@@ -1,0 +1,663 @@
+/* ============================================================================
+   maka-tokens.css — Maka visual system
+   ----------------------------------------------------------------------------
+
+   Usage in apps/desktop/src/renderer/styles.css:
+     @import "./maka-tokens.css";
+
+   The 6-color philosophy:
+     - background / foreground / accent (purple) / info (amber) / success (green) / destructive (red)
+     - All other colors are derived: alpha overlays (foreground/N) or solid mixes (foreground-N).
+     - Borders / dividers / hovers / muted text never use a "gray" — they're foreground at low alpha.
+
+   Why this looks "premium":
+     - Sharp 0px radius corners + 1px subtle border rings (--shadow-minimal-flat).
+     - Multi-layer soft shadows with very low opacity (0.06) instead of one heavy shadow.
+     - System UI fonts with optical antialiasing.
+     - 15px base font, 0.25rem (4px) spacing unit → dense but readable.
+============================================================================ */
+
+/* =============================================================================
+   LIGHT MODE
+============================================================================= */
+
+:root {
+  /* === 6 base colors ===
+     oklch() gives perceptually uniform lightness, keeping subtle surface and
+     status colors calibrated. */
+  --background: oklch(0.98 0.003 265);
+  --background-elevated: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
+  --foreground: oklch(0.185 0.01 270);
+  --foreground-dimmed: color-mix(in srgb, var(--foreground) 80%, var(--background));
+  --foreground-rgb: 38, 36, 42; /* light-mode RGB triplet used by shadow rings */
+
+  --accent: oklch(0.62 0.13 293);       /* purple — brand, "execute" mode */
+  --accent-rgb: 104, 78, 133;
+  --info: oklch(0.75 0.16 70);          /* amber — "ask" mode, warnings */
+  --info-rgb: 180, 120, 40;
+  --success: oklch(0.55 0.17 145);      /* green — connected, ok */
+  --success-rgb: 34, 120, 60;
+  --destructive: oklch(0.58 0.24 28);   /* red — errors, denied */
+  --destructive-rgb: 180, 60, 50;
+
+  /* === text variants (mixed toward foreground for better contrast) === */
+  --success-text: color-mix(in oklab, var(--success) 50%, var(--foreground));
+  --destructive-text: color-mix(in oklab, var(--destructive) 50%, var(--foreground));
+  --info-text: color-mix(in oklab, var(--info) 50%, var(--foreground));
+
+  /* === foreground solid mix scale ===
+     foreground-N = N% of foreground interpolated INTO background.
+     These are the SOLID gray tones used for body text, captions, dividers.
+     Prefer these over alpha overlays when stacking on a non-background surface. */
+  --foreground-2:  color-mix(in oklch, var(--foreground) 2%,  var(--background));
+  --foreground-3:  color-mix(in oklch, var(--foreground) 3%,  var(--background));
+  --foreground-5:  color-mix(in oklch, var(--foreground) 5%,  var(--background));
+  --foreground-10: color-mix(in oklch, var(--foreground) 10%, var(--background));
+  --foreground-20: color-mix(in oklch, var(--foreground) 20%, var(--background));
+  --foreground-30: color-mix(in oklch, var(--foreground) 30%, var(--background));
+  --foreground-40: color-mix(in oklch, var(--foreground) 40%, var(--background));
+  --foreground-50: color-mix(in oklch, var(--foreground) 50%, var(--background));
+  --foreground-60: color-mix(in oklch, var(--foreground) 60%, var(--background));
+  --foreground-70: color-mix(in oklch, var(--foreground) 70%, var(--background));
+  --foreground-80: color-mix(in oklch, var(--foreground) 80%, var(--background));
+  --foreground-90: color-mix(in oklch, var(--foreground) 90%, var(--background));
+  --foreground-95: color-mix(in oklch, var(--foreground) 95%, var(--background));
+
+  /* === alpha overlays via oklch(from ...) ===
+     Use these when stacking on a tinted surface (e.g. a card on background-elevated).
+     border / muted / ring all derive from foreground at low alpha. */
+  --border:        oklch(from var(--foreground) l c h / 0.05);
+  --border-strong: oklch(from var(--foreground) l c h / 0.10);
+  --muted:         oklch(from var(--foreground) l c h / 0.05);
+  --muted-foreground: var(--foreground-50);
+  --ring:          oklch(from var(--foreground) l c h / 0.25);
+  --hover:         oklch(from var(--foreground) l c h / 0.04);
+  --active:        oklch(from var(--foreground) l c h / 0.08);
+  --user-message-bubble: oklch(from var(--foreground) l c h / 0.05);
+  --selection:     oklch(from var(--accent) l c h / 0.2);
+
+  /* === shadow opacity (subtle in light, stronger in dark) === */
+  --shadow-border-opacity: 0.08;
+  --shadow-blur-opacity:   0.06;
+
+  /* === shadow recipes ===
+     Always include the 1px border ring as the FIRST inset-like layer.
+     Subsequent layers are very low-opacity blurs that stack into a soft glow. */
+  --shadow-minimal:
+    rgba(0,0,0,0) 0 0 0 0,
+    rgba(0,0,0,0) 0 0 0 0,
+    rgba(var(--foreground-rgb), 0.06) 0 0 0 1px,
+    rgba(0,0,0, var(--shadow-blur-opacity)) 0 1px 1px -0.5px,
+    rgba(0,0,0, var(--shadow-blur-opacity)) 0 3px 3px -1.5px;
+
+  --shadow-minimal-flat:
+    rgba(0,0,0,0) 0 0 0 0,
+    rgba(0,0,0,0) 0 0 0 0,
+    rgba(var(--foreground-rgb), 0.06) 0 0 0 1px;
+
+  --shadow-medium:
+    rgba(0,0,0,0) 0 0 0 0,
+    rgba(0,0,0,0) 0 0 0 0,
+    rgba(var(--foreground-rgb), 0.06) 0 0 0 1px,
+    rgba(0,0,0,0.06) 0 1px 1px -0.5px,
+    rgba(0,0,0,0.06) 0 3px 3px -1.5px,
+    rgba(0,0,0,0.06) 0 6px 6px -3px,
+    rgba(0,0,0,0.04) 0 12px 12px -6px;
+
+  --shadow-modal:
+    rgba(0,0,0,0) 0 0 0 0,
+    rgba(0,0,0,0) 0 0 0 0,
+    rgba(var(--foreground-rgb), 0.06) 0 0 0 1px,
+    rgba(0,0,0,0.04) 0 1px 1px -0.5px,
+    rgba(0,0,0,0.04) 0 3px 3px 0,
+    rgba(0,0,0,0.02) 0 6px 6px 0,
+    rgba(0,0,0,0.02) 0 12px 12px 0,
+    rgba(0,0,0,0.02) 0 24px 24px 0;
+
+  /* === z-index scale (semantic) === */
+  --z-base: 0;
+  --z-sticky: 20;
+  --z-titlebar: 40;
+  --z-panel: 50;
+  --z-dropdown: 100;
+  --z-tooltip: 150;
+  --z-modal: 200;
+  --z-overlay: 300;
+
+  /* === typography === */
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --font-default: var(--font-sans);
+
+  /* === layout === */
+  --font-size-base: 15px;
+  --radius: 0rem;
+  --radius-button: 6px;        /* buttons get a small radius for tactility */
+  --radius-modal: 8px;
+  --spacing: 0.25rem;          /* 4px base step */
+
+  /* sidebar / pane widths (use as max-inline-size on resizable panels) */
+  --w-sidebar: 260px;
+  --w-rail: 240px;
+  --h-titlebar: 36px;
+  --h-toolbar: 40px;
+  --h-composer-min: 56px;
+}
+
+/* =============================================================================
+   DARK MODE — toggle via `<html class="dark">`
+============================================================================= */
+
+.dark {
+  --background: oklch(0.20 0.005 270);
+  --background-elevated: color-mix(in srgb, var(--foreground) 2%, var(--background));
+  --foreground: oklch(0.92 0.005 270);
+  --foreground-rgb: 227, 226, 229;
+
+  --accent: oklch(0.65 0.20 293);
+  --accent-rgb: 118, 92, 147;
+  --info: oklch(0.70 0.16 70);
+  --info-rgb: 200, 140, 60;
+  --success: oklch(0.60 0.17 145);
+  --success-rgb: 50, 140, 80;
+  --destructive: oklch(0.70 0.19 22);
+  --destructive-rgb: 200, 80, 70;
+
+  --shadow-border-opacity: 0.15;
+  --shadow-blur-opacity:   0.12;
+
+  /* foreground-N variants re-derive automatically via color-mix(), so the
+     :root definitions above remain correct — no need to redefine here. */
+}
+
+/* =============================================================================
+   TAILWIND v4 THEME INTEGRATION
+   Make tokens addressable as Tailwind utilities:
+     bg-foreground-5       → background of subtle hover surface
+     text-foreground-60    → secondary text
+     bg-accent             → primary accent fill
+     border-border         → 1px subtle divider
+   See https://tailwindcss.com/docs/v4-beta for @theme inline semantics.
+============================================================================= */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-background-elevated: var(--background-elevated);
+  --color-foreground: var(--foreground);
+  --color-foreground-dimmed: var(--foreground-dimmed);
+  --color-accent: var(--accent);
+  --color-info: var(--info);
+  --color-success: var(--success);
+  --color-destructive: var(--destructive);
+
+  --color-foreground-2:  var(--foreground-2);
+  --color-foreground-3:  var(--foreground-3);
+  --color-foreground-5:  var(--foreground-5);
+  --color-foreground-10: var(--foreground-10);
+  --color-foreground-20: var(--foreground-20);
+  --color-foreground-30: var(--foreground-30);
+  --color-foreground-40: var(--foreground-40);
+  --color-foreground-50: var(--foreground-50);
+  --color-foreground-60: var(--foreground-60);
+  --color-foreground-70: var(--foreground-70);
+  --color-foreground-80: var(--foreground-80);
+  --color-foreground-90: var(--foreground-90);
+  --color-foreground-95: var(--foreground-95);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-hover: var(--hover);
+  --color-active: var(--active);
+  --color-user-message-bubble: var(--user-message-bubble);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+/* =============================================================================
+   BASE STYLES
+============================================================================= */
+
+@layer base {
+  * { box-sizing: border-box; border-color: var(--border); }
+
+  html { font-size: var(--font-size-base); }
+
+  body {
+    font-family: var(--font-default);
+    background: var(--background);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;          /* main shell handles its own scrolling */
+  }
+
+  /* Scrollbars: thin, accent-on-hover, transparent track. */
+  ::-webkit-scrollbar        { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track  { background: transparent; }
+  ::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+
+  ::selection { background: var(--selection); }
+
+  *:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--ring);
+  }
+
+  kbd {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--foreground-5);
+    border: 1px solid var(--border);
+  }
+}
+
+/* =============================================================================
+   UTILITY CLASSES
+============================================================================= */
+
+@layer utilities {
+  /* Hide scrollbar but keep scrolling */
+  .scrollbar-hide              { -ms-overflow-style: none; scrollbar-width: none; }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+
+  /* Reveal scrollbar only on parent hover (use with .group) */
+  .scrollbar-hover::-webkit-scrollbar       { width: 4px; }
+  .scrollbar-hover::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-hover::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+  .group:hover .scrollbar-hover::-webkit-scrollbar-thumb { background: var(--border); }
+
+  /* Shadow recipes — apply as standalone classes */
+  .shadow-minimal      { box-shadow: var(--shadow-minimal); }
+  .shadow-minimal-flat { box-shadow: var(--shadow-minimal-flat); }
+  .shadow-medium       { box-shadow: var(--shadow-medium); }
+  .shadow-modal        { box-shadow: var(--shadow-modal); }
+
+  /* iOS-style continuous corners (supported in WebKit/Chromium). */
+  .smooth-corners {
+    corner-shape: superellipse;
+    -webkit-corner-shape: superellipse;
+  }
+
+  /* "Pill" — used for status badges and labels.
+     Background is 5% foreground; text is 80% foreground. */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--foreground-80);
+    background: var(--foreground-5);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+  .pill[data-tone="accent"]      { background: oklch(from var(--accent) l c h / 0.08); color: var(--accent); border-color: oklch(from var(--accent) l c h / 0.15); }
+  .pill[data-tone="info"]        { background: oklch(from var(--info) l c h / 0.10); color: var(--info-text); border-color: oklch(from var(--info) l c h / 0.20); }
+  .pill[data-tone="success"]     { background: oklch(from var(--success) l c h / 0.10); color: var(--success-text); border-color: oklch(from var(--success) l c h / 0.20); }
+  .pill[data-tone="destructive"] { background: oklch(from var(--destructive) l c h / 0.10); color: var(--destructive-text); border-color: oklch(from var(--destructive) l c h / 0.20); }
+}
+
+/* =============================================================================
+   COMPONENT RECIPES — drop-in classes for our V0.1 UI
+
+   These are literal class names used by the React components. Layout stays in JSX; this file
+   owns colors / borders / shadows / typography.
+============================================================================= */
+
+@layer components {
+
+  /* ---- App shell -------------------------------------------------- */
+
+  .maka-shell {
+    display: grid;
+    grid-template-columns: var(--w-sidebar) 1fr;
+    height: 100vh;
+    background: var(--background);
+    color: var(--foreground);
+    font-size: var(--font-size-base);
+  }
+
+  .maka-shell-rail-right {
+    grid-template-columns: var(--w-sidebar) 1fr var(--w-rail);
+  }
+
+  /* ---- Sidebar ---------------------------------------------------- */
+
+  .maka-sidebar {
+    background: var(--foreground-2);            /* subtle 2% wash */
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .maka-sidebar-header {
+    height: var(--h-titlebar);
+    padding: 0 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--foreground-60);
+  }
+  .maka-sidebar-section {
+    padding: 8px 6px;
+  }
+  .maka-sidebar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: var(--radius-button);
+    color: var(--foreground-80);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1.4;
+    user-select: none;
+    transition: background 120ms ease, color 120ms ease;
+  }
+  .maka-sidebar-row:hover    { background: var(--hover); }
+  .maka-sidebar-row[data-active="true"] {
+    background: var(--active);
+    color: var(--foreground);
+    font-weight: 500;
+  }
+  .maka-sidebar-row[data-unread="true"]::before {
+    content: "";
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .maka-sidebar-button {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 4px 8px;
+    border-radius: var(--radius-button);
+    color: var(--foreground-60);
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .maka-sidebar-button:hover { background: var(--hover); color: var(--foreground); }
+
+  /* ---- Main column ------------------------------------------------ */
+
+  .maka-main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--background);
+  }
+  .maka-titlebar {
+    height: var(--h-titlebar);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    font-size: 13px;
+    color: var(--foreground-70);
+  }
+  .maka-titlebar strong { color: var(--foreground); font-weight: 500; }
+
+  /* ---- Chat surface ----------------------------------------------- */
+
+  .maka-chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 0 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .maka-message-row {
+    max-width: 760px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 0 24px;
+  }
+  /* User bubble: 5% foreground overlay, no border, rounded */
+  .maka-bubble-user {
+    background: var(--user-message-bubble);
+    border-radius: 12px;
+    padding: 10px 14px;
+    line-height: 1.5;
+    color: var(--foreground);
+    max-width: 80%;
+    margin-left: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  /* Assistant: no bubble — just text on background, like an editor. */
+  .maka-bubble-assistant {
+    color: var(--foreground);
+    line-height: 1.65;
+    padding: 4px 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .maka-bubble-streaming::after {
+    content: "▋";
+    display: inline-block;
+    margin-left: 2px;
+    color: var(--foreground-50);
+    animation: maka-cursor 1s steps(2) infinite;
+  }
+  @keyframes maka-cursor { 50% { opacity: 0; } }
+
+  /* ---- Tool activity ---------------------------------------------- */
+
+  .maka-tool {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--foreground-2);
+    padding: 8px 12px;
+    margin-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--foreground-80);
+  }
+  .maka-tool-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--foreground-70);
+  }
+  .maka-tool-name {
+    color: var(--foreground);
+    font-weight: 500;
+    font-family: var(--font-mono);
+  }
+  .maka-tool[data-status="waiting_permission"] { border-color: oklch(from var(--info) l c h / 0.4); }
+  .maka-tool[data-status="running"]            { border-color: oklch(from var(--accent) l c h / 0.4); }
+  .maka-tool[data-status="completed"]          { border-color: var(--border); }
+  .maka-tool[data-status="errored"]            { border-color: oklch(from var(--destructive) l c h / 0.4); background: oklch(from var(--destructive) l c h / 0.04); }
+  .maka-tool[data-status="interrupted"]        { border-color: var(--border); background: var(--foreground-3); opacity: 0.7; }
+
+  /* ---- Composer --------------------------------------------------- */
+
+  .maka-composer {
+    border-top: 1px solid var(--border);
+    padding: 16px 24px 18px 24px;
+    background: var(--background);
+  }
+  .maka-composer-inner {
+    max-width: 760px;
+    margin: 0 auto;
+    box-shadow: var(--shadow-minimal);
+    border-radius: 12px;
+    background: var(--background);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .maka-composer textarea {
+    appearance: none;
+    border: none;
+    outline: none;
+    width: 100%;
+    resize: none;
+    background: transparent;
+    color: var(--foreground);
+    font-family: var(--font-default);
+    font-size: 15px;
+    line-height: 1.5;
+    min-height: var(--h-composer-min);
+    max-height: 240px;
+  }
+  .maka-composer textarea::placeholder { color: var(--foreground-40); }
+  .maka-composer-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--foreground-60);
+    font-size: 12px;
+  }
+
+  /* ---- Buttons ---------------------------------------------------- */
+
+  .maka-button {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--background);
+    color: var(--foreground);
+    padding: 6px 12px;
+    border-radius: var(--radius-button);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease, transform 120ms ease;
+  }
+  .maka-button:hover  { background: var(--hover); }
+  .maka-button:active { background: var(--active); }
+  .maka-button[disabled],
+  .maka-button[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+
+  .maka-button[data-variant="primary"] {
+    background: var(--accent);
+    color: white;
+    border-color: oklch(from var(--accent) calc(l - 0.05) c h);
+  }
+  .maka-button[data-variant="primary"]:hover {
+    background: oklch(from var(--accent) calc(l - 0.03) c h);
+  }
+  .maka-button[data-variant="destructive"] {
+    border-color: oklch(from var(--destructive) l c h / 0.35);
+    color: var(--destructive-text);
+  }
+  .maka-button[data-variant="destructive"]:hover {
+    background: oklch(from var(--destructive) l c h / 0.08);
+  }
+  .maka-button[data-variant="ghost"] {
+    border-color: transparent;
+    background: transparent;
+  }
+  .maka-button[data-variant="ghost"]:hover {
+    background: var(--hover);
+    border-color: transparent;
+  }
+
+  /* ---- Modal / Dialog --------------------------------------------- */
+
+  .maka-modal-backdrop {
+    position: fixed; inset: 0;
+    background: oklch(from var(--background) l c h / 0.6);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: grid; place-items: center;
+    z-index: var(--z-modal);
+  }
+  .maka-modal {
+    background: var(--background);
+    border-radius: var(--radius-modal);
+    box-shadow: var(--shadow-modal);
+    width: min(520px, calc(100vw - 48px));
+    max-height: calc(100vh - 80px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .maka-modal-header {
+    padding: 16px 20px 8px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .maka-modal-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--foreground);
+    letter-spacing: 0;
+  }
+  .maka-modal-subtitle {
+    font-size: 13px;
+    color: var(--foreground-60);
+    margin-top: 2px;
+  }
+  .maka-modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+  .maka-modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  /* ---- Permission badge tones (for status text + dialog reason) --- */
+
+  .maka-reason-text[data-reason="shell_dangerous"] { color: var(--info-text); }
+  .maka-reason-text[data-reason="file_write"]       { color: var(--info-text); }
+  .maka-reason-text[data-reason="fs_destructive"]   { color: var(--destructive-text); font-weight: 500; }
+  .maka-reason-text[data-reason="git_destructive"]  { color: var(--destructive-text); font-weight: 500; }
+  .maka-reason-text[data-reason="privileged"]       { color: var(--destructive-text); font-weight: 500; }
+  .maka-reason-text[data-reason="network"]          { color: var(--info-text); }
+  .maka-reason-text[data-reason="custom"]           { color: var(--foreground-70); }
+
+  /* ---- Code blocks (used in args preview inside permission dialog) --- */
+
+  .maka-code {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    background: var(--foreground-3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: var(--foreground);
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+}
+
+/* =============================================================================
+   ANIMATIONS
+============================================================================= */
+
+@keyframes maka-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.maka-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--foreground-5) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: maka-shimmer 1.5s ease-in-out infinite;
+}

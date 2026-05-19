@@ -1,0 +1,35 @@
+{
+  "name": "@maka/runtime",
+  "version": "0.1.0",
+  "description": "SessionManager, PermissionEngine, AiSdkBackend, materializer.",
+  "type": "module",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./permission-engine": "./dist/permission-engine.js",
+    "./ai-sdk-backend": "./dist/ai-sdk-backend.js",
+    "./builtin-tools": "./dist/builtin-tools.js",
+    "./model-factory": "./dist/model-factory.js",
+    "./test-connection": "./dist/test-connection.js",
+    "./model-fetcher": "./dist/model-fetcher.js",
+    "./materializer": "./dist/materializer.js",
+    "./async-queue": "./dist/async-queue.js",
+    "./session-manager": "./dist/session-manager.js",
+    "./fake-backend": "./dist/fake-backend.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.78",
+    "@ai-sdk/google": "^3.0.75",
+    "@ai-sdk/openai": "^3.0.64",
+    "@ai-sdk/openai-compatible": "^2.0.47",
+    "@maka/core": "0.1.0",
+    "ai": "^6.0.185",
+    "zod": "^4.4.3"
+  }
+}

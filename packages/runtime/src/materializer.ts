@@ -1,0 +1,263 @@
+/**
+ * Materializer — converts the raw JSONL message stream into the view-model
+ * shape the UI renders. Lives in `runtime` (not `storage`) because correlation
+ * is a semantic operation, not a disk concern.
+ *
+ * Source of truth: V0.1_TECH_SPEC.md §5.2 orphan policy + §7 view models.
+ *
+ * Runtime/UI materializer for rebuilding chat and tool activity state from
+ * append-only stored messages.
+ */
+
+import type {
+  StoredMessage,
+  UserMessage,
+  AssistantMessage,
+  ToolCallMessage,
+  ToolResultMessage,
+  PermissionDecisionMessage,
+  TokenUsageMessage,
+  SystemNoteMessage,
+  ToolResultContent,
+} from '@maka/core';
+
+// ============================================================================
+// View-model types (mirror packages/ui/src exports, lifted here for reuse)
+// ============================================================================
+
+export interface ToolActivityItem {
+  toolUseId: string;
+  toolName: string;
+  displayName?: string;
+  intent?: string;
+  status:
+    | 'pending'
+    | 'waiting_permission'
+    | 'running'
+    | 'completed'
+    | 'errored'
+    | 'interrupted';
+  args: unknown;
+  result?: ToolResultContent;
+  isError?: boolean;
+  durationMs?: number;
+  ts: number;
+}
+
+export type ChatItem =
+  | { kind: 'user'; message: UserMessage }
+  | { kind: 'assistant'; message: AssistantMessage }
+  | { kind: 'tool'; item: ToolActivityItem; decision?: PermissionDecisionMessage }
+  | { kind: 'system_note'; message: SystemNoteMessage };
+
+export interface SessionViewModel {
+  items: ChatItem[];
+  totalTokens: { input: number; output: number; costUsd?: number };
+}
+
+// ============================================================================
+// Materialize one shot (used on session reload)
+// ============================================================================
+
+/**
+ * Convert StoredMessage[] (raw JSONL) into a ChatItem[] for rendering.
+ *
+ * Orphan ToolCallMessage (no matching ToolResultMessage by toolUseId) is
+ * rendered as ToolActivityItem.status === 'interrupted' (V0.1_TECH_SPEC §5.2,
+ * §7). Storage layer never synthesizes a fake ToolResultMessage — that's our
+ * job here.
+ */
+export function materializeSession(messages: readonly StoredMessage[]): SessionViewModel {
+  const items: ChatItem[] = [];
+  let totalInput = 0;
+  let totalOutput = 0;
+  let totalCostUsd = 0;
+  let hasCost = false;
+
+  // Index for tool correlation. ToolCallMessage.id === toolUseId, by §4.2.
+  const resultsByToolUseId = new Map<string, ToolResultMessage>();
+  const decisionsByToolUseId = new Map<string, PermissionDecisionMessage>();
+
+  // First pass: index results + decisions.
+  for (const m of messages) {
+    if (m.type === 'tool_result') {
+      resultsByToolUseId.set(m.toolUseId, m);
+    } else if (m.type === 'permission_decision') {
+      decisionsByToolUseId.set(m.toolUseId, m);
+    }
+  }
+
+  // Second pass: emit ChatItems in document order, skipping tool_result + decision
+  // (they're folded into the tool ChatItem at the call site).
+  for (const m of messages) {
+    switch (m.type) {
+      case 'user':
+        items.push({ kind: 'user', message: m });
+        break;
+      case 'assistant':
+        items.push({ kind: 'assistant', message: m });
+        break;
+      case 'tool_call': {
+        const result = resultsByToolUseId.get(m.id);
+        const decision = decisionsByToolUseId.get(m.id);
+        items.push({
+          kind: 'tool',
+          item: toolActivityFromPair(m, result),
+          decision,
+        });
+        break;
+      }
+      case 'tool_result':
+      case 'permission_decision':
+        // folded into tool ChatItem above; skip here
+        break;
+      case 'token_usage':
+        totalInput += m.input;
+        totalOutput += m.output;
+        if (typeof m.costUsd === 'number') {
+          totalCostUsd += m.costUsd;
+          hasCost = true;
+        }
+        break;
+      case 'system_note':
+        items.push({ kind: 'system_note', message: m });
+        break;
+    }
+  }
+
+  return {
+    items,
+    totalTokens: {
+      input: totalInput,
+      output: totalOutput,
+      ...(hasCost ? { costUsd: totalCostUsd } : {}),
+    },
+  };
+}
+
+/**
+ * Build a ToolActivityItem from a (ToolCallMessage, ToolResultMessage?) pair.
+ *
+ * - Missing result + isError-false-not-applicable → status 'interrupted' (orphan from crash)
+ * - Result with isError === true → 'errored' (includes permission deny/block)
+ * - Result with isError === false → 'completed'
+ */
+function toolActivityFromPair(
+  call: ToolCallMessage,
+  result: ToolResultMessage | undefined,
+): ToolActivityItem {
+  if (result === undefined) {
+    return {
+      toolUseId: call.id,
+      toolName: call.toolName,
+      ...(call.displayName !== undefined ? { displayName: call.displayName } : {}),
+      ...(call.intent !== undefined ? { intent: call.intent } : {}),
+      status: 'interrupted',
+      args: call.args,
+      ts: call.ts,
+    };
+  }
+  return {
+    toolUseId: call.id,
+    toolName: call.toolName,
+    ...(call.displayName !== undefined ? { displayName: call.displayName } : {}),
+    ...(call.intent !== undefined ? { intent: call.intent } : {}),
+    status: result.isError ? 'errored' : 'completed',
+    args: call.args,
+    result: result.content,
+    isError: result.isError,
+    ...(result.durationMs !== undefined ? { durationMs: result.durationMs } : {}),
+    ts: call.ts,
+  };
+}
+
+// ============================================================================
+// Streaming patch for live updates (used during an active turn)
+// ============================================================================
+
+/**
+ * Apply a single newly-appended StoredMessage to an existing ChatItem[].
+ * Used by the renderer to incrementally update the view as events / writes
+ * land, without re-materializing the whole session.
+ *
+ * Returns the new items array (immutable update) and an optional patch hint
+ * indicating which existing item id was modified.
+ */
+export function applyAppendedMessage(
+  items: readonly ChatItem[],
+  message: StoredMessage,
+): { items: ChatItem[]; modifiedToolUseId?: string } {
+  switch (message.type) {
+    case 'user':
+      return { items: [...items, { kind: 'user', message }] };
+
+    case 'assistant':
+      return { items: [...items, { kind: 'assistant', message }] };
+
+    case 'tool_call': {
+      const item: ToolActivityItem = {
+        toolUseId: message.id,
+        toolName: message.toolName,
+        ...(message.displayName !== undefined ? { displayName: message.displayName } : {}),
+        ...(message.intent !== undefined ? { intent: message.intent } : {}),
+        status: 'pending',
+        args: message.args,
+        ts: message.ts,
+      };
+      return { items: [...items, { kind: 'tool', item }] };
+    }
+
+    case 'tool_result': {
+      // Patch the matching tool ChatItem in place by toolUseId.
+      const next = items.map((it) => {
+        if (it.kind !== 'tool' || it.item.toolUseId !== message.toolUseId) return it;
+        return {
+          ...it,
+          item: {
+            ...it.item,
+            status: message.isError ? 'errored' as const : 'completed' as const,
+            result: message.content,
+            isError: message.isError,
+            ...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
+          },
+        };
+      });
+      return { items: next, modifiedToolUseId: message.toolUseId };
+    }
+
+    case 'permission_decision': {
+      const next = items.map((it) => {
+        if (it.kind !== 'tool' || it.item.toolUseId !== message.toolUseId) return it;
+        return { ...it, decision: message };
+      });
+      return { items: next, modifiedToolUseId: message.toolUseId };
+    }
+
+    case 'system_note':
+      return { items: [...items, { kind: 'system_note', message }] };
+
+    case 'token_usage':
+      // No item to render; UI aggregates separately.
+      return { items: [...items] };
+  }
+}
+
+// ============================================================================
+// Event-driven UI status transitions (used during streaming)
+// ============================================================================
+
+/**
+ * Renderer helpers for transitioning ToolActivityItem.status based on
+ * SessionEvent stream (NOT JSONL replay). Idempotent by toolUseId per §10
+ * implementation notes — multiple events for the same id are merged.
+ */
+export function setToolStatus(
+  items: readonly ChatItem[],
+  toolUseId: string,
+  patch: Partial<Pick<ToolActivityItem, 'status' | 'result' | 'isError' | 'durationMs'>>,
+): ChatItem[] {
+  return items.map((it) => {
+    if (it.kind !== 'tool' || it.item.toolUseId !== toolUseId) return it;
+    return { ...it, item: { ...it.item, ...patch } };
+  });
+}

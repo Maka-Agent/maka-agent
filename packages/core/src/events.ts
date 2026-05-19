@@ -1,0 +1,234 @@
+/**
+ * Backend → UI unified event stream.
+ *
+ * Runtime backends normalize their provider-native streams to
+ * this `SessionEvent` union. The UI never imports SDK types directly.
+ *
+ * Source: V0.1_TECH_SPEC.md §4.1
+ *
+ * Connection-setup events live in ./connections.ts (separate channel).
+ */
+
+import type { PermissionRequest, PermissionResponse, ToolCategory } from './permission.js';
+
+// ============================================================================
+// Storage refs (shared by attachments, image tool results, etc.)
+// ============================================================================
+
+export type StorageRef =
+  | { kind: 'session_file'; sessionId: string; relativePath: string }
+  | { kind: 'workspace_file'; relativePath: string }
+  | { kind: 'external_file'; absolutePath: string };
+
+export interface AttachmentRef {
+  kind: 'image' | 'pdf' | 'doc' | 'code' | 'other';
+  name: string;
+  mimeType: string;
+  bytes: number;
+  ref: StorageRef;
+}
+
+// ============================================================================
+// Event union
+// ============================================================================
+
+interface BaseEvent {
+  /** Event uuid — used for dedup on reconnect/replay. */
+  id: string;
+  /** Groups all events from one agent turn. */
+  turnId: string;
+  /** Unix ms timestamp. */
+  ts: number;
+}
+
+export type SessionEvent =
+  | TextDeltaEvent
+  | TextCompleteEvent
+  | ThinkingDeltaEvent
+  | ThinkingCompleteEvent
+  | ToolStartEvent
+  | ToolProgressEvent
+  | ToolResultEvent
+  | PermissionRequestEvent
+  | PermissionDecisionAckEvent
+  | PlanSubmittedEvent
+  | TokenUsageEvent
+  | ErrorEvent
+  | CompleteEvent
+  | AbortEvent;
+
+export interface TextDeltaEvent extends BaseEvent {
+  type: 'text_delta';
+  messageId: string;
+  text: string;
+}
+
+export interface TextCompleteEvent extends BaseEvent {
+  type: 'text_complete';
+  messageId: string;
+  text: string;
+}
+
+export interface ThinkingDeltaEvent extends BaseEvent {
+  type: 'thinking_delta';
+  messageId: string;
+  text: string;
+}
+
+export interface ThinkingCompleteEvent extends BaseEvent {
+  type: 'thinking_complete';
+  messageId: string;
+  text: string;
+  /** Anthropic signed thinking — MUST be re-sent on replay. */
+  signature?: string;
+}
+
+export interface ToolStartEvent extends BaseEvent {
+  type: 'tool_start';
+  toolUseId: string;
+  toolName: string;
+  args: unknown;
+  displayName?: string;
+  intent?: string;
+}
+
+export interface ToolProgressEvent extends BaseEvent {
+  type: 'tool_progress';
+  toolUseId: string;
+  chunk: string | { kind: 'stdout' | 'stderr'; text: string };
+}
+
+export interface ToolResultEvent extends BaseEvent {
+  type: 'tool_result';
+  toolUseId: string;
+  isError: boolean;
+  content: ToolResultContent;
+  durationMs?: number;
+}
+
+export type ToolResultContent =
+  | { kind: 'text'; text: string }
+  | { kind: 'json'; value: unknown }
+  | { kind: 'file_diff'; paths: string[]; diff: string }
+  | { kind: 'file_write'; path: string; bytes: number }
+  | {
+      kind: 'terminal';
+      cwd: string;
+      cmd: string;
+      exitCode: number;
+      stdout: string;
+      stderr: string;
+    }
+  | { kind: 'image'; mimeType: string; ref: StorageRef }
+  | { kind: 'summary'; original: string; summarized: string; reason: 'too_large' };
+
+export interface PermissionRequestEvent extends BaseEvent {
+  type: 'permission_request';
+  requestId: string;
+  toolUseId: string;
+  toolName: string;
+  category: ToolCategory;
+  reason:
+    | 'shell_dangerous'
+    | 'file_write'
+    | 'fs_destructive'
+    | 'network'
+    | 'git_destructive'
+    | 'privileged'
+    | 'custom';
+  args: unknown;
+  hint?: string;
+}
+
+/**
+ * Echo of the user's permission decision back through the event stream so
+ * all UI observers (and JSONL audit) see the same outcome. Mirrors the
+ * PermissionDecisionMessage that storage appends.
+ */
+export interface PermissionDecisionAckEvent extends BaseEvent {
+  type: 'permission_decision_ack';
+  requestId: string;
+  toolUseId: string;
+  decision: 'allow' | 'deny';
+  rememberForTurn?: boolean;
+}
+
+export interface PlanSubmittedEvent extends BaseEvent {
+  type: 'plan_submitted';
+  planId: string;
+  title: string;
+  markdownPath: string;
+  steps?: PlanStep[];
+}
+
+export interface PlanStep {
+  id: string;
+  description: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'skipped';
+  files?: string[];
+  complexity?: 'low' | 'medium' | 'high';
+}
+
+export interface TokenUsageEvent extends BaseEvent {
+  type: 'token_usage';
+  input: number;
+  output: number;
+  cacheRead?: number;
+  cacheCreation?: number;
+  costUsd?: number;
+  contextRemaining?: number;
+}
+
+export interface ErrorEvent extends BaseEvent {
+  type: 'error';
+  recoverable: boolean;
+  code?: string;
+  message: string;
+  /** Adapter MUST scrub secrets before populating this field. */
+  details?: string[] | Record<string, unknown>;
+}
+
+export interface CompleteEvent extends BaseEvent {
+  type: 'complete';
+  stopReason:
+    | 'end_turn'
+    | 'user_stop'
+    | 'error'
+    | 'plan_handoff'
+    | 'permission_handoff'
+    | 'max_tokens';
+}
+
+export interface AbortEvent extends BaseEvent {
+  type: 'abort';
+  reason: 'user_stop' | 'redirect' | 'timeout' | 'crash';
+}
+
+// ============================================================================
+// UI → Backend commands
+// ============================================================================
+
+/**
+ * SessionCommand: commands that target a specific session.
+ *
+ * Connection-management commands live in ConnectionCommand (./connections.ts).
+ *
+ * `permission_response` composes PermissionResponse rather than flattening
+ * its fields, so there is exactly ONE shape for a permission decision in
+ * the codebase.
+ */
+export type SessionCommand =
+  | {
+      type: 'send';
+      turnId: string;
+      text: string;
+      attachments?: AttachmentRef[];
+    }
+  | { type: 'stop' }
+  | { type: 'permission_response'; response: PermissionResponse }
+  | {
+      type: 'plan_response';
+      planId: string;
+      action: 'approve' | 'refine';
+      feedback?: string;
+    };

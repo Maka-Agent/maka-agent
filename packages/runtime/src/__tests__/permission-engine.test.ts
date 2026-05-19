@@ -1,0 +1,295 @@
+/**
+ * Tests for PermissionEngine — wraps the pure preToolUse() with state,
+ * requestId generation, and parked-Promise resumption.
+ */
+
+import { describe, test, expect } from 'bun:test';
+import { PermissionEngine, type PermissionEngineDeps } from '../permission-engine.js';
+import type { PermissionResponse } from '@maka/core/permission';
+
+function makeEngine(): { engine: PermissionEngine; deps: TestDeps } {
+  const deps = new TestDeps();
+  return { engine: new PermissionEngine(deps), deps };
+}
+
+class TestDeps implements PermissionEngineDeps {
+  private idSeq = 0;
+  private clock = 1_000_000;
+  newId = (): string => `id-${++this.idSeq}`;
+  now = (): number => this.clock++;
+}
+
+describe('PermissionEngine.evaluate — allow path', () => {
+  test('allow for read in any mode', () => {
+    const { engine } = makeEngine();
+    engine.beginTurn('t1');
+    const r = engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu1',
+      toolName: 'Read',
+      args: {},
+      mode: 'explore',
+    });
+    expect(r.kind).toBe('allow');
+  });
+
+  test('allow when category in turnRemembered', async () => {
+    const { engine } = makeEngine();
+    engine.beginTurn('t1');
+    // First Write in ask mode → prompt
+    const r1 = engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu1',
+      toolName: 'Write',
+      args: { path: '/x' },
+      mode: 'ask',
+    });
+    expect(r1.kind).toBe('prompt');
+
+    if (r1.kind !== 'prompt') return;
+    engine.recordResponse('t1', {
+      requestId: r1.event.requestId,
+      decision: 'allow',
+      rememberForTurn: true,
+    });
+    await r1.parked;
+
+    // Second Write → allow (remembered)
+    const r2 = engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu2',
+      toolName: 'Write',
+      args: { path: '/y' },
+      mode: 'ask',
+    });
+    expect(r2.kind).toBe('allow');
+  });
+});
+
+describe('PermissionEngine.evaluate — block path', () => {
+  test('block in explore mode', () => {
+    const { engine } = makeEngine();
+    engine.beginTurn('t1');
+    const r = engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu1',
+      toolName: 'Write',
+      args: { path: '/x' },
+      mode: 'explore',
+    });
+    expect(r.kind).toBe('block');
+    if (r.kind === 'block') {
+      expect(r.reason).toContain('blocked');
+    }
+  });
+});
+
+describe('PermissionEngine.evaluate — prompt path', () => {
+  test('emits PermissionRequestEvent with stable requestId', () => {
+    const { engine, deps: _deps } = makeEngine();
+    engine.beginTurn('t1');
+    const r = engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu1',
+      toolName: 'Write',
+      args: { path: '/x' },
+      mode: 'ask',
+    });
+    expect(r.kind).toBe('prompt');
+    if (r.kind !== 'prompt') return;
+    expect(r.event.type).toBe('permission_request');
+    expect(r.event.turnId).toBe('t1');
+    expect(r.event.toolUseId).toBe('tu1');
+    expect(r.event.requestId).toMatch(/^id-/);
+  });
+
+  test('parked Promise resolves on recordResponse', async () => {
+    const { engine } = makeEngine();
+    engine.beginTurn('t1');
+    const r = engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu1',
+      toolName: 'Write',
+      args: {},
+      mode: 'ask',
+    });
+    if (r.kind !== 'prompt') throw new Error('expected prompt');
+
+    const response: PermissionResponse = {
+      requestId: r.event.requestId,
+      decision: 'allow',
+    };
+    const recorded = engine.recordResponse('t1', response);
+    expect(recorded).not.toBeNull();
+    expect(recorded?.toolUseId).toBe('tu1');
+
+    const resolved = await r.parked;
+    expect(resolved.decision).toBe('allow');
+  });
+
+  test('deny → parked resolves with decision=deny', async () => {
+    const { engine } = makeEngine();
+    engine.beginTurn('t1');
+    const r = engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu1',
+      toolName: 'Bash',
+      args: { command: 'rm foo' },
+      mode: 'ask',
+    });
+    if (r.kind !== 'prompt') throw new Error('expected prompt');
+
+    engine.recordResponse('t1', { requestId: r.event.requestId, decision: 'deny' });
+    const out = await r.parked;
+    expect(out.decision).toBe('deny');
+  });
+});
+
+describe('PermissionEngine — turn lifecycle', () => {
+  test('endTurn rejects parked Promises', async () => {
+    const { engine } = makeEngine();
+    engine.beginTurn('t1');
+    const r = engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu1',
+      toolName: 'Write',
+      args: {},
+      mode: 'ask',
+    });
+    if (r.kind !== 'prompt') throw new Error('expected prompt');
+
+    const parkedPromise = r.parked.then(
+      () => 'resolved',
+      (e: Error) => `rejected:${e.message}`,
+    );
+
+    engine.endTurn('t1', 'aborted');
+    const settled = await parkedPromise;
+    expect(settled).toContain('rejected');
+    expect(settled).toContain('aborted');
+  });
+
+  test('endTurn clears state', () => {
+    const { engine } = makeEngine();
+    engine.beginTurn('t1');
+    expect(engine.pendingCount('t1')).toBe(0);
+    engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu1',
+      toolName: 'Write',
+      args: {},
+      mode: 'ask',
+    });
+    expect(engine.pendingCount('t1')).toBe(1);
+    engine.endTurn('t1');
+    expect(engine.pendingCount('t1')).toBe(0);
+  });
+
+  test('beginTurn is idempotent', () => {
+    const { engine } = makeEngine();
+    engine.beginTurn('t1');
+    engine.beginTurn('t1');
+    // No throw, state intact:
+    const r = engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu1',
+      toolName: 'Read',
+      args: {},
+      mode: 'explore',
+    });
+    expect(r.kind).toBe('allow');
+  });
+});
+
+describe('PermissionEngine — recordResponse edge cases', () => {
+  test('unknown requestId → null, no throw', () => {
+    const { engine } = makeEngine();
+    engine.beginTurn('t1');
+    const result = engine.recordResponse('t1', {
+      requestId: 'nonexistent',
+      decision: 'allow',
+    });
+    expect(result).toBeNull();
+  });
+
+  test('unknown turnId → null', () => {
+    const { engine } = makeEngine();
+    const result = engine.recordResponse('nonexistent-turn', {
+      requestId: 'x',
+      decision: 'allow',
+    });
+    expect(result).toBeNull();
+  });
+
+  test('rememberForTurn=true persists category across same-category re-eval', async () => {
+    const { engine } = makeEngine();
+    engine.beginTurn('t1');
+
+    const r1 = engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu1',
+      toolName: 'Write',
+      args: {},
+      mode: 'ask',
+    });
+    if (r1.kind !== 'prompt') throw new Error('expected prompt');
+    engine.recordResponse('t1', {
+      requestId: r1.event.requestId,
+      decision: 'allow',
+      rememberForTurn: true,
+    });
+    await r1.parked;
+
+    const r2 = engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu2',
+      toolName: 'Edit',
+      args: {},
+      mode: 'ask',
+    });
+    expect(r2.kind).toBe('allow');
+  });
+
+  test('rememberForTurn=false does NOT add to set', async () => {
+    const { engine } = makeEngine();
+    engine.beginTurn('t1');
+
+    const r1 = engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu1',
+      toolName: 'Write',
+      args: {},
+      mode: 'ask',
+    });
+    if (r1.kind !== 'prompt') throw new Error('expected prompt');
+    engine.recordResponse('t1', {
+      requestId: r1.event.requestId,
+      decision: 'allow',
+      // rememberForTurn omitted
+    });
+    await r1.parked;
+
+    const r2 = engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu2',
+      toolName: 'Write',
+      args: {},
+      mode: 'ask',
+    });
+    expect(r2.kind).toBe('prompt');
+  });
+});

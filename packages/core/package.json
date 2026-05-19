@@ -1,0 +1,24 @@
+{
+  "name": "@maka/core",
+  "version": "0.1.0",
+  "description": "Pure types for Maka — events, session, permission, connections.",
+  "type": "module",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./events": "./dist/events.js",
+    "./session": "./dist/session.js",
+    "./permission": "./dist/permission.js",
+    "./connections": "./dist/connections.js",
+    "./workspace": "./dist/workspace.js",
+    "./runtime-inputs": "./dist/runtime-inputs.js",
+    "./backend-types": "./dist/backend-types.js",
+    "./llm-connections": "./dist/llm-connections.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

@@ -1,0 +1,277 @@
+/**
+ * Tests for materializer.
+ *
+ * Run: `bun test packages/runtime/src/__tests__/materializer.test.ts`
+ */
+
+import { describe, test, expect } from 'bun:test';
+import type {
+  UserMessage,
+  AssistantMessage,
+  ToolCallMessage,
+  ToolResultMessage,
+  PermissionDecisionMessage,
+  TokenUsageMessage,
+  SystemNoteMessage,
+} from '@maka/core/session';
+import {
+  materializeSession,
+  applyAppendedMessage,
+  setToolStatus,
+  type ChatItem,
+} from '../materializer.js';
+
+// ---------- Fixtures ----------
+
+const ts = 1_700_000_000_000;
+const turnId = 't1';
+
+const user = (id: string, text: string): UserMessage => ({
+  type: 'user',
+  id,
+  turnId,
+  ts: ts + 1,
+  text,
+});
+
+const assistant = (id: string, text: string): AssistantMessage => ({
+  type: 'assistant',
+  id,
+  turnId,
+  ts: ts + 2,
+  text,
+  modelId: 'claude-sonnet-4-5',
+});
+
+const toolCall = (id: string, name: string, args: unknown = {}): ToolCallMessage => ({
+  type: 'tool_call',
+  id,
+  turnId,
+  ts: ts + 3,
+  toolName: name,
+  args,
+});
+
+const toolResult = (
+  toolUseId: string,
+  isError: boolean,
+  text: string,
+): ToolResultMessage => ({
+  type: 'tool_result',
+  id: `r-${toolUseId}`,
+  turnId,
+  ts: ts + 4,
+  toolUseId,
+  isError,
+  content: { kind: 'text', text },
+});
+
+const permission = (
+  requestId: string,
+  toolUseId: string,
+  decision: 'allow' | 'deny',
+): PermissionDecisionMessage => ({
+  type: 'permission_decision',
+  id: requestId,
+  turnId,
+  ts: ts + 3,
+  toolUseId,
+  toolName: 'Write',
+  decision,
+});
+
+const tokens = (input: number, output: number, costUsd?: number): TokenUsageMessage => ({
+  type: 'token_usage',
+  id: 'tu',
+  turnId,
+  ts: ts + 5,
+  input,
+  output,
+  ...(costUsd !== undefined ? { costUsd } : {}),
+});
+
+const note = (kind: SystemNoteMessage['kind']): SystemNoteMessage => ({
+  type: 'system_note',
+  id: 'n',
+  ts: ts + 6,
+  kind,
+});
+
+// ---------- materializeSession ----------
+
+describe('materializeSession', () => {
+  test('empty', () => {
+    const vm = materializeSession([]);
+    expect(vm.items).toEqual([]);
+    expect(vm.totalTokens.input).toBe(0);
+    expect(vm.totalTokens.output).toBe(0);
+  });
+
+  test('user + assistant', () => {
+    const vm = materializeSession([user('u', 'hello'), assistant('a', 'hi')]);
+    expect(vm.items).toHaveLength(2);
+    expect(vm.items[0]?.kind).toBe('user');
+    expect(vm.items[1]?.kind).toBe('assistant');
+  });
+
+  test('completed tool: call + result paired into single ChatItem', () => {
+    const vm = materializeSession([
+      toolCall('t-1', 'Read', { path: '/x' }),
+      toolResult('t-1', false, 'contents'),
+    ]);
+    expect(vm.items).toHaveLength(1);
+    const item = vm.items[0];
+    expect(item?.kind).toBe('tool');
+    if (item?.kind !== 'tool') return;
+    expect(item.item.toolUseId).toBe('t-1');
+    expect(item.item.status).toBe('completed');
+    expect(item.item.isError).toBe(false);
+    expect(item.item.result).toEqual({ kind: 'text', text: 'contents' });
+  });
+
+  test('errored tool: result with isError=true → status errored', () => {
+    const vm = materializeSession([
+      toolCall('t-2', 'Write'),
+      toolResult('t-2', true, 'Permission denied'),
+    ]);
+    expect(vm.items).toHaveLength(1);
+    const item = vm.items[0];
+    if (item?.kind !== 'tool') throw new Error('wrong kind');
+    expect(item.item.status).toBe('errored');
+    expect(item.item.isError).toBe(true);
+  });
+
+  test('orphan tool_call (no matching result) → interrupted', () => {
+    const vm = materializeSession([toolCall('t-orphan', 'Bash')]);
+    expect(vm.items).toHaveLength(1);
+    const item = vm.items[0];
+    if (item?.kind !== 'tool') throw new Error('wrong kind');
+    expect(item.item.status).toBe('interrupted');
+    expect(item.item.result).toBeUndefined();
+  });
+
+  test('permission decision folded into tool ChatItem', () => {
+    const vm = materializeSession([
+      toolCall('t-3', 'Write'),
+      permission('req-1', 't-3', 'allow'),
+      toolResult('t-3', false, 'ok'),
+    ]);
+    expect(vm.items).toHaveLength(1);
+    const item = vm.items[0];
+    if (item?.kind !== 'tool') throw new Error('wrong kind');
+    expect(item.decision?.decision).toBe('allow');
+    expect(item.decision?.id).toBe('req-1');
+  });
+
+  test('token usage accumulated, not rendered as ChatItem', () => {
+    const vm = materializeSession([tokens(100, 50, 0.001), tokens(200, 80, 0.002)]);
+    expect(vm.items).toHaveLength(0);
+    expect(vm.totalTokens.input).toBe(300);
+    expect(vm.totalTokens.output).toBe(130);
+    expect(vm.totalTokens.costUsd).toBeCloseTo(0.003);
+  });
+
+  test('system_note rendered as ChatItem', () => {
+    const vm = materializeSession([note('session_start'), note('abort')]);
+    expect(vm.items).toHaveLength(2);
+    expect(vm.items[0]?.kind).toBe('system_note');
+  });
+
+  test('mixed full conversation', () => {
+    const vm = materializeSession([
+      note('session_start'),
+      user('u1', 'do X'),
+      toolCall('t-a', 'Read'),
+      toolResult('t-a', false, 'data'),
+      assistant('a1', 'Done.'),
+      tokens(50, 20),
+    ]);
+    expect(vm.items.map((i) => i.kind)).toEqual(['system_note', 'user', 'tool', 'assistant']);
+    expect(vm.totalTokens.input).toBe(50);
+    expect(vm.totalTokens.output).toBe(20);
+  });
+});
+
+// ---------- applyAppendedMessage ----------
+
+describe('applyAppendedMessage', () => {
+  test('append user → adds bubble', () => {
+    const next = applyAppendedMessage([], user('u', 'hi'));
+    expect(next.items).toHaveLength(1);
+    expect(next.items[0]?.kind).toBe('user');
+  });
+
+  test('append tool_call → pending tool item', () => {
+    const next = applyAppendedMessage([], toolCall('t', 'Read'));
+    expect(next.items).toHaveLength(1);
+    const item = next.items[0];
+    if (item?.kind !== 'tool') throw new Error('wrong kind');
+    expect(item.item.status).toBe('pending');
+  });
+
+  test('append tool_result → patches matching tool item by toolUseId', () => {
+    const items: ChatItem[] = applyAppendedMessage([], toolCall('t', 'Write')).items;
+    const next = applyAppendedMessage(items, toolResult('t', false, 'wrote'));
+    expect(next.items).toHaveLength(1);
+    expect(next.modifiedToolUseId).toBe('t');
+    const item = next.items[0];
+    if (item?.kind !== 'tool') throw new Error('wrong kind');
+    expect(item.item.status).toBe('completed');
+    expect(item.item.result).toEqual({ kind: 'text', text: 'wrote' });
+  });
+
+  test('append tool_result with isError=true → status errored', () => {
+    const items = applyAppendedMessage([], toolCall('t', 'Write')).items;
+    const next = applyAppendedMessage(items, toolResult('t', true, 'denied'));
+    const item = next.items[0];
+    if (item?.kind !== 'tool') throw new Error('wrong kind');
+    expect(item.item.status).toBe('errored');
+    expect(item.item.isError).toBe(true);
+  });
+
+  test('append tool_result for unknown toolUseId → no-op (list unchanged)', () => {
+    const items = applyAppendedMessage([], user('u', 'hello')).items;
+    const next = applyAppendedMessage(items, toolResult('nonexistent', false, 'x'));
+    expect(next.items).toEqual(items);
+  });
+
+  test('append permission_decision → patches tool item.decision', () => {
+    const items = applyAppendedMessage([], toolCall('t', 'Write')).items;
+    const next = applyAppendedMessage(items, permission('req', 't', 'deny'));
+    const item = next.items[0];
+    if (item?.kind !== 'tool') throw new Error('wrong kind');
+    expect(item.decision?.decision).toBe('deny');
+  });
+
+  test('append token_usage → does not add item', () => {
+    const next = applyAppendedMessage([], tokens(10, 5));
+    expect(next.items).toEqual([]);
+  });
+});
+
+// ---------- setToolStatus (renderer idempotent merge per §10) ----------
+
+describe('setToolStatus', () => {
+  test('updates by toolUseId without duplicating', () => {
+    const items = applyAppendedMessage([], toolCall('t', 'Read')).items;
+    const stage1 = setToolStatus(items, 't', { status: 'waiting_permission' });
+    const stage2 = setToolStatus(stage1, 't', { status: 'running' });
+    expect(stage2).toHaveLength(1);
+    const item = stage2[0];
+    if (item?.kind !== 'tool') throw new Error('wrong kind');
+    expect(item.item.status).toBe('running');
+  });
+
+  test('idempotent on duplicate updates', () => {
+    const items = applyAppendedMessage([], toolCall('t', 'Read')).items;
+    const once = setToolStatus(items, 't', { status: 'running' });
+    const twice = setToolStatus(once, 't', { status: 'running' });
+    expect(twice).toHaveLength(1);
+  });
+
+  test('unknown toolUseId → no-op', () => {
+    const items = applyAppendedMessage([], user('u', 'hi')).items;
+    const next = setToolStatus(items, 'nonexistent', { status: 'running' });
+    expect(next).toEqual(items);
+  });
+});
