@@ -315,13 +315,7 @@ function SettingsPage(props: {
     case 'network':
       return <NetworkSettingsPage settings={props.settings} onUpdate={props.onUpdateSettings} />;
     case 'about':
-      return (
-        <SettingsRows>
-          <SettingRow title="版本" detail="Local development build." value="0.1.0" />
-          <SettingRow title="Runtime" detail="Electron desktop with React renderer." value="Electron 39" />
-          <SettingRow title="存储" detail="JSONL sessions、settings.json 和 encrypted provider credentials." value="Local" />
-        </SettingsRows>
-      );
+      return <AboutSettingsPage />;
     case 'general':
       return (
         <SettingsRows>
@@ -357,6 +351,53 @@ function SettingsPage(props: {
       );
     }
   }
+}
+
+type AppInfo = Awaited<ReturnType<typeof window.maka.app.info>>;
+
+const PLATFORM_LABEL: Record<string, string> = {
+  darwin: 'macOS',
+  win32: 'Windows',
+  linux: 'Linux',
+};
+
+function AboutSettingsPage() {
+  const [info, setInfo] = useState<AppInfo | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.maka.app
+      .info()
+      .then((next) => {
+        if (!cancelled) setInfo(next);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!info) {
+    return (
+      <div className="maka-skeleton-stack" aria-busy="true" aria-label="Loading about page">
+        <div className="maka-skeleton maka-skeleton-line" data-size="lg" style={{ width: '38%' }} />
+        <div className="maka-skeleton maka-skeleton-line" style={{ width: '70%' }} />
+        <div className="maka-skeleton maka-skeleton-line" style={{ width: '52%' }} />
+      </div>
+    );
+  }
+
+  const platformPretty = PLATFORM_LABEL[info.platform] ?? info.platform;
+  const platformLine = `${platformPretty} ${info.osRelease} · ${info.arch}`;
+  return (
+    <SettingsRows>
+      <SettingRow title="Maka 版本" detail="Local development build." value={`v${info.appVersion}`} />
+      <SettingRow title="运行时" detail="Renderer + Electron + Node 三层版本号一并显示。" value={`Electron ${info.electronVersion} · Node ${info.nodeVersion} · Chrome ${info.chromeVersion}`} />
+      <SettingRow title="平台" detail="操作系统、版本和 CPU 架构。" value={platformLine} />
+      <SettingRow title="工作区" detail="会话、设置、credential 全部留在本地这条路径下。" value={info.workspacePath} />
+      <SettingRow title="存储" detail="JSONL sessions、settings.json、encrypted provider credentials。" value="Local" />
+    </SettingsRows>
+  );
 }
 
 function SettingsSkeleton() {

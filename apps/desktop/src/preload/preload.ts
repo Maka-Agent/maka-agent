@@ -135,4 +135,18 @@ contextBridge.exposeInMainWorld('maka', {
       return () => ipcRenderer.off('window:openSettings', listener);
     },
   },
+  app: {
+    info(): Promise<{
+      appVersion: string;
+      electronVersion: string;
+      nodeVersion: string;
+      chromeVersion: string;
+      platform: string;
+      arch: string;
+      osRelease: string;
+      workspacePath: string;
+    }> {
+      return ipcRenderer.invoke('app:info');
+    },
+  },
 });

@@ -71,6 +71,18 @@ declare global {
       appWindow: {
         subscribeOpenSettings(handler: () => void): () => void;
       };
+      app: {
+        info(): Promise<{
+          appVersion: string;
+          electronVersion: string;
+          nodeVersion: string;
+          chromeVersion: string;
+          platform: string;
+          arch: string;
+          osRelease: string;
+          workspacePath: string;
+        }>;
+      };
     };
   }
 }

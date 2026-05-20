@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { release as osRelease, arch as osArch } from 'node:os';
 import type {
   ConnectionEvent,
   CreateConnectionInput,
@@ -191,6 +192,16 @@ function installApplicationMenu(): void {
 }
 
 function registerIpc(): void {
+  ipcMain.handle('app:info', () => ({
+    appVersion: app.getVersion(),
+    electronVersion: process.versions.electron ?? '',
+    nodeVersion: process.versions.node ?? '',
+    chromeVersion: process.versions.chrome ?? '',
+    platform: process.platform,
+    arch: osArch(),
+    osRelease: osRelease(),
+    workspacePath: workspaceRoot,
+  }));
   ipcMain.handle('sessions:list', (_event, filter?: SessionListFilter) => runtime.listSessions(filter));
   ipcMain.handle('sessions:create', async (_event, input?: Partial<CreateSessionInput>) => {
     const cwd = input?.cwd ?? process.cwd();
