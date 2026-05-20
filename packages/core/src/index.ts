@@ -135,3 +135,16 @@ export {
   mergeSettings,
   normalizeSettings,
 } from './settings.js';
+
+// usage-stats/types.ts
+export type {
+  LlmCallRecord,
+  PricingConfig,
+  TimeRange,
+  ToolInvocationRecord,
+  UsageBucket,
+  UsageGroupBy,
+  UsageLogRow,
+  UsageQuery,
+  UsageSummaryV2,
+} from './usage-stats/types.js';

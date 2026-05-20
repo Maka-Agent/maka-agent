@@ -18,7 +18,8 @@
     "./llm-connections": "./dist/llm-connections.js",
     "./settings": "./dist/settings.js",
     "./settings/network-settings": "./dist/settings/network-settings.js",
-    "./settings/result": "./dist/settings/result.js"
+    "./settings/result": "./dist/settings/result.js",
+    "./usage-stats/types": "./dist/usage-stats/types.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

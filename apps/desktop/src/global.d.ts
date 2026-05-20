@@ -18,6 +18,15 @@ import type {
   UsageRange,
   UsageStats,
 } from '@maka/core';
+import type {
+  PricingConfig,
+  UsageBucket,
+  UsageGroupBy,
+  UsageLogRow,
+  UsageQuery,
+  UsageSummaryV2,
+} from '@maka/core/usage-stats/types';
+import type { Result } from '@maka/core/settings/result';
 import type { CreateSessionInput } from '@maka/core';
 
 declare global {
@@ -50,6 +59,14 @@ declare global {
         testNetworkProxy(): Promise<SettingsTestResult>;
         testBotChannel(provider: BotProvider): Promise<SettingsTestResult>;
         usageStats(range?: UsageRange): Promise<UsageStats>;
+      };
+      usage: {
+        summary(query: UsageQuery): Promise<Result<UsageSummaryV2>>;
+        buckets(query: UsageQuery & { groupBy: UsageGroupBy }): Promise<Result<UsageBucket[]>>;
+        logs(query: UsageQuery & { offset?: number; limit?: number }): Promise<Result<{ rows: UsageLogRow[]; total: number }>>;
+        listPricing(): Promise<Result<PricingConfig[]>>;
+        putPricing(pricing: PricingConfig): Promise<Result<PricingConfig>>;
+        resetPricing(modelKey: string): Promise<Result<void>>;
       };
       appWindow: {
         subscribeOpenSettings(handler: () => void): () => void;

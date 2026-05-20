@@ -1,0 +1,26 @@
+import type { LlmCallRecord, ToolInvocationRecord } from '@maka/core/usage-stats/types';
+
+export interface TelemetryRepoLite {
+  insertLlmCall(record: PersistedLlmCallRecord): void;
+  insertToolInvocation(record: PersistedToolInvocationRecord): void;
+}
+
+export type PersistedLlmCallRecord = LlmCallRecord & {
+  id: string;
+  cachedInputTokens: number;
+  cacheWriteInputTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  date: string;
+  ts: number;
+};
+
+export type PersistedToolInvocationRecord = ToolInvocationRecord & {
+  id: string;
+  argsSummary?: string;
+  bytesIn: number;
+  bytesOut: number;
+  date: string;
+  ts: number;
+};

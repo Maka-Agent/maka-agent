@@ -52,3 +52,19 @@ export type { ToolActivityItem, ChatItem, SessionViewModel } from './materialize
 
 export { AsyncEventQueue } from './async-queue.js';
 export { FakeBackend } from './fake-backend.js';
+
+export {
+  BUILTIN_PRICING,
+  buildPricingLookup,
+  computeCost,
+  getBuiltinPricing,
+  recordLlmCall,
+  recordToolInvocation,
+} from './telemetry/index.js';
+export type {
+  LlmRecorderDeps,
+  PersistedLlmCallRecord,
+  PersistedToolInvocationRecord,
+  TelemetryRepoLite,
+  ToolRecorderDeps,
+} from './telemetry/index.js';

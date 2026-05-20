@@ -15,6 +15,11 @@ import type {
   UsageRange,
 } from '@maka/core';
 import type {
+  PricingConfig,
+  UsageGroupBy,
+  UsageQuery,
+} from '@maka/core/usage-stats/types';
+import type {
   NetworkSettings as ContractNetworkSettings,
   ProxySettings,
   TestProxyInput,
@@ -35,21 +40,26 @@ import {
   buildBuiltinTools,
   fetchProviderModels,
   getAIModel,
+  recordLlmCall,
+  recordToolInvocation,
+  buildPricingLookup,
   testConnection,
 } from '@maka/runtime';
 import { testProxyConnection } from '@maka/runtime/network/proxy-test';
 import { PROVIDER_DEFAULTS } from '@maka/core/llm-connections';
-import { createConnectionStore, createSessionStore, createSettingsStore } from '@maka/storage';
+import { createConnectionStore, createSessionStore, createSettingsStore, createTelemetryRepo } from '@maka/storage';
 import { createSafeStorageCredentialStore } from './credential-store.js';
 
 const workspaceRoot = join(app.getPath('userData'), 'workspaces', 'default');
 const store = createSessionStore(workspaceRoot);
 const connectionStore = createConnectionStore(workspaceRoot);
 const settingsStore = createSettingsStore(workspaceRoot);
+const telemetryRepo = createTelemetryRepo(workspaceRoot);
 const credentialStore = createSafeStorageCredentialStore(workspaceRoot);
 const backends = new BackendRegistry();
 const permissionEngine = new PermissionEngine({ newId: randomUUID, now: Date.now });
 const builtinTools = buildBuiltinTools().filter((tool) => tool.name !== 'Edit');
+let lookupPricing = buildPricingLookup();
 
 app.setName('Maka');
 
@@ -74,6 +84,8 @@ backends.register('ai-sdk', async (ctx) => {
     permissionEngine,
     modelFactory: getAIModel,
     tools: builtinTools,
+    recordLlmCall: (event) => recordLlmCall({ repo: telemetryRepo, lookupPricing }, event),
+    recordToolInvocation: (event) => recordToolInvocation({ repo: telemetryRepo }, event),
     newId: randomUUID,
     now: Date.now,
   });
@@ -262,6 +274,33 @@ function registerIpc(): void {
   ipcMain.handle('settings:usageStats', (_event, range?: UsageRange) =>
     settingsStore.usageStats(range),
   );
+  ipcMain.handle('usage:summary', (_event, query: UsageQuery) =>
+    tryResult(async () => telemetryRepo.summary(query), 'USAGE_SUMMARY_FAILED'),
+  );
+  ipcMain.handle('usage:buckets', (_event, query: UsageQuery & { groupBy: UsageGroupBy }) =>
+    tryResult(async () => telemetryRepo.buckets(query, query.groupBy), 'USAGE_BUCKETS_FAILED'),
+  );
+  ipcMain.handle('usage:logs', (_event, query: UsageQuery & { offset?: number; limit?: number }) =>
+    tryResult(async () => telemetryRepo.logs(query, query.offset, query.limit), 'USAGE_LOGS_FAILED'),
+  );
+  ipcMain.handle('usage:pricing:list', () =>
+    tryResult(async () => telemetryRepo.listPricingOverrides(), 'USAGE_PRICING_LIST_FAILED'),
+  );
+  ipcMain.handle('usage:pricing:put', (_event, pricing: PricingConfig) =>
+    tryResult(async () => {
+      await telemetryRepo.upsertPricing(pricing);
+      lookupPricing = buildPricingLookup(telemetryRepo.listPricingOverrides());
+      mainWindow?.webContents.send('usage:pricing:changed');
+      return pricing;
+    }, 'USAGE_PRICING_PUT_FAILED'),
+  );
+  ipcMain.handle('usage:pricing:reset', (_event, modelKey: string) =>
+    tryResult(async () => {
+      await telemetryRepo.deletePricing(modelKey);
+      lookupPricing = buildPricingLookup(telemetryRepo.listPricingOverrides());
+      mainWindow?.webContents.send('usage:pricing:changed');
+    }, 'USAGE_PRICING_RESET_FAILED'),
+  );
 
   ipcMain.handle('settings:network:get', async (): Promise<Result<ContractNetworkSettings>> =>
     tryResult(async () => maskNetworkSettings(toContractNetworkSettings((await settingsStore.get()).network)), 'NETWORK_GET_FAILED'),
@@ -403,6 +442,8 @@ registerIpc();
 
 app.whenReady().then(async () => {
   await ensureBootstrapConnection();
+  await telemetryRepo.load();
+  lookupPricing = buildPricingLookup(telemetryRepo.listPricingOverrides());
   await createWindow();
 });
 

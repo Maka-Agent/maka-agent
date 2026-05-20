@@ -19,6 +19,15 @@ import type {
   UsageRange,
   UsageStats,
 } from '@maka/core';
+import type {
+  PricingConfig,
+  UsageBucket,
+  UsageGroupBy,
+  UsageLogRow,
+  UsageQuery,
+  UsageSummaryV2,
+} from '@maka/core/usage-stats/types';
+import type { Result } from '@maka/core/settings/result';
 import type { CreateSessionInput } from '@maka/core';
 
 contextBridge.exposeInMainWorld('maka', {
@@ -97,6 +106,26 @@ contextBridge.exposeInMainWorld('maka', {
     },
     usageStats(range?: UsageRange): Promise<UsageStats> {
       return ipcRenderer.invoke('settings:usageStats', range);
+    },
+  },
+  usage: {
+    summary(query: UsageQuery): Promise<Result<UsageSummaryV2>> {
+      return ipcRenderer.invoke('usage:summary', query);
+    },
+    buckets(query: UsageQuery & { groupBy: UsageGroupBy }): Promise<Result<UsageBucket[]>> {
+      return ipcRenderer.invoke('usage:buckets', query);
+    },
+    logs(query: UsageQuery & { offset?: number; limit?: number }): Promise<Result<{ rows: UsageLogRow[]; total: number }>> {
+      return ipcRenderer.invoke('usage:logs', query);
+    },
+    listPricing(): Promise<Result<PricingConfig[]>> {
+      return ipcRenderer.invoke('usage:pricing:list');
+    },
+    putPricing(pricing: PricingConfig): Promise<Result<PricingConfig>> {
+      return ipcRenderer.invoke('usage:pricing:put', pricing);
+    },
+    resetPricing(modelKey: string): Promise<Result<void>> {
+      return ipcRenderer.invoke('usage:pricing:reset', modelKey);
     },
   },
   appWindow: {

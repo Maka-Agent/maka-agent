@@ -20,7 +20,8 @@
     "./fake-backend": "./dist/fake-backend.js",
     "./network/proxy-env": "./dist/network/proxy-env.js",
     "./network/proxy-test": "./dist/network/proxy-test.js",
-    "./network/proxy-parser": "./dist/network/proxy-parser.js"
+    "./network/proxy-parser": "./dist/network/proxy-parser.js",
+    "./telemetry": "./dist/telemetry/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

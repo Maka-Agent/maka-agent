@@ -62,6 +62,7 @@ import type {
   PermissionDecision,
 } from '@maka/core/backend-types';
 import { PROVIDER_DEFAULTS, type LlmConnection } from '@maka/core/llm-connections';
+import type { LlmCallRecord, ToolInvocationRecord } from '@maka/core/usage-stats/types';
 
 import { PermissionEngine } from './permission-engine.js';
 import { AsyncEventQueue } from './async-queue.js';
@@ -146,6 +147,8 @@ export type ModelFactory = (input: ModelFactoryInput) => unknown;
  * Allows callers to inject a custom queueing/buffering strategy if needed.
  */
 export type AppendMessageFn = (m: StoredMessage) => Promise<void>;
+export type LlmTelemetryRecorder = (record: LlmCallRecord) => void;
+export type ToolTelemetryRecorder = (record: ToolInvocationRecord) => void;
 
 export interface AiSdkBackendInput {
   // ── Session context ────────────────────────────────────────────────────
@@ -175,6 +178,9 @@ export interface AiSdkBackendInput {
   maxSteps?: number;
   /** Optional system prompt (skills + workspace AGENTS.md merged upstream). */
   systemPrompt?: string;
+  /** Optional fire-and-forget telemetry hooks. Tool implementations remain unaware. */
+  recordLlmCall?: LlmTelemetryRecorder;
+  recordToolInvocation?: ToolTelemetryRecorder;
 }
 
 // ============================================================================
@@ -223,6 +229,10 @@ export class AiSdkBackend implements AgentBackend {
     let assistantText = '';
     let thinkingText = '';
     let thinkingSignature: string | undefined;
+    const startedAt = this.now();
+    let tokenUsage: { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined;
+    let streamStatus: LlmCallRecord['status'] = 'success';
+    let streamErrorClass: string | undefined;
 
     // --- Resolve model (API key already attached at construct time) ---
     let model: unknown;
@@ -332,6 +342,7 @@ export class AiSdkBackend implements AgentBackend {
         // Final usage event (await result.usage which resolves once stream ends).
         try {
           const usage = await result.usage;
+          tokenUsage = usage;
           if (usage) {
             const tu: TokenUsageMessage = {
               type: 'token_usage',
@@ -365,6 +376,8 @@ export class AiSdkBackend implements AgentBackend {
           stopReason: this.mapFinishReason(finishReason),
         } satisfies CompleteEvent);
       } catch (err) {
+        streamStatus = this.aborted ? 'aborted' : 'error';
+        streamErrorClass = classifyError(err);
         if (this.aborted) {
           queue.push({
             type: 'abort',
@@ -391,6 +404,19 @@ export class AiSdkBackend implements AgentBackend {
           } satisfies CompleteEvent);
         }
       } finally {
+        this.input.recordLlmCall?.({
+          sessionId: this.sessionId,
+          turnId,
+          providerId: this.input.connection.providerType,
+          modelId: this.input.modelId,
+          inputTokens: tokenUsage?.promptTokens ?? 0,
+          outputTokens: tokenUsage?.completionTokens ?? 0,
+          totalTokens: tokenUsage?.totalTokens,
+          latencyMs: Math.max(0, this.now() - startedAt),
+          status: streamStatus,
+          ...(streamErrorClass ? { errorClass: streamErrorClass } : {}),
+          startedAt,
+        });
         queue.close();
       }
     })();
@@ -541,10 +567,40 @@ export class AiSdkBackend implements AgentBackend {
           durationMs,
         } satisfies ToolResultEvent);
 
+        this.input.recordToolInvocation?.({
+          sessionId: this.sessionId,
+          turnId,
+          toolCallId: toolUseId,
+          toolName: tool.name,
+          providerId: this.input.connection.providerType,
+          modelId: this.input.modelId,
+          durationMs,
+          status: 'success',
+          argsSummary: summarizeArgs(args),
+          bytesIn: byteLength(args),
+          bytesOut: byteLength(result),
+          startedAt,
+        });
+
         return result;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         await this.writeSyntheticToolResult(toolUseId, turnId, msg, queue);
+        this.input.recordToolInvocation?.({
+          sessionId: this.sessionId,
+          turnId,
+          toolCallId: toolUseId,
+          toolName: tool.name,
+          providerId: this.input.connection.providerType,
+          modelId: this.input.modelId,
+          durationMs: Math.max(0, this.now() - startedAt),
+          status: 'error',
+          errorClass: classifyError(err),
+          argsSummary: summarizeArgs(args),
+          bytesIn: byteLength(args),
+          bytesOut: 0,
+          startedAt,
+        });
         return this.errorReturn(msg);
       }
     };
@@ -774,4 +830,27 @@ interface StreamTextResult {
   fullStream: AsyncIterable<AiSdkStreamChunk>;
   usage: Promise<{ promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined>;
   finishReason: Promise<string>;
+}
+
+function classifyError(error: unknown): string {
+  if (!(error instanceof Error)) return 'Other';
+  const code = 'code' in error ? String((error as { code?: unknown }).code) : '';
+  const text = `${error.name} ${code} ${error.message}`.toLowerCase();
+  if (text.includes('abort')) return 'Abort';
+  if (text.includes('rate') || code === '429') return 'RateLimit';
+  if (text.includes('auth') || code === '401' || code === '403') return 'Auth';
+  if (text.includes('timeout')) return 'Timeout';
+  if (text.includes('network') || text.includes('fetch')) return 'Network';
+  return error.name || 'Other';
+}
+
+function summarizeArgs(args: unknown): string {
+  const text = typeof args === 'string' ? args : JSON.stringify(args ?? null);
+  return text.length <= 512 ? text : `${text.slice(0, 511)}…`;
+}
+
+function byteLength(value: unknown): number {
+  if (value === undefined) return 0;
+  const text = typeof value === 'string' ? value : JSON.stringify(value ?? null);
+  return Buffer.byteLength(text, 'utf8');
 }
