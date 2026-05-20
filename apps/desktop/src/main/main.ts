@@ -43,6 +43,9 @@ import {
   recordLlmCall,
   recordToolInvocation,
   buildPricingLookup,
+  BotRegistry,
+  testBotChannel as testRuntimeBotChannel,
+  setActiveProxy,
   testConnection,
 } from '@maka/runtime';
 import { testProxyConnection } from '@maka/runtime/network/proxy-test';
@@ -60,6 +63,14 @@ const backends = new BackendRegistry();
 const permissionEngine = new PermissionEngine({ newId: randomUUID, now: Date.now });
 const builtinTools = buildBuiltinTools().filter((tool) => tool.name !== 'Edit');
 let lookupPricing = buildPricingLookup();
+const botRegistry = new BotRegistry({
+  onIncomingMessage: (message) => {
+    console.log('[bot] incoming message', message.platform, message.chatId);
+  },
+  onStatusChange: (status) => {
+    mainWindow?.webContents.send('settings:bots:statusChanged', status);
+  },
+});
 
 app.setName('Maka');
 
@@ -271,6 +282,22 @@ function registerIpc(): void {
   ipcMain.handle('settings:testBotChannel', (_event, provider: BotProvider) =>
     settingsStore.testBotChannel(provider),
   );
+  ipcMain.handle('settings:bots:listStatuses', () =>
+    tryResult(async () => botRegistry.allStatuses(), 'BOTS_STATUS_FAILED'),
+  );
+  ipcMain.handle('settings:bots:restart', (_event, provider: BotProvider) =>
+    tryResult(async () => {
+      const settings = await settingsStore.get();
+      await botRegistry.applySettings(settings.botChat);
+      return botRegistry.getStatus(provider);
+    }, 'BOTS_RESTART_FAILED'),
+  );
+  ipcMain.handle('settings:bots:test', (_event, provider: BotProvider) =>
+    tryResult(async () => {
+      const settings = await settingsStore.get();
+      return testRuntimeBotChannel(provider, settings.botChat.channels[provider]);
+    }, 'BOTS_TEST_FAILED'),
+  );
   ipcMain.handle('settings:usageStats', (_event, range?: UsageRange) =>
     settingsStore.usageStats(range),
   );
@@ -311,6 +338,7 @@ function registerIpc(): void {
       const nextNetwork = applyNetworkPatch(toContractNetworkSettings(current.network), patch);
       const next = await settingsStore.update({ network: toAppNetworkPatch(nextNetwork) });
       const masked = maskNetworkSettings(toContractNetworkSettings(next.network));
+      setActiveProxy(toContractNetworkSettings(next.network).proxy);
       mainWindow?.webContents.send('settings:network:changed', masked);
       return masked;
     }, 'NETWORK_PUT_FAILED'),
@@ -442,13 +470,20 @@ registerIpc();
 
 app.whenReady().then(async () => {
   await ensureBootstrapConnection();
+  const settings = await settingsStore.get();
+  setActiveProxy(toContractNetworkSettings(settings.network).proxy);
   await telemetryRepo.load();
   lookupPricing = buildPricingLookup(telemetryRepo.listPricingOverrides());
+  await botRegistry.applySettings(settings.botChat);
   await createWindow();
 });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', () => {
+  void botRegistry.stopAll();
 });
 
 app.on('activate', () => {
