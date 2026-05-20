@@ -502,6 +502,32 @@ button:active {
   background: oklch(from var(--destructive) l c h / 0.10);
 }
 
+.maka-list-row-rename-input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  outline: 0;
+  padding: 1px 0;
+  border-bottom: 1px solid oklch(from var(--accent) l c h / 0.4);
+}
+
+.maka-list-row-rename-input:focus {
+  border-bottom-color: var(--accent);
+}
+
+.maka-list-row[data-editing="true"] {
+  border-color: oklch(from var(--accent) l c h / 0.45);
+  background: var(--background);
+}
+
+.maka-list-row[data-editing="true"] .maka-list-row-main {
+  cursor: text;
+}
+
 .maka-list-row-name {
   overflow: hidden;
   text-overflow: ellipsis;

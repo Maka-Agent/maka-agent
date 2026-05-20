@@ -275,19 +275,34 @@ function SessionRow(props: {
   actions?: SessionRowActions;
 }) {
   const { session, active, actions, onSelect } = props;
+  const [editing, setEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus + select-all when the row enters edit mode so the user can
+  // overwrite the current name without an extra Cmd+A.
+  useEffect(() => {
+    if (!editing) return;
+    const input = inputRef.current;
+    if (!input) return;
+    input.focus();
+    input.select();
+  }, [editing]);
 
   const stopPropagation = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
   };
 
-  function handleRename(event: MouseEvent<HTMLButtonElement>) {
+  function startRename(event: MouseEvent<HTMLButtonElement>) {
     stopPropagation(event);
     if (!actions) return;
-    const next = window.prompt('Rename this chat', session.name);
-    if (next === null) return;
-    const trimmed = next.trim();
+    setEditing(true);
+  }
+
+  function commitRename(rawValue: string) {
+    const trimmed = rawValue.trim();
+    setEditing(false);
     if (!trimmed || trimmed === session.name) return;
-    actions.onRename(session.id, trimmed);
+    actions?.onRename(session.id, trimmed);
   }
 
   function handleDelete(event: MouseEvent<HTMLButtonElement>) {
@@ -299,19 +314,56 @@ function SessionRow(props: {
   }
 
   return (
-    <div className="maka-list-row" data-active={active}>
-      <button
-        className="maka-list-row-main"
-        type="button"
-        onClick={() => onSelect(session.id)}
-      >
-        <div>
-          <div className="maka-list-row-name">{session.name}</div>
-          <div className="maka-list-row-meta">{formatSessionMeta(session)}</div>
-        </div>
-        {session.hasUnread && <span className="maka-list-row-unread" />}
-      </button>
-      {actions && (
+    <div className="maka-list-row" data-active={active} data-editing={editing}>
+      {editing ? (
+        <form
+          className="maka-list-row-main"
+          onSubmit={(event) => {
+            event.preventDefault();
+            commitRename(inputRef.current?.value ?? '');
+          }}
+        >
+          <div>
+            <input
+              ref={inputRef}
+              className="maka-list-row-rename-input"
+              defaultValue={session.name}
+              maxLength={80}
+              aria-label="Rename chat"
+              onBlur={(event) => commitRename(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                // IME guard so committing CJK characters with Enter doesn't
+                // submit the rename before the user is done.
+                if (event.nativeEvent.isComposing || event.key === 'Process') return;
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  setEditing(false);
+                }
+              }}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <div className="maka-list-row-meta">{formatSessionMeta(session)}</div>
+          </div>
+        </form>
+      ) : (
+        <button
+          className="maka-list-row-main"
+          type="button"
+          onClick={() => onSelect(session.id)}
+          onDoubleClick={(event) => {
+            event.stopPropagation();
+            if (actions) setEditing(true);
+          }}
+        >
+          <div>
+            <div className="maka-list-row-name">{session.name}</div>
+            <div className="maka-list-row-meta">{formatSessionMeta(session)}</div>
+          </div>
+          {session.hasUnread && <span className="maka-list-row-unread" />}
+        </button>
+      )}
+      {actions && !editing && (
         <div className="maka-list-row-actions" aria-label="Session actions">
           <button
             type="button"
@@ -331,9 +383,9 @@ function SessionRow(props: {
           <button
             type="button"
             className="maka-list-row-action"
-            onClick={handleRename}
+            onClick={startRename}
             aria-label="Rename chat"
-            title="Rename"
+            title="Rename (double-click also works)"
           >
             <Pencil size={14} strokeWidth={1.75} aria-hidden="true" />
           </button>
