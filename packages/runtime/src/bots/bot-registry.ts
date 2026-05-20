@@ -11,13 +11,19 @@ export interface BotRegistryDeps {
 
 export class BotRegistry extends EventEmitter {
   private bridges = new Map<BotPlatform, BotBridge>();
+  private applyQueue: Promise<void> = Promise.resolve();
 
   constructor(private readonly deps: BotRegistryDeps) {
     super();
   }
 
   async applySettings(settings: BotChatSettings): Promise<void> {
-    await Promise.all(BOT_PROVIDERS.map((provider) => this.reconcileOne(provider, settings.channels[provider])));
+    const next = this.applyQueue.then(
+      () => this.applySettingsNow(settings),
+      () => this.applySettingsNow(settings),
+    );
+    this.applyQueue = next.catch(() => {});
+    return next;
   }
 
   getStatus(platform: BotPlatform): BotStatus {
@@ -36,6 +42,19 @@ export class BotRegistry extends EventEmitter {
   }
 
   async stopAll(): Promise<void> {
+    const next = this.applyQueue.then(
+      () => this.stopAllNow(),
+      () => this.stopAllNow(),
+    );
+    this.applyQueue = next.catch(() => {});
+    return next;
+  }
+
+  private async applySettingsNow(settings: BotChatSettings): Promise<void> {
+    await Promise.all(BOT_PROVIDERS.map((provider) => this.reconcileOne(provider, settings.channels[provider])));
+  }
+
+  private async stopAllNow(): Promise<void> {
     await Promise.all([...this.bridges.values()].map((bridge) => bridge.stop().catch(() => {})));
     this.bridges.clear();
   }
