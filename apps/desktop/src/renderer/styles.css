@@ -153,7 +153,7 @@ button:active {
 .maka-session-search {
   height: 34px;
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
+  grid-template-columns: 16px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   margin: 0 10px 8px;
@@ -163,11 +163,55 @@ button:active {
   background: var(--foreground-2);
   color: var(--foreground-40);
   font-size: 13px;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.maka-session-search:focus-within {
+  border-color: oklch(from var(--accent) l c h / 0.4);
+  background: var(--background);
 }
 
 .maka-session-search svg {
   width: 14px;
   height: 14px;
+}
+
+.maka-session-search input {
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 13px;
+  outline: 0;
+  width: 100%;
+}
+
+.maka-session-search input::placeholder {
+  color: var(--foreground-40);
+}
+
+/* Hide the browser's default search-cancel button — we render our own. */
+.maka-session-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.maka-session-search-clear {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--foreground-50);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+}
+
+.maka-session-search-clear:hover {
+  color: var(--foreground);
+  background: var(--foreground-5);
 }
 
 .maka-session-list {

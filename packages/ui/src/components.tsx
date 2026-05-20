@@ -1,4 +1,4 @@
-import { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from 'react';
+import { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import {
   AlertOctagon,
   AlertTriangle,
@@ -168,6 +168,32 @@ export function SessionListPanel(props: {
 }) {
   const isSessionFilter = (filter: SessionFilter) => props.selection.section === 'sessions' && props.selection.filter === filter;
   const title = props.selection.section === 'sessions' ? FILTER_LABEL[props.selection.filter] : 'Skills';
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Filter the incoming sessions by name. Case-insensitive substring is
+  // enough for chats — most users name them with the topic. Falls back to
+  // showing everything when the query is empty.
+  const filteredSessions = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return props.sessions;
+    return props.sessions.filter((session) => session.name.toLowerCase().includes(q));
+  }, [props.sessions, searchQuery]);
+
+  // ⌘F / Ctrl+F focuses the search field instead of triggering Electron's
+  // page find. Limit to the sessions section so it doesn't fight the chat.
+  useEffect(() => {
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.key !== 'f' && event.key !== 'F') return;
+      if (props.selection.section !== 'sessions') return;
+      event.preventDefault();
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [props.selection.section]);
 
   function handleListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown' && event.key !== 'Home' && event.key !== 'End') {
@@ -244,9 +270,37 @@ export function SessionListPanel(props: {
         </button>
       </div>
 
-      <div className="maka-session-search" aria-hidden="true">
-        <Search strokeWidth={1.5} />
-        <span>Search chats</span>
+      <div className="maka-session-search">
+        <Search strokeWidth={1.5} aria-hidden="true" />
+        <input
+          ref={searchInputRef}
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && searchQuery) {
+              event.preventDefault();
+              setSearchQuery('');
+            }
+          }}
+          placeholder="搜索会话…  ⌘F"
+          aria-label="Search chats"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            className="maka-session-search-clear"
+            onClick={() => {
+              setSearchQuery('');
+              searchInputRef.current?.focus();
+            }}
+            aria-label="Clear search"
+          >
+            ×
+          </button>
+        )}
       </div>
 
       <section className="maka-session-list" aria-label={title}>
@@ -268,9 +322,15 @@ export function SessionListPanel(props: {
               New Chat
             </button>
           </div>
+        ) : filteredSessions.length === 0 ? (
+          <div className="maka-empty-state">
+            <Search className="maka-empty-state-icon" strokeWidth={1.5} />
+            <div className="maka-empty-state-title">没有匹配的会话</div>
+            <div className="maka-empty-state-body">没有名字包含 “{searchQuery}” 的会话。换个关键词，或者按 Esc 清空搜索。</div>
+          </div>
         ) : (
           <div className="maka-list-stack" onKeyDown={handleListKeyDown}>
-            {props.sessions.map((session) => (
+            {filteredSessions.map((session) => (
               <SessionRow
                 key={session.id}
                 session={session}
