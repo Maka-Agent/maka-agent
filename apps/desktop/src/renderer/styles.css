@@ -770,6 +770,84 @@ button:active {
   gap: 6px;
 }
 
+.maka-help-modal {
+  width: min(680px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.maka-help-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.maka-help-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: var(--foreground-50);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.maka-help-body {
+  display: grid;
+  gap: 22px;
+  padding: 18px 20px 22px;
+  overflow-y: auto;
+}
+
+.maka-help-section h3 {
+  margin: 0 0 10px;
+  color: var(--foreground-70);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.maka-help-section dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.maka-help-section dl > div {
+  display: contents;
+}
+
+.maka-help-section dt {
+  color: var(--foreground-80);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.maka-help-section dd {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-self: end;
+}
+
+.maka-help-section dd > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.maka-help-plus {
+  color: var(--foreground-40);
+  font-size: 11px;
+}
+
 .emptyChat {
   width: min(760px, 100%);
   margin: auto;

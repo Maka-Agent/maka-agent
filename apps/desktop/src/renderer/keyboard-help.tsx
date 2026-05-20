@@ -1,0 +1,154 @@
+// apps/desktop/src/renderer/keyboard-help.tsx
+//
+// Discoverable keyboard cheat sheet. Modal triggered by `?` (when no input is
+// focused) or `⌘/` / `Ctrl+/`. Lists every shortcut the renderer reacts to so
+// users don't need to scrape the README. Reuses the same useModalA11y hook
+// as Settings/Permission so focus trapping + escape + return-focus are
+// already covered.
+
+import { useEffect, useRef, useState } from 'react';
+import { Keyboard, X } from 'lucide-react';
+import { useModalA11y } from '@maka/ui';
+
+type Section = {
+  heading: string;
+  rows: Array<{ keys: string[]; description: string }>;
+};
+
+const SHORTCUTS: Section[] = [
+  {
+    heading: '通用',
+    rows: [
+      { keys: ['?'], description: '打开 / 关闭此快捷键面板' },
+      { keys: ['⌘', ','], description: '打开 Settings' },
+      { keys: ['Esc'], description: '关闭当前模态框' },
+    ],
+  },
+  {
+    heading: 'Composer 输入',
+    rows: [
+      { keys: ['Enter'], description: '发送消息' },
+      { keys: ['Shift', 'Enter'], description: '插入换行' },
+      { keys: ['Alt', 'Enter'], description: '插入换行（备用）' },
+    ],
+  },
+  {
+    heading: '会话列表',
+    rows: [
+      { keys: ['Tab'], description: '在会话与导航之间移动焦点' },
+      { keys: ['Enter'], description: '打开聚焦的会话' },
+    ],
+  },
+  {
+    heading: '聊天区',
+    rows: [
+      { keys: ['Tab'], description: '聚焦工具活动 / Copy 按钮' },
+      { keys: ['Space', 'Enter'], description: '展开 / 折叠工具调用' },
+    ],
+  },
+  {
+    heading: '面板调整',
+    rows: [
+      { keys: ['Tab'], description: '聚焦左右分割条' },
+      { keys: ['←', '→'], description: '微调会话列表宽度（±10 px）' },
+      { keys: ['Shift', '←', '→'], description: '快速调整（±50 px）' },
+      { keys: ['Home', 'End'], description: '直接拉到最小 / 最大宽度' },
+    ],
+  },
+];
+
+/**
+ * Manages the global key listener that opens and closes the help modal.
+ * Returned tuple gives callers the current open state and an imperative
+ * close function for the rendered modal.
+ */
+export function useKeyboardHelp(): [boolean, () => void] {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.metaKey || event.ctrlKey) {
+        if (event.key === '/' || event.key === '?') {
+          event.preventDefault();
+          setOpen((prev) => !prev);
+        }
+        return;
+      }
+      if (event.key !== '?') return;
+      // Skip if the user is typing in a text field so `?` still types.
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      setOpen(true);
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  return [open, () => setOpen(false)];
+}
+
+export function KeyboardHelpModal(props: { onClose(): void }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, props.onClose);
+
+  return (
+    <div className="maka-modal-backdrop maka-help-backdrop" role="presentation" onClick={props.onClose}>
+      <div
+        ref={dialogRef}
+        className="maka-modal maka-help-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="maka-help-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="maka-modal-header maka-help-header">
+          <div>
+            <span className="maka-help-eyebrow" aria-hidden="true">
+              <Keyboard size={14} strokeWidth={1.75} />
+              <span>键盘快捷键</span>
+            </span>
+            <h2 className="maka-modal-title" id="maka-help-title">所有可用快捷键</h2>
+          </div>
+          <button
+            type="button"
+            className="settingsCloseButton"
+            aria-label="Close shortcuts"
+            onClick={props.onClose}
+          >
+            <X strokeWidth={1.75} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="maka-modal-body maka-help-body">
+          {SHORTCUTS.map((section) => (
+            <section key={section.heading} className="maka-help-section">
+              <h3>{section.heading}</h3>
+              <dl>
+                {section.rows.map((row) => (
+                  <div key={row.description}>
+                    <dt>{row.description}</dt>
+                    <dd>
+                      {row.keys.map((key, index) => (
+                        <span key={`${row.description}:${key}:${index}`}>
+                          {index > 0 && <span className="maka-help-plus" aria-hidden="true">+</span>}
+                          <kbd>{key}</kbd>
+                        </span>
+                      ))}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -20,6 +20,7 @@ import {
 } from '@maka/ui';
 import { SettingsModal } from './settings/SettingsModal';
 import { ErrorBoundary } from './error-boundary';
+import { KeyboardHelpModal, useKeyboardHelp } from './keyboard-help';
 import { applyTheme } from './theme';
 import './styles.css';
 
@@ -35,6 +36,7 @@ function App() {
   const [defaultConnection, setDefaultConnection] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [themePref, setThemePref] = useState<ThemePreference>('auto');
+  const [helpOpen, closeHelp] = useKeyboardHelp();
   const activeStreaming = activeId ? streamingBySession[activeId] ?? '' : '';
   const liveTools = useMemo(() => (activeId ? liveToolsBySession[activeId] ?? [] : []), [activeId, liveToolsBySession]);
   const activePermission = activeId ? permissionBySession[activeId] : undefined;
@@ -375,6 +377,7 @@ function App() {
           onThemeChange={setThemePref}
         />
       )}
+      {helpOpen && <KeyboardHelpModal onClose={closeHelp} />}
     </div>
   );
 }
