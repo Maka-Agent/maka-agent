@@ -76,6 +76,8 @@ import {
   requireReadyConnection,
 } from './chat-readiness.js';
 import { createSafeStorageCredentialStore } from './credential-store.js';
+import { bindOnboardingDeps, createOnboardingService } from './onboarding-service.js';
+import { handleQuickChatStart as runQuickChatStart, type QuickChatResult } from './quick-chat.js';
 import { connectionTestStatusPatch } from './connection-test-status.js';
 import { resolveOpenPath, type OpenPathResult } from './open-path-guard.js';
 import { buildPersonalizationPromptFragment } from './personalization-prompt.js';
@@ -217,6 +219,20 @@ const runtime = new SessionManager({
   newId: randomUUID,
   now: Date.now,
 });
+
+// PR110b: onboarding service composes existing stores + runtime to
+// derive `OnboardingState` and manage `OnboardingMilestone[]`.
+// Constructed AFTER `runtime` so `listSessions()` is bindable. The
+// service never reaches into credentialStore directly except through
+// the explicit `hasApiKey` predicate.
+const onboardingService = createOnboardingService(
+  bindOnboardingDeps({
+    settingsStore,
+    connectionStore,
+    credentialStore,
+    listSessions: () => runtime.listSessions(),
+  }),
+);
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -884,6 +900,25 @@ function registerIpc(): void {
     Boolean(await credentialStore.getSecret(slug, 'api_key')),
   );
 
+  // PR110b: Onboarding snapshot + milestone IPCs. Renderer polls via
+  // these on app load and whenever `sessions:changed` /
+  // `connections:changed` / settings change events fire. No push from
+  // main; see smoke.md Path 16.
+  ipcMain.handle('onboarding:getSnapshot', async () => onboardingService.getSnapshot());
+  ipcMain.handle('onboarding:setMilestone', async (_event, id: unknown, status: unknown) => {
+    // Service throws INVALID_MILESTONE_ID / INVALID_MILESTONE_STATUS
+    // for bad inputs; let the error propagate so the renderer sees
+    // it as a typed reject rather than silently swallowing.
+    return onboardingService.setMilestone(id, status);
+  });
+  // PR110b: Quick Chat entry. Input shape is intentionally minimal —
+  // `{ prompt?: string }` — to keep readiness gating airtight. Override
+  // surfaces (connectionSlug / model) will land in PR110c/d when the
+  // model-picker UI is ready.
+  ipcMain.handle('quickChat:start', async (_event, input: unknown) => {
+    return handleQuickChatStart(input);
+  });
+
   ipcMain.handle('settings:get', async () => maskAppSettings(await settingsStore.get()));
   ipcMain.handle('settings:update', async (_event, patch: UpdateAppSettingsInput): Promise<UpdateAppSettingsResult> => {
     const normalizedPatch = await normalizeSettingsPatch(patch);
@@ -1115,6 +1150,40 @@ const readyConnectionDeps = {
 
 function getReadyConnection(slug: string | null | undefined, model?: string) {
   return requireReadyConnection(slug, readyConnectionDeps, model);
+}
+
+/**
+ * PR110b: Quick Chat entry — thin adapter over the extracted helper.
+ * The discriminated-union logic + readiness gating lives in
+ * `./quick-chat.ts` so it can be unit-tested without spinning up an
+ * Electron app.
+ */
+async function handleQuickChatStart(rawInput: unknown): Promise<QuickChatResult> {
+  return runQuickChatStart(rawInput, {
+    getOnboardingState: async () => (await onboardingService.getSnapshot()).state,
+    createSession: async (input) => {
+      // Re-run requireReadyConnection inside the create path to close
+      // the race window between `getSnapshot()` and `createSession()`
+      // (e.g. user revoked credential in another window).
+      const ready = await getReadyConnection(input.defaultConnectionSlug, input.defaultModel);
+      return runtime.createSession({
+        cwd: process.cwd(),
+        backend: 'ai-sdk',
+        llmConnectionSlug: ready.connection.slug,
+        model: ready.model,
+        permissionMode: 'ask',
+        name: 'New Chat',
+      });
+    },
+    emitCreated: (sessionId) => emitSessionsChanged('created', sessionId),
+    ensureCanSend: (sessionId) => ensureSessionCanSend(sessionId),
+    sendFirstMessage: async (sessionId, text) => {
+      const turnId = randomUUID();
+      const iterator = runtime.sendMessage(sessionId, { turnId, text });
+      void streamEvents(sessionId, iterator);
+      return turnId;
+    },
+  });
 }
 
 async function buildSystemPrompt(): Promise<string | undefined> {

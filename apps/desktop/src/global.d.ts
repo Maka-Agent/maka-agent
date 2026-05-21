@@ -43,6 +43,23 @@ import type {
 import type { TestProxyInput } from '@maka/core/settings/network-settings';
 import type { Result } from '@maka/core/settings/result';
 import type { CreateSessionInput } from '@maka/core';
+import type {
+  OnboardingMilestone,
+  OnboardingMilestoneId,
+  OnboardingState,
+} from '@maka/core';
+
+// PR110b: shared union used by `quickChat:start`. Renderer pattern-
+// matches on `ok` + `reason` to route to the correct UI surface.
+export type QuickChatResult =
+  | { ok: true; sessionId: string; firstMessageId?: string }
+  | { ok: false; reason: 'setup_required'; state: OnboardingState }
+  | { ok: false; reason: 'send_failed'; message: string };
+
+export interface OnboardingSnapshot {
+  state: OnboardingState;
+  milestones: OnboardingMilestone[];
+}
 
 declare global {
   interface Window {
@@ -85,6 +102,16 @@ declare global {
         testNetworkProxy(input?: TestProxyInput): Promise<SettingsTestResult>;
         testBotChannel(provider: BotProvider): Promise<SettingsTestResult>;
         usageStats(range?: UsageRange): Promise<UsageStats>;
+      };
+      onboarding: {
+        getSnapshot(): Promise<OnboardingSnapshot>;
+        setMilestone(
+          id: OnboardingMilestoneId,
+          status: 'completed' | 'skipped',
+        ): Promise<OnboardingSnapshot>;
+      };
+      quickChat: {
+        start(input?: { prompt?: string }): Promise<QuickChatResult>;
       };
       usage: {
         summary(query: UsageQuery): Promise<Result<UsageSummaryV2>>;

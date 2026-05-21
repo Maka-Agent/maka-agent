@@ -1,3 +1,6 @@
+import type { OnboardingMilestone } from './onboarding.js';
+import { sanitizeOnboardingMilestones } from './onboarding.js';
+
 export type SettingsSection =
   | 'general'
   | 'personalization'
@@ -86,6 +89,17 @@ export interface PersonalizationSettings {
   assistantTone: string;
 }
 
+/**
+ * PR110b: persisted onboarding state. Only `milestones` lives in
+ * settings.json — `OnboardingState` is a runtime projection and is
+ * never persisted. The milestone list is sanitized via
+ * `sanitizeOnboardingMilestones()` (closed enum + at-most-one
+ * terminal + strict field set) on every read and write.
+ */
+export interface OnboardingSettings {
+  milestones: OnboardingMilestone[];
+}
+
 export interface AppSettings {
   schemaVersion: 1;
   network: NetworkSettings;
@@ -93,6 +107,7 @@ export interface AppSettings {
   usage: UsageSettings;
   appearance: AppearanceSettings;
   personalization: PersonalizationSettings;
+  onboarding: OnboardingSettings;
 }
 
 export interface UsageRequestLog {
@@ -227,6 +242,9 @@ export function createDefaultSettings(): AppSettings {
       displayName: '',
       assistantTone: '',
     },
+    onboarding: {
+      milestones: [],
+    },
   };
 }
 
@@ -268,6 +286,12 @@ export function mergeSettings(current: AppSettings, patch: UpdateAppSettingsInpu
       ...current.personalization,
       ...(patch.personalization ?? {}),
     },
+    onboarding: {
+      ...current.onboarding,
+      // PR110b: milestones flow through a dedicated setMilestone IPC
+      // rather than the generic UpdateAppSettingsInput patch surface.
+      // Keep the existing list intact when callers patch other sections.
+    },
   };
 }
 
@@ -275,11 +299,26 @@ export function normalizeSettings(input: unknown): AppSettings {
   const defaults = createDefaultSettings();
   if (!input || typeof input !== 'object') return defaults;
   const value = input as Partial<AppSettings>;
-  return mergeSettings(defaults, {
+  const base = mergeSettings(defaults, {
     network: value.network,
     botChat: value.botChat,
     usage: value.usage,
     appearance: value.appearance,
     personalization: value.personalization,
   });
+  // PR110b: milestones bypass the generic patch surface so we can
+  // sanitize them with the closed-enum + at-most-one validator on
+  // every read. The settings → onboarding dependency is one-way; there
+  // is no cycle.
+  const rawOnboarding = (value as { onboarding?: unknown }).onboarding;
+  const rawMilestones =
+    rawOnboarding && typeof rawOnboarding === 'object'
+      ? (rawOnboarding as { milestones?: unknown }).milestones
+      : undefined;
+  return {
+    ...base,
+    onboarding: {
+      milestones: sanitizeOnboardingMilestones(rawMilestones),
+    },
+  };
 }
