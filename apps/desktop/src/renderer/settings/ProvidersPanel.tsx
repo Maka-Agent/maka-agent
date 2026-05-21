@@ -521,29 +521,25 @@ function ConnectionDetail(props: {
   async function refreshModels(opts: { silent?: boolean } = {}) {
     setFetchingModels(true);
     try {
-      // Once xuan's backend patch lands, a failed live `/models` probe will
-      // throw with a generalizedErrorMessage (auth / timeout / network /
-      // provider unavailable) rather than silently substituting the static
-      // fallback list. Until then we still defensively handle the throw
-      // case here so the UI is correct once the backend flips.
+      // Backend (xuan `81ed044`) returns a `ModelDiscoveryResult` envelope —
+      // `{ models, source: 'fetched' | 'fallback', fetchedAt }` — and throws
+      // a generalizedErrorMessage on failure. We trust `result.source`
+      // verbatim instead of inferring from list length, so a provider that
+      // legitimately returns 0 models still reads as 'fetched'.
       const result = await props.bridge.fetchModels(connection.slug);
-      const list = result.models;
-      setModels(list);
-      // Mark as fetched even if list.length === 0. A provider that returned
-      // an empty model list is a meaningful signal — the user should see
-      // "0 fetched" rather than the static fallback being silently
-      // substituted.
+      setModels(result.models);
       setModelSource(result.source);
-      await props.bridge.update(connection.slug, { models: list });
+      await props.bridge.update(connection.slug, { models: result.models });
       await props.onChanged();
       if (!opts.silent) {
-        toast.success(`已拉取 ${list.length} 个模型 · ${connection.name}`);
+        toast.success(`已拉取 ${result.models.length} 个模型 · ${connection.name}`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // Leave the previously-known source / models intact (so the dropdown
-      // doesn't suddenly empty out), but ensure the source label downgrades
-      // back to 'fallback' if we have nothing fresh to show.
+      // doesn't suddenly empty out), but downgrade the source label back to
+      // 'fallback' if we have nothing fresh to show — the failed fetch
+      // means whatever's on screen is not from the latest probe.
       if (models.length === 0) setModelSource('fallback');
       toast.error(
         `拉取模型失败 · ${connection.name}`,
