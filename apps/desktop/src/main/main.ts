@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, screen, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, nativeTheme, screen, shell } from 'electron';
 import { isExternalUrl } from './external-link-guard.js';
 import { readSavedBounds, writeSavedBounds, type SavedBounds } from './window-state.js';
 import { randomUUID } from 'node:crypto';
@@ -178,6 +178,18 @@ async function createWindow(): Promise<void> {
   // the window on the primary display instead of opening it off-screen.
   const savedBounds = await readSavedBounds(workspaceRoot, { width: 1240, height: 820 });
   const bounds = clampBoundsToVisibleDisplay(savedBounds);
+
+  // @kenji PR103 follow-up: complete the FOUC fix at the window-chrome layer.
+  // The renderer applies `.dark` synchronously before React mounts (PR103),
+  // but the BrowserWindow's `backgroundColor` shows during the first frame
+  // before the renderer paints. Pick the right initial bg by reading the
+  // persisted theme + system preference.
+  const themePref = (await settingsStore.get()).appearance?.theme ?? 'auto';
+  const isDark =
+    themePref === 'dark' ||
+    (themePref === 'auto' && nativeTheme.shouldUseDarkColors);
+  const initialBg = isDark ? '#1c1d21' : '#f3f3f5';
+
   mainWindow = new BrowserWindow({
     width: bounds.width,
     height: bounds.height,
@@ -185,7 +197,7 @@ async function createWindow(): Promise<void> {
     title: 'Maka',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 24, y: 24 },
-    backgroundColor: '#f3f3f5',
+    backgroundColor: initialBg,
     webPreferences: {
       preload: join(import.meta.dirname, '..', 'preload', 'preload.cjs'),
       // Defense-in-depth flags (@kenji PR96 review). The external-link guard

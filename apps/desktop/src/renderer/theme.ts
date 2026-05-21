@@ -18,10 +18,22 @@ let unsubscribeMediaQuery: (() => void) | null = null;
  * Apply a theme preference to <html>. Returns an unsubscribe function for the
  * caller; we also memoize the active subscription internally so re-applying a
  * different preference cleanly tears down the previous listener.
+ *
+ * Also persists the preference to `maka-theme-v1` in localStorage so the
+ * pre-React paint in `main.tsx` can apply `.dark` synchronously on next
+ * launch, eliminating the brief light-mode flash for dark-theme users.
  */
 export function applyTheme(pref: ThemePreference): () => void {
   unsubscribeMediaQuery?.();
   unsubscribeMediaQuery = null;
+
+  // Cache the user-facing preference (not the resolved light/dark). The
+  // pre-React paint reapplies the auto → system-matchMedia branch itself.
+  try {
+    localStorage.setItem('maka-theme-v1', pref);
+  } catch {
+    /* localStorage unavailable; cached preference will fall back to default */
+  }
 
   if (pref === 'auto') {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');

@@ -910,6 +910,28 @@ function countSessions(sessions: SessionSummary[]) {
   };
 }
 
+// Apply the cached theme before React mounts so dark-theme users don't get
+// a brief light-mode flash while settings.json loads. We persist the resolved
+// theme to localStorage on every change (theme.ts), and this entry point
+// reads it synchronously before the first paint. This is the standard
+// "FOUC prevention via inline-script" pattern, but here it runs in the same
+// JS bundle as the rest of the renderer so we don't need to relax the CSP
+// `script-src 'self'` rule.
+try {
+  const cached = localStorage.getItem('maka-theme-v1');
+  const isDark =
+    cached === 'dark' ||
+    (cached !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  if (isDark) {
+    document.documentElement.classList.add('dark');
+    document.documentElement.style.colorScheme = 'dark';
+  } else {
+    document.documentElement.style.colorScheme = 'light';
+  }
+} catch {
+  /* localStorage unavailable; fall back to default light theme */
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
