@@ -110,8 +110,15 @@ the model picked.
 3. Try pressing Esc inside the textarea — it should call onStop and
    the stream should cancel.
 4. Send a fresh prompt and let it run.
-5. From a separate window (or by invoking `window.maka.sessions.remove`
-   in DevTools), delete the currently-active session mid-stream.
+5. Delete the currently-active session mid-stream. Options, easiest
+   first:
+   - **IPC-level (preferred for automated test runs)**: from DevTools
+     console, fire `window.maka.sessions.remove(activeSessionId)`. The
+     `sessions:changed { reason: 'deleted', sessionId }` broadcast is
+     the contract under test, not the right-click affordance.
+   - **GUI**: from a *second* Maka window pointed at the same workspace
+     (open a new BrowserWindow if needed), right-click the row → 删除
+     → confirm. The original window must observe the broadcast.
 
 **Pass signal.**
 - The sidebar removes the row (via `sessions:changed` broadcast).
@@ -135,10 +142,18 @@ the model picked.
 **Precondition.** A connection that lets the model invoke tools (e.g.
 default agent setup). User is in **Ask** permission mode.
 
+**Important — do not actually run the destructive command.** The goal is
+to verify the *dialog presentation*, not to delete real files. Either:
+- Ask the assistant to *propose* the action so it surfaces a
+  PermissionRequest, then **Deny**. Or
+- Inject a synthetic permission request via DevTools by simulating the
+  IPC event so the dialog mounts without any tool actually pending.
+
 **Steps.**
-1. Ask the assistant to run a clearly destructive operation, e.g.
-   *"用 Bash 删除 /tmp/maka-smoke-target/*"* (point at a disposable
-   directory you've created beforehand).
+1. Cause the runtime to produce a destructive PermissionRequest
+   (e.g. tell the model "我会自己跑，先告诉我你打算执行什么 rm 命令"
+   so it issues an `fs_destructive` request you can refuse), or inject
+   a synthetic request in DevTools.
 2. Wait for the PermissionDialog to appear.
 
 **Pass signal.**
