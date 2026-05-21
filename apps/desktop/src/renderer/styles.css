@@ -1765,6 +1765,53 @@ button:active {
   font-variant-numeric: tabular-nums;
 }
 
+/* Message meta row — replaces the loose `<span>{label}</span>` of the
+ * previous structure. Inline horizontal: avatar circle + role name +
+ * timestamp, with the user row mirrored to the right via the global
+ * `.message.user` flow.  */
+.maka-message-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--foreground-60);
+}
+
+.maka-message-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.maka-message-avatar[data-role="user"] {
+  background: var(--chat-user-bg);
+  color: var(--chat-user-foreground);
+}
+
+.maka-message-avatar[data-role="assistant"] {
+  background: oklch(from var(--accent) l c h / 0.14);
+  color: var(--accent);
+}
+
+.maka-message-avatar[data-role="system"] {
+  background: oklch(from var(--info) l c h / 0.18);
+  color: var(--info-text);
+}
+
+.maka-message-name {
+  white-space: nowrap;
+}
+
 .message pre {
   margin: 0;
   font: inherit;
@@ -1813,6 +1860,166 @@ button:active {
   font-size: 12.5px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* File diff: each line tagged with data-line for add / del / hunk / meta /
+ * ctx so we can color the unified-diff payload like GitHub / VS Code. */
+.maka-tool-diff {
+  padding: 0;
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  white-space: normal;
+}
+
+.maka-tool-diff-paths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--foreground-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.maka-tool-diff-paths code {
+  color: var(--foreground-70);
+  background: transparent;
+}
+
+.maka-tool-diff-body {
+  margin: 0;
+  padding: 6px 0;
+  max-height: 360px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.45;
+  white-space: pre;
+  word-break: normal;
+}
+
+.maka-tool-diff-line {
+  display: block;
+  padding: 0 10px;
+  white-space: pre;
+}
+
+.maka-tool-diff-line[data-line="add"] {
+  background: oklch(from var(--success) l c h / 0.10);
+  color: var(--success-text);
+}
+
+.maka-tool-diff-line[data-line="del"] {
+  background: oklch(from var(--destructive) l c h / 0.10);
+  color: var(--destructive);
+}
+
+.maka-tool-diff-line[data-line="hunk"] {
+  background: oklch(from var(--accent) l c h / 0.08);
+  color: var(--foreground-70);
+  font-weight: 600;
+}
+
+.maka-tool-diff-line[data-line="meta"] {
+  color: var(--foreground-50);
+}
+
+.maka-tool-diff-line[data-line="ctx"] {
+  color: var(--foreground-70);
+}
+
+/* Terminal output: head row (cwd + cmd + exit badge) then optional stdout /
+ * stderr blocks with stderr tinted destructive. */
+.maka-tool-terminal {
+  padding: 0;
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  white-space: normal;
+}
+
+.maka-tool-terminal-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--foreground-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.maka-tool-terminal-cwd {
+  color: var(--foreground-50);
+  background: transparent;
+}
+
+.maka-tool-terminal-cmd {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--foreground);
+  background: transparent;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.maka-tool-terminal-exit {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: var(--foreground-5);
+  color: var(--foreground-60);
+}
+
+.maka-tool-terminal-exit[data-ok="true"] {
+  background: oklch(from var(--success) l c h / 0.14);
+  color: var(--success);
+}
+
+.maka-tool-terminal-exit[data-ok="false"] {
+  background: oklch(from var(--destructive) l c h / 0.14);
+  color: var(--destructive);
+}
+
+.maka-tool-terminal-empty {
+  margin: 0;
+  padding: 10px;
+  color: var(--foreground-50);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.maka-tool-terminal-stream {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 200px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.maka-tool-terminal-stream[data-stream="stdout"] {
+  color: var(--foreground);
+}
+
+.maka-tool-terminal-stream[data-stream="stderr"] {
+  border-top: 1px solid var(--border);
+  background: oklch(from var(--destructive) l c h / 0.04);
+  color: var(--destructive);
 }
 
 .composer {
@@ -2195,9 +2402,50 @@ button:active {
   min-height: 0;
   display: grid;
   align-content: start;
-  gap: 5px;
+  gap: 14px;
   overflow: auto;
   padding-right: 2px;
+}
+
+/* Each Settings nav group: tight cluster of buttons under a small uppercase
+ * heading. Visually breaks the 14-item list into 5 scannable chunks. */
+.settingsNavGroup {
+  display: grid;
+  gap: 4px;
+}
+
+.settingsNavGroupLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--foreground-50);
+  padding: 0 6px 0;
+}
+
+/* Per @kenji's PR75 review: group labels should also act as navigation
+ * summaries (live state, not just visual dividers). Single short line in
+ * the foreground-60 default, tinted info/warning/destructive when the
+ * group has actionable state. */
+.settingsNavGroupSummary {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--foreground-60);
+  padding: 0 6px 2px;
+}
+
+.settingsNavGroupSummary[data-tone="info"] {
+  color: var(--info-text);
+}
+
+.settingsNavGroupSummary[data-tone="warning"] {
+  color: var(--info-text);
+  font-weight: 600;
+}
+
+.settingsNavGroupSummary[data-tone="destructive"] {
+  color: var(--destructive);
+  font-weight: 600;
 }
 
 .settingsNavItem {
@@ -2757,6 +3005,107 @@ button:active {
   cursor: pointer;
   padding: 12px;
   text-align: left;
+}
+
+/* Preview variant: tile stacks vertically (mock on top, label below) and
+ * gives the mock more room. Used by the theme picker, not the density picker. */
+.settingsThemeOptionPreview {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto;
+  gap: 10px;
+}
+
+/* Mini chat-surface mock rendered inside each theme tile. Hardcodes colors
+ * per variant so the preview doesn't track the active theme — comparing
+ * tiles is the whole point. */
+.settingsThemePreview {
+  width: 100%;
+  aspect-ratio: 16 / 8;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  display: flex;
+  background: var(--foreground-5);
+}
+
+.settingsThemePreviewSplit > .settingsThemePreviewPane:first-child {
+  border-right: 1px solid var(--border);
+}
+
+.settingsThemePreviewPane {
+  flex: 1 1 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.settingsThemePreviewPane[data-mode="light"] {
+  background: oklch(0.985 0.003 265);
+  color: oklch(0.16 0.01 270);
+}
+
+.settingsThemePreviewPane[data-mode="dark"] {
+  background: oklch(0.18 0.005 270);
+  color: oklch(0.92 0.008 270);
+}
+
+.settingsThemePreviewSidebar {
+  height: 100%;
+}
+
+.settingsThemePreviewPane[data-mode="light"] .settingsThemePreviewSidebar {
+  background: oklch(0.96 0.003 265);
+  border-right: 1px solid oklch(0.88 0.005 265);
+}
+
+.settingsThemePreviewPane[data-mode="dark"] .settingsThemePreviewSidebar {
+  background: oklch(0.14 0.005 270);
+  border-right: 1px solid oklch(0.22 0.005 270);
+}
+
+.settingsThemePreviewChat {
+  padding: 6px 8px;
+  display: grid;
+  gap: 4px;
+  align-content: end;
+  min-width: 0;
+}
+
+.settingsThemePreviewLine {
+  height: 5px;
+  border-radius: 999px;
+  width: 90%;
+}
+
+.settingsThemePreviewLine-short {
+  width: 56%;
+}
+
+.settingsThemePreviewPane[data-mode="light"] .settingsThemePreviewLine-assistant {
+  background: oklch(0.78 0.01 265);
+}
+.settingsThemePreviewPane[data-mode="dark"] .settingsThemePreviewLine-assistant {
+  background: oklch(0.36 0.01 270);
+}
+
+.settingsThemePreviewBubble {
+  align-self: end;
+  justify-self: end;
+  width: 60%;
+  height: 12px;
+  border-radius: 7px 2px 7px 7px;
+  margin-top: 2px;
+}
+
+.settingsThemePreviewPane[data-mode="light"] .settingsThemePreviewBubble {
+  background: oklch(0.85 0.02 250);
+}
+.settingsThemePreviewPane[data-mode="dark"] .settingsThemePreviewBubble {
+  background: oklch(0.32 0.025 250);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settingsThemePreview { transition: none; }
 }
 
 .settingsThemeOption:hover {
