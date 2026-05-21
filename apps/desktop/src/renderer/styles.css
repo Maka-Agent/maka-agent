@@ -1765,6 +1765,53 @@ button:active {
   font-variant-numeric: tabular-nums;
 }
 
+/* Message meta row — replaces the loose `<span>{label}</span>` of the
+ * previous structure. Inline horizontal: avatar circle + role name +
+ * timestamp, with the user row mirrored to the right via the global
+ * `.message.user` flow.  */
+.maka-message-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--foreground-60);
+}
+
+.maka-message-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.maka-message-avatar[data-role="user"] {
+  background: var(--chat-user-bg);
+  color: var(--chat-user-foreground);
+}
+
+.maka-message-avatar[data-role="assistant"] {
+  background: oklch(from var(--accent) l c h / 0.14);
+  color: var(--accent);
+}
+
+.maka-message-avatar[data-role="system"] {
+  background: oklch(from var(--info) l c h / 0.18);
+  color: var(--info-text);
+}
+
+.maka-message-name {
+  white-space: nowrap;
+}
+
 .message pre {
   margin: 0;
   font: inherit;
