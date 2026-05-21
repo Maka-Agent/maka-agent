@@ -303,6 +303,15 @@ function AppShell() {
     if (state.liveToolsBySession) {
       setLiveToolsBySession((current) => ({ ...current, ...state.liveToolsBySession }));
     }
+    // PR-IR-01b: theme override applied BEFORE the persisted user pref so
+    // the screenshot variant matches `<theme>-<viewport>-<motion>.png`
+    // exactly. `applyTheme` writes both the React state + the `.dark` class
+    // on the html element. Real users never hit this branch because
+    // `state` is null without `MAKA_VISUAL_SMOKE_FIXTURE`.
+    if (state.theme) {
+      applyTheme(state.theme);
+      setThemePref(state.theme);
+    }
     // PR-IR-04: apply reduced-motion attribute when the fixture asks for it.
     // The matching CSS rule in styles.css collapses all animations to
     // ~0.01ms so the screenshot pipeline can capture a reduced-motion
@@ -318,6 +327,25 @@ function AppShell() {
     }
     if (state.openSettingsSection) {
       openSettingsSection(state.openSettingsSection);
+    }
+    // PR-IR-01: when MAKA_VISUAL_SMOKE_AUTO_CAPTURE is set, snap a
+    // screenshot once the fixture has settled and the renderer has
+    // committed. We wait two RAFs + a small idle delay so async layout
+    // (Settings modal mount, sidebar group rendering, etc.) finishes
+    // before the capture lands. The driver script reads the stdout
+    // marker emitted from main and kills the subprocess after.
+    if (state.autoCaptureVariant) {
+      const variant = state.autoCaptureVariant;
+      // Two RAFs + 400ms idle is the same pattern Chromium uses for
+      // settled layout in DevTools "Capture full size screenshot" —
+      // gives @starting-style + fonts + late-stream IPC time to flush.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            void window.maka.visualSmoke.capture({ scenario: state.scenario, variant });
+          }, 400);
+        });
+      });
     }
   }
 

@@ -14,7 +14,9 @@
     "build:renderer": "vite build",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "pretest": "npm --workspace @maka/core run build && npm --workspace @maka/ui run build && node ../../scripts/check-console.mjs && node ../../scripts/check-a11y.mjs",
-    "test": "npm run build:main && node --test \"dist/main/**/*.test.js\""
+    "test": "npm run build:main && node --test \"dist/main/**/*.test.js\"",
+    "screenshots": "npm run build && node ../../scripts/capture-screenshots.mjs",
+    "screenshots:single": "npm run build && node ../../scripts/capture-screenshots.mjs --scenario"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.9",

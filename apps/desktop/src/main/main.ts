@@ -87,6 +87,8 @@ const visualSmokeFixture = resolveVisualSmokeFixture(
   process.env.MAKA_VISUAL_SMOKE_FIXTURE,
   app.isPackaged,
   process.env.MAKA_VISUAL_SMOKE_REDUCED_MOTION,
+  process.env.MAKA_VISUAL_SMOKE_AUTO_CAPTURE,
+  process.env.MAKA_VISUAL_SMOKE_THEME,
 );
 const workspaceRoot = join(app.getPath('userData'), 'workspaces', visualSmokeFixture?.workspaceName ?? 'default');
 const store = createSessionStore(workspaceRoot);
@@ -156,6 +158,22 @@ async function resolveToolArtifactSourcePath(cwd: string, sourcePath: string): P
     return null;
   }
   return isInsideOrSamePath(root, target) ? target : null;
+}
+
+/**
+ * Sanitize a single path segment for use under `screenshots/`. Allows
+ * only `[a-zA-Z0-9._-]`; rejects everything else (slashes, `..`, NUL,
+ * UTF-8 letters). Returns null when the input is empty after sanitization
+ * so the capture IPC can fail-closed rather than write to an attacker-
+ * controlled relative path.
+ */
+function sanitizeSegment(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > 128) return null;
+  if (!/^[a-zA-Z0-9._-]+$/.test(trimmed)) return null;
+  if (trimmed === '.' || trimmed === '..') return null;
+  return trimmed;
 }
 
 function isInsideOrSamePath(root: string, target: string): boolean {
@@ -242,7 +260,12 @@ async function createWindow(): Promise<void> {
   // but the BrowserWindow's `backgroundColor` shows during the first frame
   // before the renderer paints. Pick the right initial bg by reading the
   // persisted theme + system preference.
-  const themePref = (await settingsStore.get()).appearance?.theme ?? 'auto';
+  // PR-IR-01b: visual smoke theme override wins over the persisted user
+  // pref. This guarantees the BrowserWindow backgroundColor matches the
+  // theme variant we're about to screenshot, so the very first frame
+  // doesn't capture a light-on-dark or dark-on-light flash.
+  const persistedTheme = (await settingsStore.get()).appearance?.theme ?? 'auto';
+  const themePref = visualSmokeFixture?.theme ?? persistedTheme;
   const isDark =
     themePref === 'dark' ||
     (themePref === 'auto' && nativeTheme.shouldUseDarkColors);
@@ -602,6 +625,62 @@ function registerIpc(): void {
     }
   });
   ipcMain.handle('visualSmoke:getState', () => getVisualSmokeState(visualSmokeFixture));
+  /**
+   * PR-IR-01 screenshot capture (dev/test-only).
+   *
+   * Available only when `MAKA_VISUAL_SMOKE_FIXTURE` is set — refuses
+   * otherwise so real users / packaged builds can't be coerced into
+   * dumping the renderer to disk. The capture script
+   * (`scripts/capture-screenshots.mjs`) drives this IPC after the
+   * fixture finishes settling.
+   *
+   * Returns the absolute path of the written file or a structured
+   * failure reason. The renderer never sees absolute paths (per the
+   * filesystem-boundary contract); the script reads the result back
+   * over IPC because it owns the screenshot directory.
+   */
+  ipcMain.handle(
+    'visualSmoke:capture',
+    async (
+      _event,
+      input: { scenario: string; variant: string },
+    ): Promise<
+      | { ok: true; path: string }
+      | { ok: false; reason: 'not_in_fixture_mode' | 'invalid_input' | 'capture_failed' | 'write_failed' }
+    > => {
+      if (!visualSmokeFixture) return { ok: false, reason: 'not_in_fixture_mode' };
+      const scenario = sanitizeSegment(input?.scenario);
+      const variant = sanitizeSegment(input?.variant);
+      if (!scenario || !variant) return { ok: false, reason: 'invalid_input' };
+      if (!mainWindow) return { ok: false, reason: 'capture_failed' };
+      let image: Electron.NativeImage;
+      try {
+        image = await mainWindow.webContents.capturePage();
+      } catch {
+        return { ok: false, reason: 'capture_failed' };
+      }
+      const dir = join(workspaceRoot, 'screenshots', scenario);
+      try {
+        await mkdir(dir, { recursive: true });
+      } catch {
+        return { ok: false, reason: 'write_failed' };
+      }
+      const filePath = join(dir, `${variant}.png`);
+      try {
+        const { writeFile } = await import('node:fs/promises');
+        await writeFile(filePath, image.toPNG());
+      } catch {
+        return { ok: false, reason: 'write_failed' };
+      }
+      // Deterministic stdout marker so the driver script
+      // (`scripts/capture-screenshots.mjs`) can match on the line and
+      // know the capture completed without polling the filesystem.
+      // The line is single-token whitespace-separated so it's easy to
+      // parse by regex.
+      console.log(`[visual-smoke] captured scenario=${scenario} variant=${variant} path=${filePath}`);
+      return { ok: true, path: filePath };
+    },
+  );
   ipcMain.handle('artifacts:list', (_event, sessionId: string, opts?: { includeDeleted?: boolean }) =>
     artifactStore.list(sessionId, opts),
   );

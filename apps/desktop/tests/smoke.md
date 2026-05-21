@@ -42,6 +42,36 @@ are repeatable and real user workspaces are not touched. `visualSmoke`
 IPC returns `null` when the env var is unset; renderer smoke-only
 streaming / permission state must never appear in normal usage.
 
+### Automated screenshot capture (PR-IR-01)
+
+Capture light/dark/narrow/reduced-motion baseline PNGs for every fixture
+scenario using the driver script:
+
+```bash
+# Single scenario × all 4 variants (light-1280-motion / light-990-motion
+# / light-1280-reduced-motion / light-990-reduced-motion)
+npm --workspace @maka/desktop run screenshots:single artifact-pane
+
+# All scenarios × all variants (full regression baseline)
+npm --workspace @maka/desktop run screenshots
+```
+
+Output: `apps/desktop/tests/screenshots/<scenario>/<variant>.png`.
+
+Implementation: the script spawns `electron .` once per (scenario,
+variant) with `MAKA_VISUAL_SMOKE_FIXTURE=<scenario>` +
+`MAKA_VISUAL_SMOKE_AUTO_CAPTURE=<variant>` (+ optional
+`MAKA_VISUAL_SMOKE_REDUCED_MOTION=1`). The renderer waits 2 RAFs + 400ms
+idle after fixture settle, then calls `window.maka.visualSmoke.capture()`.
+Main process writes the PNG via `webContents.capturePage()` and emits
+a deterministic stdout marker `[visual-smoke] captured scenario=…
+variant=… path=…`. The driver script greps for the marker, kills the
+subprocess, and copies the PNG into the canonical screenshots
+directory.
+
+PR-IR-02 (future) will add a diff CI gate against the committed
+baseline PNGs.
+
 ### Reduced-motion variant (PR-IR-04)
 
 Combine `MAKA_VISUAL_SMOKE_REDUCED_MOTION=1` with any of the above to

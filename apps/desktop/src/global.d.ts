@@ -132,6 +132,17 @@ declare global {
       };
       visualSmoke: {
         getState(): Promise<VisualSmokeState | null>;
+        capture(input: { scenario: string; variant: string }): Promise<
+          | { ok: true; path: string }
+          | {
+              ok: false;
+              reason:
+                | 'not_in_fixture_mode'
+                | 'invalid_input'
+                | 'capture_failed'
+                | 'write_failed';
+            }
+        >;
       };
       artifacts: {
         list(sessionId: string, opts?: { includeDeleted?: boolean }): Promise<ArtifactRecord[]>;
