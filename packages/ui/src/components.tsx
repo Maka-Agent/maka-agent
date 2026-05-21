@@ -145,6 +145,13 @@ function Count(props: { value: number }) {
   return <small>{props.value}</small>;
 }
 
+export interface SkillEntry {
+  id: string;
+  name: string;
+  description: string;
+  path: string;
+}
+
 export interface SessionRowActions {
   /** Flag (pin) state toggle. */
   onToggleFlag(sessionId: string, next: boolean): void;
@@ -162,10 +169,12 @@ export function SessionListPanel(props: {
   sessionCounts: Record<SessionFilter, number>;
   sessions: SessionSummary[];
   activeId?: string;
+  skills?: SkillEntry[];
   onSelectSession(sessionId: string): void;
   onSelect(selection: NavSelection): void;
   onOpenSettings(): void;
   onNew(): void;
+  onOpenSkillFolder?(path: string): void;
   rowActions?: SessionRowActions;
 }) {
   const isSessionFilter = (filter: SessionFilter) => props.selection.section === 'sessions' && props.selection.filter === filter;
@@ -308,13 +317,37 @@ export function SessionListPanel(props: {
       <section className="maka-session-list" aria-label={title}>
         <div className="maka-session-list-title">{title}</div>
         {props.selection.section === 'skills' ? (
-          <div className="maka-empty-state">
-            <Sparkles className="maka-empty-state-icon" strokeWidth={1.5} />
-            <div className="maka-empty-state-title">No skills yet</div>
-            <div className="maka-empty-state-body">
-              Maka loads skills from <code className="maka-empty-state-code">~/.maka/skills/</code>. Drop a folder with a <code className="maka-empty-state-code">SKILL.md</code> to register one.
+          (props.skills && props.skills.length > 0) ? (
+            <div className="maka-list-stack">
+              {props.skills.map((skill) => (
+                <button
+                  key={skill.id}
+                  type="button"
+                  className="maka-list-row maka-skill-row"
+                  onClick={() => props.onOpenSkillFolder?.(skill.path)}
+                  title={`Open ${skill.path}`}
+                >
+                  <div className="maka-list-row-text">
+                    <div className="maka-list-row-name">{skill.name}</div>
+                    {skill.description && (
+                      <div className="maka-list-row-preview">{skill.description}</div>
+                    )}
+                    <div className="maka-list-row-meta">{skill.id}</div>
+                  </div>
+                </button>
+              ))}
             </div>
-          </div>
+          ) : (
+            <div className="maka-empty-state">
+              <Sparkles className="maka-empty-state-icon" strokeWidth={1.5} />
+              <div className="maka-empty-state-title">No skills yet</div>
+              <div className="maka-empty-state-body">
+                Drop a folder with a <code className="maka-empty-state-code">SKILL.md</code> under
+                the workspace <code className="maka-empty-state-code">skills/</code> directory.
+                See 关于 · 工作区 for the exact path.
+              </div>
+            </div>
+          )
         ) : props.sessions.length === 0 ? (
           <div className="maka-empty-state">
             <MessageSquare className="maka-empty-state-icon" strokeWidth={1.5} />

@@ -168,5 +168,13 @@ contextBridge.exposeInMainWorld('maka', {
     }> {
       return ipcRenderer.invoke('app:info');
     },
+    openPath(target: string): Promise<string> {
+      return ipcRenderer.invoke('app:openPath', target);
+    },
+  },
+  skills: {
+    list(): Promise<Array<{ id: string; name: string; description: string; path: string }>> {
+      return ipcRenderer.invoke('skills:list');
+    },
   },
 });
