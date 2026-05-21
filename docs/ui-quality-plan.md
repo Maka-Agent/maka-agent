@@ -198,7 +198,7 @@ Rows are **all UI surfaces** in Maka. Columns are §1 gates 1–12.
 | Toast | ✅ | ⚙️ | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Keyboard help modal | ✅ | n/a | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Error boundary | ✅ | n/a | ✅ | ❌ | ⚙️ | ❌ | ❌ | ✅ | ⚙️ | ✅ | ✅ | ✅ |
-| Artifact pane | ✅ | ⚙️ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | ✅ | ⚙️ | ✅ | ✅ | ✅ |
+| Artifact pane | ✅ | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Pending (month-1)** |   |   |   |   |   |   |   |   |   |   |   |   |
 | Quick Chat (§9.7) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Workstation shell (§9.8) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -244,13 +244,33 @@ screen. Screenshots provide a regression baseline.
 
 ### PR-IR-02 — Screenshot diff CI gate
 
-**What.** Compare new screenshots from PR branch vs `main` baselines.
-Diff > N px or > X% area → CI fail. Reviewer can update baseline by
-deleting the old PNG.
+**Status (2026-05-22).** Stage 1 is live as
+`scripts/diff-screenshots.mjs`. The committed baseline in
+`apps/desktop/tests/screenshots-baseline/` covers 3 stable scenarios × 8
+variants = 24 PNGs: `artifact-pane`, `first-run`, and `artifact-errors`.
+`npm --workspace @maka/desktop run screenshots:diff:stable` exits 1 on
+hard failures: missing PNG, corrupt PNG, file < 1 KB, or wrong
+dimensions. Size drift is a soft warning.
 
-**Why.** Catch unintended visual regressions before merge.
+**Scope catches.**
+- Capture pipeline regression: renderer crashes before paint, capture
+  IPC breaks, or fixture seed throws.
+- Viewport misconfiguration: `MAKA_VISUAL_SMOKE_WIDTH/HEIGHT` not
+  honored by the main process.
+- Truncated or empty PNGs.
+- Scenario/variant matrix drift between capture and diff scripts.
 
-**Owner.** @yuejing.
+**Out of scope.**
+- Pixel-level UI regressions. Electron/font rasterization drift makes
+  byte-level SHA/SHA256 equality unsuitable as a blocker.
+- Layout shifts that keep the same viewport dimensions.
+- Color, contrast, opacity, typography, and spacing regressions.
+
+**PR-IR-02 v3 plan.** Add `pixelmatch` + `pngjs` with calibrated
+tolerance and ignored dynamic regions. Pilot only on the stable subset
+before expanding to all scenarios.
+
+**Owner.** @yuejing. Baseline rollout coordinated with @xuan.
 
 ### PR-IR-03 — A11y assertion library
 
