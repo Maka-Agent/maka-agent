@@ -712,6 +712,20 @@ function AppShell() {
               }
             },
             onOpenSkillsFolder: () => openSkillsFolder(),
+            onExportActiveConversation: async () => {
+              if (!activeId) return;
+              const session = sessions.find((s) => s.id === activeId);
+              const markdown = renderConversationMarkdown(session?.name ?? '新建对话', messages);
+              try {
+                await navigator.clipboard.writeText(markdown);
+                toastApi.success(
+                  '已复制对话为 Markdown',
+                  `${markdown.split('\n').length} 行 · 可粘贴到 Notion / Obsidian / GitHub`,
+                );
+              } catch {
+                toastApi.error('复制失败', '剪贴板不可用');
+              }
+            },
           })}
         />
       )}
@@ -724,6 +738,69 @@ const modeDescriptions: Record<PermissionMode, string> = {
   ask: '所有敏感工具调用前都会停下来征求 allow / deny。',
   execute: '常见工具直通；只有破坏性操作仍然拦截。',
 };
+
+/**
+ * Serialize a conversation to a Markdown document suitable for pasting into
+ * Notion / Obsidian / GitHub. One section per turn: `## 你` header for the
+ * user message, optional `### 工具调用` block enumerating tool calls + their
+ * result type, `## Maka` for the assistant answer. Drops persisted token_usage
+ * / permission_decision rows — those are operational, not narrative.
+ */
+function renderConversationMarkdown(sessionName: string, messages: StoredMessage[]): string {
+  const lines: string[] = [];
+  lines.push(`# ${sessionName}`);
+  lines.push('');
+  lines.push(`*Exported ${new Date().toLocaleString()} from Maka.*`);
+  lines.push('');
+
+  // Group by turnId in encounter order so we preserve narrative flow.
+  const turnOrder: string[] = [];
+  const byTurn = new Map<string, StoredMessage[]>();
+  for (const m of messages) {
+    const tid = (m as { turnId?: string }).turnId ?? '__loose';
+    if (!byTurn.has(tid)) {
+      byTurn.set(tid, []);
+      turnOrder.push(tid);
+    }
+    byTurn.get(tid)!.push(m);
+  }
+
+  for (const tid of turnOrder) {
+    const turnMessages = byTurn.get(tid) ?? [];
+    const user = turnMessages.find((m) => m.type === 'user');
+    const assistant = turnMessages.find((m) => m.type === 'assistant');
+    const toolCalls = turnMessages.filter((m) => m.type === 'tool_call');
+
+    if (user) {
+      lines.push('---');
+      lines.push('');
+      lines.push('## 你');
+      lines.push('');
+      lines.push((user as { text: string }).text);
+      lines.push('');
+    }
+
+    if (toolCalls.length > 0) {
+      lines.push('### 工具调用');
+      lines.push('');
+      for (const call of toolCalls) {
+        const c = call as { toolName: string; intent?: string };
+        const intentSuffix = c.intent ? ` — ${c.intent}` : '';
+        lines.push(`- \`${c.toolName}\`${intentSuffix}`);
+      }
+      lines.push('');
+    }
+
+    if (assistant) {
+      lines.push('## Maka');
+      lines.push('');
+      lines.push((assistant as { text: string }).text);
+      lines.push('');
+    }
+  }
+
+  return lines.join('\n').trim() + '\n';
+}
 
 function readNavSelection(): NavSelection {
   try {

@@ -586,11 +586,15 @@ function SessionRow(props: {
               )}
               <span>{session.name}</span>
             </div>
-            {session.lastMessagePreview && (
+            {streaming ? (
+              <div className="maka-list-row-preview" data-streaming="true">
+                Maka 正在思考…
+              </div>
+            ) : session.lastMessagePreview ? (
               <div className="maka-list-row-preview" title={session.lastMessagePreview}>
                 {session.lastMessagePreview}
               </div>
-            )}
+            ) : null}
             <div className="maka-list-row-meta">{formatSessionMeta(session)}</div>
           </div>
           {session.hasUnread && !streaming && <span className="maka-list-row-unread" />}
@@ -1429,7 +1433,7 @@ export const Composer = forwardRef<
         <textarea
           ref={textareaRef}
           name="text"
-          placeholder="Message Maka…"
+          placeholder="给 Maka 发消息…"
           disabled={props.disabled}
           onKeyDown={onTextareaKeyDown}
           onInput={autoResize}
