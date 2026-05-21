@@ -9,17 +9,21 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import {
   ChevronRight,
   CornerDownLeft,
+  Database,
+  FolderOpen,
   Keyboard,
   MessageSquare,
   Moon,
   Palette,
+  Plug,
   Plus,
   Settings as SettingsIcon,
   Sun,
   SunMoon,
+  Wifi,
   type LucideIcon,
 } from 'lucide-react';
-import type { SessionSummary, SettingsSection, ThemePreference } from '@maka/core';
+import type { LlmConnection, SessionSummary, SettingsSection, ThemePreference } from '@maka/core';
 import { useModalA11y } from '@maka/ui';
 import { SETTINGS_NAV } from './settings/SettingsModal';
 
@@ -63,12 +67,23 @@ export function buildCommandList(args: {
   sessions: SessionSummary[];
   activeSessionId: string | undefined;
   themePref: ThemePreference;
+  connections: LlmConnection[];
+  defaultSlug: string | null;
   onSelectSession(id: string): void;
   onNewChat(): void;
   onOpenSettings(): void;
   onOpenSettingsSection(section: SettingsSection): void;
   onOpenShortcuts(): void;
   onSetTheme(next: ThemePreference): void;
+  /**
+   * Diagnostics — wired up via the existing IPC bridge in main.tsx so the
+   * palette can trigger actions without taking a dependency on
+   * `window.maka.*` directly from this file.
+   */
+  onTestConnection?(slug: string): Promise<void> | void;
+  onSetDefaultConnection?(slug: string): Promise<void> | void;
+  onOpenWorkspace?(): Promise<void> | void;
+  onOpenSkillsFolder?(): Promise<void> | void;
 }): Command[] {
   const cmds: Command[] = [
     {
@@ -147,6 +162,84 @@ export function buildCommandList(args: {
       keywords: [navItem.id, navItem.label, 'settings', '设置'],
       run: () => args.onOpenSettingsSection(navItem.id),
     });
+  }
+
+  // Diagnostics — quick actions @kenji called out in UI-05 (palette as
+  // command surface, not just navigation). Each is gated on the matching
+  // host callback being provided so the palette stays useful even when
+  // some IPC entry isn't wired up.
+  if (args.onOpenWorkspace) {
+    cmds.push({
+      id: 'diag:open-workspace',
+      kind: 'action',
+      label: '打开工作区文件夹',
+      hint: 'Finder',
+      group: '诊断',
+      Icon: FolderOpen,
+      keywords: ['workspace', 'folder', 'open', 'finder', '工作区', '文件夹', '目录'],
+      run: () => void args.onOpenWorkspace!(),
+    });
+  }
+  if (args.onOpenSkillsFolder) {
+    cmds.push({
+      id: 'diag:open-skills',
+      kind: 'action',
+      label: '打开 Skills 文件夹',
+      hint: 'Finder',
+      group: '诊断',
+      Icon: FolderOpen,
+      keywords: ['skills', 'folder', 'open', 'finder', '技能', '文件夹'],
+      run: () => void args.onOpenSkillsFolder!(),
+    });
+  }
+  if (args.onTestConnection && args.defaultSlug) {
+    const defaultConnection = args.connections.find((c) => c.slug === args.defaultSlug);
+    if (defaultConnection) {
+      cmds.push({
+        id: 'diag:test-default',
+        kind: 'action',
+        label: `测试默认连接 · ${defaultConnection.name}`,
+        hint: defaultConnection.providerType,
+        group: '诊断',
+        Icon: Plug,
+        keywords: ['test', 'connection', 'verify', '测试', '连接', '验证', 'default', '默认'],
+        run: () => void args.onTestConnection!(defaultConnection.slug),
+      });
+    }
+  }
+
+  // Per-connection: switch the default model + run a test. Useful when the
+  // user has 3+ connections and doesn't want to walk through Settings ·
+  // 账号 just to swap.
+  if (args.onSetDefaultConnection || args.onTestConnection) {
+    for (const connection of args.connections) {
+      if (!connection.enabled) continue;
+      const isDefault = connection.slug === args.defaultSlug;
+      if (args.onSetDefaultConnection && !isDefault) {
+        cmds.push({
+          id: `connection:set-default:${connection.slug}`,
+          kind: 'action',
+          label: `设为默认 · ${connection.name}`,
+          hint: connection.providerType,
+          group: '连接',
+          Icon: Wifi,
+          keywords: ['default', 'connection', '默认', '连接', connection.name, connection.providerType],
+          run: () => void args.onSetDefaultConnection!(connection.slug),
+        });
+      }
+      if (args.onTestConnection && !isDefault) {
+        cmds.push({
+          id: `connection:test:${connection.slug}`,
+          kind: 'action',
+          label: `测试连接 · ${connection.name}`,
+          hint: connection.providerType,
+          group: '连接',
+          Icon: Plug,
+          keywords: ['test', 'connection', '测试', '连接', connection.name, connection.providerType],
+          run: () => void args.onTestConnection!(connection.slug),
+        });
+      }
+    }
   }
 
   for (const session of args.sessions) {

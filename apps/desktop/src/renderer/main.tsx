@@ -657,6 +657,8 @@ function AppShell() {
             sessions: visibleSessions,
             activeSessionId: activeId,
             themePref,
+            connections,
+            defaultSlug: defaultConnection,
             onSelectSession: setActiveId,
             onNewChat: () => void createSession(),
             onOpenSettings: openSettings,
@@ -667,6 +669,41 @@ function AppShell() {
               window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }));
             },
             onSetTheme: setThemePref,
+            onTestConnection: async (slug) => {
+              try {
+                const result = await window.maka.connections.test(slug);
+                const conn = connections.find((c) => c.slug === slug);
+                const name = conn?.name ?? slug;
+                if (result.ok) {
+                  toastApi.success(
+                    `连接已验证 · ${name}`,
+                    `延迟 ${result.latencyMs ?? '?'} ms${result.modelTested ? ' · ' + result.modelTested : ''}`,
+                  );
+                } else {
+                  toastApi.error(`连接测试失败 · ${name}`, result.errorMessage ?? '未知错误');
+                }
+                await refreshConnections();
+              } catch (error) {
+                toastApi.error('测试出错', error instanceof Error ? error.message : String(error));
+              }
+            },
+            onSetDefaultConnection: async (slug) => {
+              try {
+                await window.maka.connections.setDefault(slug);
+                await refreshConnections();
+                const conn = connections.find((c) => c.slug === slug);
+                toastApi.success(`已设为默认 · ${conn?.name ?? slug}`);
+              } catch (error) {
+                toastApi.error('切换默认失败', error instanceof Error ? error.message : String(error));
+              }
+            },
+            onOpenWorkspace: async () => {
+              const result = await window.maka.app.openPath('workspace');
+              if (!result.ok) {
+                toastApi.error(`无法打开${openPathActionLabel('workspace')}`, openPathFailureCopy(result.reason));
+              }
+            },
+            onOpenSkillsFolder: () => openSkillsFolder(),
           })}
         />
       )}

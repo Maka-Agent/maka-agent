@@ -517,6 +517,32 @@
   @starting-style {
     .maka-message-row { opacity: 0; }
   }
+
+  /* Turn grouping (per kenji UI-04): user msg + tools + assistant answer
+   * cluster into one visual unit. The section is just a flex container —
+   * the spacing between turns is established by the outer chat gap; spacing
+   * inside a turn is tighter so the unit reads as one work block. */
+  .maka-turn {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-density-turn-inner-gap, 8px);
+    max-width: 760px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .maka-turn-tools {
+    padding: 0 var(--ui-density-message-pad-x, 24px);
+  }
+
+  /* The streaming bubble (out-of-band, before the in-progress turn is
+   * fully persisted) sits at the bottom of the chat surface; give it the
+   * same horizontal frame as a real turn message. */
+  .maka-turn-streaming {
+    /* maka-message-row already handles padding; this just keeps the
+       in-progress assistant streaming-row visually separated from any
+       previous turn while it lands. */
+  }
   /* User bubble: tinted slate distinct from --accent, with a notched
      top-right corner to mark direction. Matches alma 42-theme §15.1. */
   .maka-bubble-user {
