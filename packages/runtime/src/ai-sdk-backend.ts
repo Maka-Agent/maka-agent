@@ -177,7 +177,7 @@ export interface AiSdkBackendInput {
   /** Cap on tool-call steps per turn; default 50. */
   maxSteps?: number;
   /** Optional system prompt (skills + workspace AGENTS.md merged upstream). */
-  systemPrompt?: string;
+  systemPrompt?: string | (() => string | undefined | Promise<string | undefined>);
   /** Optional fire-and-forget telemetry hooks. Tool implementations remain unaware. */
   recordLlmCall?: LlmTelemetryRecorder;
   recordToolInvocation?: ToolTelemetryRecorder;
@@ -295,7 +295,7 @@ export class AiSdkBackend implements AgentBackend {
           model,
           messages,
           tools: aiSdkTools,
-          system: this.input.systemPrompt,
+          system: await this.resolveSystemPrompt(),
           stopWhen: stepCountIs(this.maxSteps),
           abortSignal: this.abortController!.signal,
         });
@@ -793,6 +793,11 @@ export class AiSdkBackend implements AgentBackend {
     if (!attachments || attachments.length === 0) return text;
     const refs = attachments.map((a) => `[attachment: ${a.name} (${a.mimeType})]`).join(' ');
     return `${text}\n\n${refs}`;
+  }
+
+  private async resolveSystemPrompt(): Promise<string | undefined> {
+    if (typeof this.input.systemPrompt === 'function') return await this.input.systemPrompt();
+    return this.input.systemPrompt;
   }
 
   private async *drain(queue: AsyncEventQueue<SessionEvent>): AsyncIterable<SessionEvent> {

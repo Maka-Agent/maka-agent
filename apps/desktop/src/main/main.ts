@@ -64,6 +64,7 @@ import {
   requireReadyConnection,
 } from './chat-readiness.js';
 import { createSafeStorageCredentialStore } from './credential-store.js';
+import { buildPersonalizationPromptFragment } from './personalization-prompt.js';
 import { maskAppSettings, preserveSensitivePlaceholders, toSettingsTestResult } from './settings-ipc-helpers.js';
 
 const workspaceRoot = join(app.getPath('userData'), 'workspaces', 'default');
@@ -100,6 +101,7 @@ backends.register('ai-sdk', async (ctx) => {
     permissionEngine,
     modelFactory: getAIModel,
     tools: builtinTools,
+    systemPrompt: buildSystemPrompt,
     recordLlmCall: (event) => recordLlmCall({ repo: telemetryRepo, lookupPricing }, event),
     recordToolInvocation: (event) => recordToolInvocation({ repo: telemetryRepo }, event),
     newId: randomUUID,
@@ -598,6 +600,15 @@ const readyConnectionDeps = {
 
 function getReadyConnection(slug: string | null | undefined, model?: string) {
   return requireReadyConnection(slug, readyConnectionDeps, model);
+}
+
+async function buildSystemPrompt(): Promise<string | undefined> {
+  const settings = await settingsStore.get();
+  const personalization = buildPersonalizationPromptFragment(settings.personalization);
+  const fragments = [
+    personalization.text,
+  ].filter((fragment): fragment is string => Boolean(fragment));
+  return fragments.length > 0 ? fragments.join('\n\n') : undefined;
 }
 
 function emitConnectionListChanged(): void {
