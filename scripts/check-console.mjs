@@ -39,6 +39,10 @@ const ALLOW = new Map([
     'dev-gated by VITE_DEV_SERVER_URL / NODE_ENV (PR100).',
   ],
   [
+    'apps/desktop/src/main/onboarding-service.ts',
+    'PR110b: credential lookup failure logs error class only (no message / secret bytes); never reaches renderer.',
+  ],
+  [
     'packages/runtime/src/bots/bot-registry.ts',
     'message routed through generalizedErrorMessage (xuan raw-error sweep).',
   ],

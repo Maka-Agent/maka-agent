@@ -2,6 +2,8 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type {
   AppSettings,
+  OnboardingMilestone,
+  OnboardingMilestoneId,
   SettingsTestResult,
   UpdateAppSettingsInput,
   UsageRange,
@@ -12,6 +14,7 @@ import {
   mergeSettings,
   normalizeSettings,
 } from '@maka/core/settings';
+import { sanitizeOnboardingMilestones } from '@maka/core/onboarding';
 import type {
   SessionHeader,
   StoredMessage,
@@ -25,6 +28,19 @@ export interface SettingsStore {
   update(patch: UpdateAppSettingsInput): Promise<AppSettings>;
   testNetworkProxy(): Promise<SettingsTestResult>;
   usageStats(range?: UsageRange): Promise<UsageStats>;
+  /**
+   * PR110b: upsert a single onboarding milestone. Caller passes the
+   * desired terminal status; the store stamps `Date.now()` so the
+   * renderer cannot tamper with timestamps. Returns the freshly
+   * sanitized milestone list. Last-valid-entry-wins dedup applies.
+   *
+   * @throws if `id` is not in `OnboardingMilestoneId` or status is
+   *         not 'completed' | 'skipped'.
+   */
+  upsertOnboardingMilestone(
+    id: OnboardingMilestoneId,
+    status: 'completed' | 'skipped',
+  ): Promise<OnboardingMilestone[]>;
 }
 
 export function createSettingsStore(workspaceRoot: string): SettingsStore {
@@ -59,6 +75,41 @@ class FileSettingsStore implements SettingsStore {
     });
     if (!next) throw new Error('Failed to update settings');
     return next;
+  }
+
+  async upsertOnboardingMilestone(
+    id: OnboardingMilestoneId,
+    status: 'completed' | 'skipped',
+  ): Promise<OnboardingMilestone[]> {
+    if (status !== 'completed' && status !== 'skipped') {
+      throw new Error(`invalid onboarding milestone status: ${String(status)}`);
+    }
+    const timestamp = Date.now();
+    const next: OnboardingMilestone =
+      status === 'completed'
+        ? { id, completedAt: timestamp }
+        : { id, skippedAt: timestamp };
+    let result: OnboardingMilestone[] | undefined;
+    await this.withQueue(async () => {
+      const current = await this.get();
+      // Append the new entry; sanitize() applies last-valid-entry-wins
+      // dedup with stable first-seen position. ID validity is enforced
+      // by the sanitizer (closed enum).
+      const sanitized = sanitizeOnboardingMilestones([...current.onboarding.milestones, next]);
+      if (!sanitized.some((entry) => entry.id === id)) {
+        // ID was rejected by the validator — propagate so the IPC
+        // handler can reject the caller's input.
+        throw new Error(`invalid onboarding milestone id: ${String(id)}`);
+      }
+      const merged: AppSettings = {
+        ...current,
+        onboarding: { milestones: sanitized },
+      };
+      await this.write(merged);
+      result = sanitized;
+    });
+    if (!result) throw new Error('Failed to upsert onboarding milestone');
+    return result;
   }
 
   async testNetworkProxy(): Promise<SettingsTestResult> {

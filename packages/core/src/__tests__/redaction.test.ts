@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { generalizedErrorMessage, redactSecrets } from '../redaction.js';
+import {
+  generalizedErrorMessage,
+  generalizedErrorMessageChinese,
+  redactSecrets,
+} from '../redaction.js';
 
 describe('redactSecrets', () => {
   test('masks bearer tokens and provider key prefixes', () => {
@@ -35,5 +39,114 @@ describe('generalizedErrorMessage', () => {
     assert.equal(rateLimit, 'Rate limit exceeded');
     assert.equal(auth.includes('sk-live-secret-token-value'), false);
     assert.equal(rateLimit.includes('sk-live-secret-token-value'), false);
+  });
+});
+
+describe('generalizedErrorMessageChinese (PR110b)', () => {
+  // Locks the Chinese-only contract for surfaces that must never
+  // leak an English category to renderer copy. Each category
+  // returns the Chinese phrase and the raw English category MUST NOT
+  // appear in the result.
+
+  test('timeout → 请求超时', () => {
+    const msg = generalizedErrorMessageChinese(new Error('Request timeout after 30s'));
+    assert.equal(msg, '请求超时');
+  });
+
+  test('429 / rate → 触发模型速率限制', () => {
+    for (const raw of [
+      'HTTP 429 Too Many Requests',
+      'OpenAI rate limit reached for model gpt-4',
+      'rate exceeded',
+    ]) {
+      const msg = generalizedErrorMessageChinese(new Error(raw));
+      assert.equal(msg, '触发模型速率限制', `raw=${raw}`);
+    }
+  });
+
+  test('401 / 403 / auth → 鉴权失败', () => {
+    for (const raw of [
+      '401 Unauthorized',
+      'HTTP 403 forbidden',
+      'Authentication failed',
+    ]) {
+      const msg = generalizedErrorMessageChinese(new Error(raw));
+      assert.equal(msg, '鉴权失败', `raw=${raw}`);
+    }
+  });
+
+  test('5xx → 模型服务暂不可用', () => {
+    for (const raw of [
+      'HTTP 500 Internal Server Error',
+      'Provider returned 503',
+      'Bad gateway 502',
+    ]) {
+      const msg = generalizedErrorMessageChinese(new Error(raw));
+      assert.equal(msg, '模型服务暂不可用', `raw=${raw}`);
+    }
+  });
+
+  test('network / fetch / econn / enotfound → 网络错误', () => {
+    for (const raw of [
+      'fetch failed',
+      'ECONNREFUSED',
+      'ENOTFOUND api.example.test',
+      'network unreachable',
+    ]) {
+      const msg = generalizedErrorMessageChinese(new Error(raw));
+      assert.equal(msg, '网络错误', `raw=${raw}`);
+    }
+  });
+
+  test('completely unknown error uses Chinese fallback (default = 操作失败)', () => {
+    // @kenji PR110b: unknown failure must NOT escape to English; the
+    // default fallback is itself Chinese.
+    assert.equal(generalizedErrorMessageChinese(new Error('something weird happened')), '操作失败');
+    assert.equal(generalizedErrorMessageChinese('non-Error string input'), '操作失败');
+  });
+
+  test('caller-supplied Chinese fallback is used for unknown errors', () => {
+    const msg = generalizedErrorMessageChinese(
+      new Error('something weird happened'),
+      '会话已创建但发送失败，请重试。',
+    );
+    assert.equal(msg, '会话已创建但发送失败，请重试。');
+  });
+
+  test('output is always Chinese — no English category leaks through', () => {
+    const rawErrors = [
+      new Error('Request timed out'),
+      new Error('rate limit'),
+      new Error('Authentication failed'),
+      new Error('Provider returned 500'),
+      new Error('fetch failed'),
+      new Error('NO_REAL_CONNECTION:missing_api_key: 缺少 API key'),
+      new Error('completely unknown'),
+    ];
+    const englishCategories = [
+      'Request timed out',
+      'Rate limit exceeded',
+      'Authentication failed',
+      'Provider unavailable',
+      'Network error',
+      'Operation failed',
+    ];
+    for (const error of rawErrors) {
+      const msg = generalizedErrorMessageChinese(error, '操作失败');
+      // Must contain at least one Chinese character.
+      assert.match(msg, /[一-鿿]/, `result "${msg}" should contain Chinese`);
+      // Must not contain ANY English category from the original helper.
+      for (const eng of englishCategories) {
+        assert.equal(msg.includes(eng), false, `result "${msg}" leaked English category "${eng}"`);
+      }
+    }
+  });
+
+  test('redacts secrets before classifying (token does not appear in output)', () => {
+    const msg = generalizedErrorMessageChinese(
+      new Error('401 Authorization: Bearer sk-live-secret-token-value'),
+    );
+    assert.equal(msg, '鉴权失败');
+    assert.equal(msg.includes('sk-live-secret-token-value'), false);
   });
 });

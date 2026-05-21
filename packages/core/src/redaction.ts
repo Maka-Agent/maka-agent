@@ -41,3 +41,28 @@ export function generalizedErrorMessage(error: unknown, fallback = 'Operation fa
   if (lower.includes('network') || lower.includes('fetch') || lower.includes('econn') || lower.includes('enotfound')) return 'Network error';
   return fallback;
 }
+
+/**
+ * Chinese-locale companion to `generalizedErrorMessage()` (PR110b
+ * follow-up). Same classification rules; returns Chinese phrasing
+ * instead of English. Used by surfaces that must enforce a
+ * Chinese-only error copy contract (Quick Chat, onboarding setup
+ * banners, etc.) — the English version would have leaked through any
+ * matched category, breaking the gate.
+ *
+ * The fallback default is also Chinese so callers that don't supply
+ * one still produce a Chinese-only result. Pass a more specific
+ * Chinese fallback (e.g. "会话已创建但发送失败，请重试。") for better
+ * UX when the classifier can't categorize.
+ */
+export function generalizedErrorMessageChinese(error: unknown, fallback = '操作失败'): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const redacted = redactSecrets(message);
+  const lower = redacted.toLowerCase();
+  if (lower.includes('timeout')) return '请求超时';
+  if (lower.includes('429') || lower.includes('rate')) return '触发模型速率限制';
+  if (lower.includes('401') || lower.includes('403') || lower.includes('auth')) return '鉴权失败';
+  if (lower.includes('5') && /\b5\d\d\b/.test(lower)) return '模型服务暂不可用';
+  if (lower.includes('network') || lower.includes('fetch') || lower.includes('econn') || lower.includes('enotfound')) return '网络错误';
+  return fallback;
+}

@@ -44,6 +44,29 @@ import type {
 import type { TestProxyInput } from '@maka/core/settings/network-settings';
 import type { Result } from '@maka/core/settings/result';
 import type { CreateSessionInput } from '@maka/core';
+import type {
+  OnboardingMilestone,
+  OnboardingMilestoneId,
+  OnboardingState,
+} from '@maka/core';
+
+// PR110b: Quick Chat result discriminated union — mirrors the
+// definition in main.ts. The renderer side type-checks against this
+// shape so a future contract change requires updates on both sides.
+//
+// @xuan PR110b review: the success branch carries ONLY `sessionId`.
+// No `firstMessageId` — that was a misnamed turnId in an earlier
+// draft. PR110c can add `firstTurnId` if the UI ever needs a scroll
+// anchor.
+export type QuickChatResult =
+  | { ok: true; sessionId: string }
+  | { ok: false; reason: 'setup_required'; state: OnboardingState }
+  | { ok: false; reason: 'send_failed'; message: string };
+
+export interface OnboardingSnapshot {
+  state: OnboardingState;
+  milestones: OnboardingMilestone[];
+}
 
 contextBridge.exposeInMainWorld('maka', {
   sessions: {
@@ -139,6 +162,34 @@ contextBridge.exposeInMainWorld('maka', {
       const listener = (_event: Electron.IpcRendererEvent, payload: ConnectionEvent) => handler(payload);
       ipcRenderer.on('connections:event', listener);
       return () => ipcRenderer.off('connections:event', listener);
+    },
+  },
+  // PR110b: onboarding snapshot + milestone IPCs. Renderer polls
+  // `getSnapshot()` on app load and re-polls when
+  // `sessions:changed` / `connections:changed` / settings change
+  // events fire. There is no push event for OnboardingState — it is
+  // a derived projection and refresh latency is acceptable.
+  onboarding: {
+    getSnapshot(): Promise<OnboardingSnapshot> {
+      return ipcRenderer.invoke('onboarding:getSnapshot');
+    },
+    setMilestone(
+      id: OnboardingMilestoneId,
+      status: 'completed' | 'skipped',
+    ): Promise<OnboardingSnapshot> {
+      return ipcRenderer.invoke('onboarding:setMilestone', id, status);
+    },
+  },
+  quickChat: {
+    /**
+     * PR110b: Quick Chat entry. Input is intentionally minimal —
+     * `{ prompt?: string }`. The main process always uses the
+     * derived ready default and never accepts user-supplied
+     * connection/model overrides at this stage (PR110c/d will add
+     * model picker UI).
+     */
+    start(input?: { prompt?: string }): Promise<QuickChatResult> {
+      return ipcRenderer.invoke('quickChat:start', input);
     },
   },
   settings: {

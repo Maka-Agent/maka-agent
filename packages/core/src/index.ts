@@ -238,6 +238,7 @@ export {
 // redaction.ts
 export {
   generalizedErrorMessage,
+  generalizedErrorMessageChinese,
   redactSecrets,
 } from './redaction.js';
 
