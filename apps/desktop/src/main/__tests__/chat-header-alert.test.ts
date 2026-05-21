@@ -50,22 +50,33 @@ describe('deriveChatHeaderAlert', () => {
       const result = deriveChatHeaderAlert(
         input({ backend: 'fake', defaultConnectionReady: true }),
       );
-      assert.deepEqual(result, {
-        tone: 'warning',
-        label: '此会话为演示版 · 发送时会切换到默认连接',
-        onClickTarget: 'models',
-      });
+      assert.equal(result?.tone, 'warning');
+      assert.equal(result?.label, '会话已过期 · 发送时会切换到默认连接');
+      assert.equal(result?.onClickTarget, 'models');
+      // @kenji review: user shouldn't see "演示版" in the badge — it lives
+      // in the tooltip so curious users can still find the technical reason.
+      assert.match(result?.tooltip ?? '', /FakeBackend/);
     });
 
     it('destructive when no default ready — send will still fail', () => {
       const result = deriveChatHeaderAlert(
         input({ backend: 'fake', defaultConnectionReady: false }),
       );
-      assert.deepEqual(result, {
-        tone: 'destructive',
-        label: '此会话为演示版 · 请先配置真实模型',
-        onClickTarget: 'models',
-      });
+      assert.equal(result?.tone, 'destructive');
+      assert.equal(result?.label, '会话已过期 · 请先配置真实模型');
+      assert.equal(result?.onClickTarget, 'models');
+      assert.match(result?.tooltip ?? '', /设置.*模型/);
+    });
+
+    it('user-centric label never exposes "演示版" / "fake" terminology', () => {
+      const ready = deriveChatHeaderAlert(
+        input({ backend: 'fake', defaultConnectionReady: true }),
+      );
+      const notReady = deriveChatHeaderAlert(
+        input({ backend: 'fake', defaultConnectionReady: false }),
+      );
+      assert.doesNotMatch(ready?.label ?? '', /演示版|fake|FakeBackend/i);
+      assert.doesNotMatch(notReady?.label ?? '', /演示版|fake|FakeBackend/i);
     });
 
     it('takes priority over a missing-connection signal (a `fake` session also has no real connection)', () => {
@@ -76,7 +87,7 @@ describe('deriveChatHeaderAlert', () => {
           defaultConnectionReady: true,
         }),
       );
-      assert.equal(result?.label, '此会话为演示版 · 发送时会切换到默认连接');
+      assert.equal(result?.label, '会话已过期 · 发送时会切换到默认连接');
     });
 
     it('lastTestStatus on a fake session is irrelevant — fake takes priority', () => {
@@ -88,7 +99,7 @@ describe('deriveChatHeaderAlert', () => {
           defaultConnectionReady: true,
         }),
       );
-      assert.equal(result?.label, '此会话为演示版 · 发送时会切换到默认连接');
+      assert.equal(result?.label, '会话已过期 · 发送时会切换到默认连接');
     });
   });
 
@@ -101,11 +112,10 @@ describe('deriveChatHeaderAlert', () => {
           defaultConnectionReady: true,
         }),
       );
-      assert.deepEqual(result, {
-        tone: 'warning',
-        label: '原连接已删除 · 发送时会切换到默认连接',
-        onClickTarget: 'models',
-      });
+      assert.equal(result?.tone, 'warning');
+      assert.equal(result?.label, '原连接已删除 · 发送时会切换到默认连接');
+      assert.equal(result?.onClickTarget, 'models');
+      assert.ok(result?.tooltip);
     });
 
     it('destructive when no default ready (preserves PR106 "连接已删除" copy)', () => {
@@ -116,11 +126,10 @@ describe('deriveChatHeaderAlert', () => {
           defaultConnectionReady: false,
         }),
       );
-      assert.deepEqual(result, {
-        tone: 'destructive',
-        label: '连接已删除',
-        onClickTarget: 'models',
-      });
+      assert.equal(result?.tone, 'destructive');
+      assert.equal(result?.label, '连接已删除');
+      assert.equal(result?.onClickTarget, 'models');
+      assert.match(result?.tooltip ?? '', /设置.*模型/);
     });
 
     it('handles legacy backend (e.g. "claude") missing connection — same banner', () => {
@@ -140,20 +149,18 @@ describe('deriveChatHeaderAlert', () => {
       const result = deriveChatHeaderAlert(
         input({ lastTestStatus: 'needs_reauth' }),
       );
-      assert.deepEqual(result, {
-        tone: 'warning',
-        label: '需要重新登录',
-        onClickTarget: 'account',
-      });
+      assert.equal(result?.tone, 'warning');
+      assert.equal(result?.label, '需要重新登录');
+      assert.equal(result?.onClickTarget, 'account');
+      assert.match(result?.tooltip ?? '', /401|403|鉴权/);
     });
 
     it('error → destructive · open account', () => {
       const result = deriveChatHeaderAlert(input({ lastTestStatus: 'error' }));
-      assert.deepEqual(result, {
-        tone: 'destructive',
-        label: '上次连接失败',
-        onClickTarget: 'account',
-      });
+      assert.equal(result?.tone, 'destructive');
+      assert.equal(result?.label, '上次连接失败');
+      assert.equal(result?.onClickTarget, 'account');
+      assert.match(result?.tooltip ?? '', /5xx|网络|超时|Base URL|代理/);
     });
 
     it('verified → no alert', () => {
@@ -180,7 +187,7 @@ describe('deriveChatHeaderAlert', () => {
           defaultConnectionReady: true,
         }),
       );
-      assert.equal(result?.label, '此会话为演示版 · 发送时会切换到默认连接');
+      assert.equal(result?.label, '会话已过期 · 发送时会切换到默认连接');
     });
 
     it('missing connection beats credential status', () => {

@@ -126,6 +126,7 @@ function AppShell() {
     return {
       tone: derived.tone,
       label: derived.label,
+      ...(derived.tooltip ? { tooltip: derived.tooltip } : {}),
       onClick: () => openSettingsSection(target),
     };
     // openSettingsSection is stable enough for our purposes — main.tsx

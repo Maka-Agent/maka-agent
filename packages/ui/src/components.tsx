@@ -688,6 +688,13 @@ export interface ChatHeaderAlert {
   tone: 'info' | 'warning' | 'destructive';
   /** Short label shown inside the chat header (e.g. "需要重新登录"). */
   label: string;
+  /**
+   * Optional longer explanation rendered as the badge's `title` attribute
+   * (native browser tooltip). Use this to explain WHY the badge is up
+   * without bloating the label — e.g. "原会话使用演示 backend，发送时
+   * 会切换到默认连接".
+   */
+  tooltip?: string;
   /** Optional click handler — e.g. open Settings · 账号 to fix it. */
   onClick?(): void;
 }
@@ -1048,7 +1055,7 @@ function EmptyChatHero(props: { onPromptSuggestion?(prompt: string): void; userL
  * lifecycle helper in the desktop renderer decides when to mount this.
  */
 function ChatHeaderAlertBadge(props: { alert: ChatHeaderAlert }) {
-  const { tone, label, onClick } = props.alert;
+  const { tone, label, tooltip, onClick } = props.alert;
   const Tag = onClick ? 'button' : 'span';
   return (
     <Tag
@@ -1056,7 +1063,8 @@ function ChatHeaderAlertBadge(props: { alert: ChatHeaderAlert }) {
       data-tone={tone}
       type={onClick ? 'button' : undefined}
       onClick={onClick}
-      aria-label={label}
+      aria-label={tooltip ?? label}
+      title={tooltip}
     >
       <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
       <span>{label}</span>
