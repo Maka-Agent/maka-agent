@@ -39,7 +39,13 @@ import type {
   StoredMessage,
   ToolResultContent,
 } from '@maka/core';
-import { materializeChat, materializeTools, type ToolActivityItem } from './materialize.js';
+import {
+  materializeChat,
+  materializeTools,
+  materializeTurns,
+  type ToolActivityItem,
+  type TurnViewModel,
+} from './materialize.js';
 
 export type NavSelection =
   | { section: 'sessions'; filter: SessionFilter }
@@ -695,9 +701,13 @@ export function ChatView(props: {
   onPromptSuggestion?(prompt: string): void;
   onPermissionModeChange?(mode: PermissionMode): void;
 }) {
+  // chat + storedTools survive for the empty-state and streaming-bubble
+  // paths; the main message log is now driven by `turns` (per @kenji UI-04
+  // turn-grouping projection).
   const chat = materializeChat(props.messages);
   const storedTools = materializeTools(props.messages);
   const tools = mergeTools(storedTools, props.tools);
+  const turns = materializeTurns(props.messages, props.tools);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
 
@@ -799,25 +809,22 @@ export function ChatView(props: {
           {chat.length === 0 && !props.streamingText && (
             props.emptyOverride ?? <EmptyChatHero onPromptSuggestion={props.onPromptSuggestion} userLabel={props.userLabel} />
           )}
-          {chat.map((item) => (
-            <article
-              key={item.id}
-              className={`maka-message-row message ${item.role}`}
-              title={item.ts ? formatAbsoluteTimestamp(item.ts) : undefined}
-            >
-              <MessageMeta role={item.role} userLabel={props.userLabel} ts={item.ts} />
-              <MessageBody role={item.role} text={item.text} />
-            </article>
+          {turns.map((turn) => (
+            <TurnView key={turn.turnId} turn={turn} userLabel={props.userLabel} />
           ))}
           {props.streamingText && (
-            <article className="maka-message-row message assistant streaming">
+            <article className="maka-message-row maka-turn-streaming message assistant streaming">
               <MessageMeta role="assistant" userLabel={props.userLabel} />
               <div className="maka-bubble-assistant maka-bubble-streaming">
                 <Markdown text={props.streamingText} />
               </div>
             </article>
           )}
-          {tools.length > 0 && <ToolActivity items={tools} />}
+          {/* Defensive: if any tool ended up outside a turn (e.g. legacy
+              sessions without turnId), render those at the very end so they
+              still appear instead of vanishing. materializeTurns already
+              folds these into the `__loose` turn, so this is normally a
+              no-op. */}
         </div>
         {!pinnedToBottom && (
           <button
@@ -1129,6 +1136,53 @@ function avatarInitial(label: string): string {
   // Pull the first codepoint so we don't slice an emoji surrogate pair.
   const [first] = trimmed;
   return first ?? '?';
+}
+
+/**
+ * Renders one conversational turn: user message → tools used → assistant
+ * answer, in that order, as a single visual unit. Replaces the previous
+ * "message stack + tools panel at end" layout so the user sees the
+ * narrative of "ask → tools fired → answer" as one work unit.
+ */
+function TurnView(props: { turn: TurnViewModel; userLabel?: string }) {
+  const { turn } = props;
+  return (
+    <section className="maka-turn" data-turn-id={turn.turnId}>
+      {turn.user && (
+        <article
+          className="maka-message-row message user"
+          title={turn.user.ts ? formatAbsoluteTimestamp(turn.user.ts) : undefined}
+        >
+          <MessageMeta role="user" userLabel={props.userLabel} ts={turn.user.ts} />
+          <MessageBody role="user" text={turn.user.text} />
+        </article>
+      )}
+      {turn.notes.map((note) => (
+        <article
+          key={note.id}
+          className="maka-message-row message system"
+          title={note.ts ? formatAbsoluteTimestamp(note.ts) : undefined}
+        >
+          <MessageMeta role="system" userLabel={props.userLabel} ts={note.ts} />
+          <MessageBody role="system" text={note.text} />
+        </article>
+      ))}
+      {turn.tools.length > 0 && (
+        <div className="maka-turn-tools">
+          <ToolActivity items={turn.tools} />
+        </div>
+      )}
+      {turn.assistant && (
+        <article
+          className="maka-message-row message assistant"
+          title={turn.assistant.ts ? formatAbsoluteTimestamp(turn.assistant.ts) : undefined}
+        >
+          <MessageMeta role="assistant" userLabel={props.userLabel} ts={turn.assistant.ts} />
+          <MessageBody role="assistant" text={turn.assistant.text} />
+        </article>
+      )}
+    </section>
+  );
 }
 
 function MessageMeta(props: { role: string; userLabel?: string; ts?: number }) {

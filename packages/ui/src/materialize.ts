@@ -67,3 +67,95 @@ export function materializeTools(messages: StoredMessage[]): ToolActivityItem[] 
       };
     });
 }
+
+/**
+ * A single conversational turn — typically one user message, the assistant's
+ * tool calls (if any), and the assistant's final answer. Derived as a
+ * read-only projection from `messages` + live tools (no storage changes
+ * needed — every StoredMessage already carries a `turnId`).
+ *
+ * Per @kenji UI-04 (turn narrative): replaces the previous "message stack
+ * + tools panel at end" layout with a per-turn rendering so a single user
+ * → assistant exchange reads as one work unit instead of fragments.
+ */
+export interface TurnViewModel {
+  turnId: string;
+  user?: ChatItem;
+  tools: ToolActivityItem[];
+  assistant?: ChatItem;
+  /** System notes inside this turn that survive the VISIBLE_SYSTEM_NOTES gate. */
+  notes: ChatItem[];
+  /** Wall-clock ts of the earliest message in this turn — used for sorting. */
+  startedAt: number;
+}
+
+/**
+ * Group materialized chat + tool items by `turnId` into ordered turns. Items
+ * without a turnId (e.g. fake-backend echo, or older sessions) fall into a
+ * synthetic `__loose` bucket rendered first so they remain visible.
+ */
+export function materializeTurns(
+  messages: StoredMessage[],
+  liveTools: ToolActivityItem[] = [],
+): TurnViewModel[] {
+  const turnsByMsg = new Map<string, string>();
+  const order: string[] = [];
+  const byId = new Map<string, TurnViewModel>();
+  const looseTurnId = '__loose';
+
+  function ensureTurn(turnId: string, startedAt: number): TurnViewModel {
+    let turn = byId.get(turnId);
+    if (!turn) {
+      turn = { turnId, tools: [], notes: [], startedAt };
+      byId.set(turnId, turn);
+      order.push(turnId);
+    } else if (startedAt < turn.startedAt) {
+      turn.startedAt = startedAt;
+    }
+    return turn;
+  }
+
+  // First pass: assign each message to its turn and walk chat-relevant
+  // messages into the projection.
+  for (const message of messages) {
+    const turnId = (message as { turnId?: string }).turnId ?? looseTurnId;
+    const ts = (message as { ts?: number }).ts ?? 0;
+    const turn = ensureTurn(turnId, ts);
+    if (message.type === 'user') {
+      turn.user = { id: message.id, role: 'user', text: message.text, ts: message.ts };
+    } else if (message.type === 'assistant') {
+      turn.assistant = { id: message.id, role: 'assistant', text: message.text, ts: message.ts };
+    } else if (message.type === 'system_note' && VISIBLE_SYSTEM_NOTES.has(message.kind)) {
+      turn.notes.push({
+        id: message.id,
+        role: 'system',
+        text: SYSTEM_NOTE_LABELS[message.kind] ?? message.kind,
+        ts: message.ts,
+      });
+    } else if (message.type === 'tool_call') {
+      turnsByMsg.set(message.id, turnId);
+    }
+  }
+
+  // Second pass: tools, persisted then live. Tools land in the turn matching
+  // their tool_call's turnId. Live tools without a matching persisted call
+  // (e.g. streaming-in-flight before persistence) attach to the latest
+  // active turn so they still surface in the right turn.
+  const persistedTools = materializeTools(messages);
+  const liveById = new Map(liveTools.map((tool) => [tool.toolUseId, tool]));
+  for (const tool of persistedTools) {
+    const live = liveById.get(tool.toolUseId);
+    const merged = live ? { ...tool, ...live } : tool;
+    const turnId = turnsByMsg.get(tool.toolUseId) ?? order[order.length - 1] ?? looseTurnId;
+    const turn = ensureTurn(turnId, Date.now());
+    turn.tools.push(merged);
+    liveById.delete(tool.toolUseId);
+  }
+  for (const liveOnly of liveById.values()) {
+    const turnId = order[order.length - 1] ?? looseTurnId;
+    const turn = ensureTurn(turnId, Date.now());
+    turn.tools.push(liveOnly);
+  }
+
+  return order.map((turnId) => byId.get(turnId)!);
+}
