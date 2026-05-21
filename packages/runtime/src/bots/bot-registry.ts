@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { BotChannelSettings, BotChatSettings, BotProvider } from '@maka/core';
+import { generalizedErrorMessage } from '@maka/core/redaction';
 import { BOT_PROVIDERS } from '@maka/core/settings';
 import { SimpleBotBridge } from './simple-bridge.js';
 import type { BotBridge, BotIncomingMessage, BotPlatform, BotStatus } from './types.js';
@@ -84,7 +85,7 @@ export class BotRegistry extends EventEmitter {
     const bridge = new SimpleBotBridge(platform, settings);
     this.wire(bridge);
     this.bridges.set(platform, bridge);
-    await bridge.start().catch((error) => console.error(`[BotRegistry] ${platform} start failed`, error));
+    await bridge.start().catch((error) => console.error(`[BotRegistry] ${platform} start failed: ${generalizedErrorMessage(error)}`));
   }
 
   private wire(bridge: BotBridge): void {

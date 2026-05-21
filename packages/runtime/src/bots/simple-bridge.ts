@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { BotChannelSettings } from '@maka/core';
+import { generalizedErrorMessage } from '@maka/core/redaction';
 import type { BotBridge, BotPlatform, BotStatus, SendCapable } from './types.js';
 import { proxiedFetch } from './proxied-fetch.js';
 
@@ -107,7 +108,7 @@ export class SimpleBotBridge extends EventEmitter implements BotBridge, SendCapa
       this.emit('statusChange', this.getStatus());
       void this.pollTelegram();
     } catch (error) {
-      this.reason = error instanceof Error ? error.message : String(error);
+      this.reason = generalizedErrorMessage(error);
       this.emit('statusChange', this.getStatus());
     }
   }

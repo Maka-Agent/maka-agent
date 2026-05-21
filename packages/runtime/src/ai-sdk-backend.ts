@@ -62,6 +62,7 @@ import type {
   PermissionDecision,
 } from '@maka/core/backend-types';
 import { PROVIDER_DEFAULTS, type LlmConnection } from '@maka/core/llm-connections';
+import { generalizedErrorMessage } from '@maka/core/redaction';
 import type { LlmCallRecord, ToolInvocationRecord } from '@maka/core/usage-stats/types';
 
 import { PermissionEngine } from './permission-engine.js';
@@ -756,7 +757,7 @@ export class AiSdkBackend implements AgentBackend {
   }
 
   private makeErrorEvent(turnId: string, err: unknown): ErrorEvent {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = generalizedErrorMessage(err);
     const code = err instanceof Error && 'code' in err
       ? String((err as { code?: unknown }).code)
       : undefined;

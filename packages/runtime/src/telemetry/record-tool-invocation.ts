@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { generalizedErrorMessage } from '@maka/core/redaction';
 import type { ToolInvocationRecord } from '@maka/core/usage-stats/types';
 import type { TelemetryRepoLite } from './types.js';
 
@@ -22,7 +23,7 @@ export function recordToolInvocation(deps: ToolRecorderDeps, record: ToolInvocat
         ts,
       });
     } catch (error) {
-      console.error('[telemetry] recordToolInvocation failed:', error);
+      console.error(`[telemetry] recordToolInvocation failed: ${generalizedErrorMessage(error)}`);
     }
   });
 }

@@ -16,6 +16,7 @@
     "./runtime-inputs": "./dist/runtime-inputs.js",
     "./backend-types": "./dist/backend-types.js",
     "./llm-connections": "./dist/llm-connections.js",
+    "./redaction": "./dist/redaction.js",
     "./settings": "./dist/settings.js",
     "./settings/network-settings": "./dist/settings/network-settings.js",
     "./settings/result": "./dist/settings/result.js",

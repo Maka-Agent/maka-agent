@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { generalizedErrorMessage } from '@maka/core/redaction';
 import type { LlmCallRecord, PricingConfig } from '@maka/core/usage-stats/types';
 import { computeCost } from './cost.js';
 import type { TelemetryRepoLite } from './types.js';
@@ -37,7 +38,7 @@ export function recordLlmCall(deps: LlmRecorderDeps, record: LlmCallRecord): voi
         ts,
       });
     } catch (error) {
-      console.error('[telemetry] recordLlmCall failed:', error);
+      console.error(`[telemetry] recordLlmCall failed: ${generalizedErrorMessage(error)}`);
     }
   });
 }
