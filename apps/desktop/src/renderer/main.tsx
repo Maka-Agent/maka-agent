@@ -34,6 +34,7 @@ import { CommandPalette, buildCommandList, useCommandPalette } from './command-p
 import { OnboardingHero } from './OnboardingHero';
 import { ProviderLogo } from './settings/ProvidersPanel';
 import { ArtifactPane } from './artifact-pane';
+import { deriveChatHeaderAlert } from './chat-header-alert';
 import { applyDensity, applyTheme } from './theme';
 import { openPathActionLabel, openPathFailureCopy } from './open-path';
 import './styles.css';
@@ -97,38 +98,47 @@ function AppShell() {
   // been deleted entirely. We skip the async hasSecret fetch here — the
   // chat header is a hint surface; AccountSettingsPage remains the
   // authoritative detailed view.
+  // Cheap renderer-side "is the default connection plausibly ready" check —
+  // used to decide whether a stale session can be silent-rebound on send
+  // (xuan's send-path rebind requires a ready default) or whether the user
+  // has to fix Settings first. We can't verify `hasSecret` synchronously
+  // here without an extra IPC round-trip; backend remains authoritative if
+  // the secret is missing — it will surface `missing_api_key` reason at
+  // send time. For banner copy purposes, "default exists + enabled" is
+  // enough.
+  const defaultConnectionReady = useMemo(() => {
+    if (!defaultConnection) return false;
+    const entry = connections.find((connection) => connection.slug === defaultConnection);
+    return entry?.enabled === true;
+  }, [defaultConnection, connections]);
+
+  // Banner derivation is a pure function (see `chat-header-alert.ts`); we
+  // wrap the returned `onClickTarget` here with the Settings-jump action.
   const chatConnectionAlert = useMemo<ChatHeaderAlert | undefined>(() => {
-    // Session references a connection that no longer exists (deleted from
-    // Settings · 模型 while a session was open). Without this, the user sees
-    // the raw slug as a model label and gets a silent failure on send.
-    if (activeSession && activeSession.backend !== 'fake' && !activeConnection) {
-      return {
-        tone: 'destructive',
-        label: '连接已删除',
-        onClick: () => openSettingsSection('models'),
-      };
-    }
-    if (!activeConnection) return undefined;
-    if (activeConnection.lastTestStatus === 'needs_reauth') {
-      return {
-        tone: 'warning',
-        label: '需要重新登录',
-        onClick: () => openSettingsSection('account'),
-      };
-    }
-    if (activeConnection.lastTestStatus === 'error') {
-      return {
-        tone: 'destructive',
-        label: '上次连接失败',
-        onClick: () => openSettingsSection('account'),
-      };
-    }
-    return undefined;
+    const derived = deriveChatHeaderAlert({
+      backend: activeSession?.backend,
+      hasActiveConnection: Boolean(activeConnection),
+      defaultConnectionReady,
+      lastTestStatus: activeConnection?.lastTestStatus,
+    });
+    if (!derived) return undefined;
+    const target = derived.onClickTarget;
+    return {
+      tone: derived.tone,
+      label: derived.label,
+      onClick: () => openSettingsSection(target),
+    };
     // openSettingsSection is stable enough for our purposes — main.tsx
     // doesn't depend on it changing, and including it would force the
     // effect to re-create on every render due to its function identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSession?.id, activeSession?.backend, activeConnection?.slug, activeConnection?.lastTestStatus]);
+  }, [
+    activeSession?.id,
+    activeSession?.backend,
+    activeConnection?.slug,
+    activeConnection?.lastTestStatus,
+    defaultConnectionReady,
+  ]);
   const activeSessionForView: SessionSummary | undefined = activeSession ?? (activeId ? {
     id: activeId,
     name: '新建对话',

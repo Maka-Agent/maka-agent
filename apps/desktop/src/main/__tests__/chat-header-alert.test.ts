@@ -1,0 +1,198 @@
+/**
+ * Tests for the chat header alert derivation (P0 follow-up).
+ *
+ * Background: @WAWQAQ reported that after configuring Z.ai, sending a
+ * message still pops "你没配置模型". Investigation showed three sessions
+ * on disk in `~/Library/Application Support/Maka/workspaces/default/`:
+ *   1. backend='claude' slug='fake-claude'  (legacy backend kind)
+ *   2. backend='ai-sdk' slug='zai-coding-plan'  (correctly configured)
+ *   3. backend='fake'   slug='fake'         (visual-smoke-style demo)
+ *
+ * Sessions 1 + 3 were silently rejected at send time by `assertSessionCanSend`
+ * with `connection_missing` / `fake_backend` reasons respectively. The user
+ * couldn't tell up-front which session they had focused.
+ *
+ * This test locks down the banner matrix so users see the broken state
+ * BEFORE they hit send — and so the warning vs. destructive split tracks
+ * whether @xuan's send-path silent rebind can save them or not.
+ */
+
+import { strict as assert } from 'node:assert';
+import { describe, it } from 'node:test';
+import {
+  deriveChatHeaderAlert,
+  type ChatHeaderAlertInput,
+} from '../../renderer/chat-header-alert.js';
+
+function input(partial: Partial<ChatHeaderAlertInput>): ChatHeaderAlertInput {
+  return {
+    backend: 'ai-sdk',
+    hasActiveConnection: true,
+    defaultConnectionReady: true,
+    lastTestStatus: undefined,
+    ...partial,
+  };
+}
+
+describe('deriveChatHeaderAlert', () => {
+  it('returns undefined when no active session', () => {
+    const result = deriveChatHeaderAlert(input({ backend: undefined }));
+    assert.equal(result, undefined);
+  });
+
+  it('returns undefined when session is healthy + connection present + no test issue', () => {
+    const result = deriveChatHeaderAlert(input({}));
+    assert.equal(result, undefined);
+  });
+
+  describe('legacy / stale fake backend (P0 root cause)', () => {
+    it('warning when default is ready — send will silent-rebind', () => {
+      const result = deriveChatHeaderAlert(
+        input({ backend: 'fake', defaultConnectionReady: true }),
+      );
+      assert.deepEqual(result, {
+        tone: 'warning',
+        label: '此会话为演示版 · 发送时会切换到默认连接',
+        onClickTarget: 'models',
+      });
+    });
+
+    it('destructive when no default ready — send will still fail', () => {
+      const result = deriveChatHeaderAlert(
+        input({ backend: 'fake', defaultConnectionReady: false }),
+      );
+      assert.deepEqual(result, {
+        tone: 'destructive',
+        label: '此会话为演示版 · 请先配置真实模型',
+        onClickTarget: 'models',
+      });
+    });
+
+    it('takes priority over a missing-connection signal (a `fake` session also has no real connection)', () => {
+      const result = deriveChatHeaderAlert(
+        input({
+          backend: 'fake',
+          hasActiveConnection: false,
+          defaultConnectionReady: true,
+        }),
+      );
+      assert.equal(result?.label, '此会话为演示版 · 发送时会切换到默认连接');
+    });
+
+    it('lastTestStatus on a fake session is irrelevant — fake takes priority', () => {
+      const result = deriveChatHeaderAlert(
+        input({
+          backend: 'fake',
+          hasActiveConnection: true,
+          lastTestStatus: 'verified',
+          defaultConnectionReady: true,
+        }),
+      );
+      assert.equal(result?.label, '此会话为演示版 · 发送时会切换到默认连接');
+    });
+  });
+
+  describe('missing connection (deleted or legacy slug)', () => {
+    it('warning when default ready', () => {
+      const result = deriveChatHeaderAlert(
+        input({
+          backend: 'ai-sdk',
+          hasActiveConnection: false,
+          defaultConnectionReady: true,
+        }),
+      );
+      assert.deepEqual(result, {
+        tone: 'warning',
+        label: '原连接已删除 · 发送时会切换到默认连接',
+        onClickTarget: 'models',
+      });
+    });
+
+    it('destructive when no default ready (preserves PR106 "连接已删除" copy)', () => {
+      const result = deriveChatHeaderAlert(
+        input({
+          backend: 'ai-sdk',
+          hasActiveConnection: false,
+          defaultConnectionReady: false,
+        }),
+      );
+      assert.deepEqual(result, {
+        tone: 'destructive',
+        label: '连接已删除',
+        onClickTarget: 'models',
+      });
+    });
+
+    it('handles legacy backend (e.g. "claude") missing connection — same banner', () => {
+      const result = deriveChatHeaderAlert(
+        input({
+          backend: 'claude',
+          hasActiveConnection: false,
+          defaultConnectionReady: false,
+        }),
+      );
+      assert.equal(result?.label, '连接已删除');
+    });
+  });
+
+  describe('credential lifecycle on a present connection', () => {
+    it('needs_reauth → warning · open account', () => {
+      const result = deriveChatHeaderAlert(
+        input({ lastTestStatus: 'needs_reauth' }),
+      );
+      assert.deepEqual(result, {
+        tone: 'warning',
+        label: '需要重新登录',
+        onClickTarget: 'account',
+      });
+    });
+
+    it('error → destructive · open account', () => {
+      const result = deriveChatHeaderAlert(input({ lastTestStatus: 'error' }));
+      assert.deepEqual(result, {
+        tone: 'destructive',
+        label: '上次连接失败',
+        onClickTarget: 'account',
+      });
+    });
+
+    it('verified → no alert', () => {
+      const result = deriveChatHeaderAlert(input({ lastTestStatus: 'verified' }));
+      assert.equal(result, undefined);
+    });
+  });
+
+  describe('priority order', () => {
+    // The three concerns are checked in the order:
+    //   1. Stale fake backend → fake banner
+    //   2. Missing connection → missing-connection banner
+    //   3. Connection test status → reauth / error
+    //
+    // We lock the order so a future change doesn't accidentally start
+    // showing "needs_reauth" instead of "session is fake" when both apply.
+
+    it('fake backend beats missing connection beats credential status', () => {
+      const result = deriveChatHeaderAlert(
+        input({
+          backend: 'fake',
+          hasActiveConnection: false,
+          lastTestStatus: 'error',
+          defaultConnectionReady: true,
+        }),
+      );
+      assert.equal(result?.label, '此会话为演示版 · 发送时会切换到默认连接');
+    });
+
+    it('missing connection beats credential status', () => {
+      const result = deriveChatHeaderAlert(
+        input({
+          backend: 'ai-sdk',
+          hasActiveConnection: false,
+          lastTestStatus: 'error',
+          defaultConnectionReady: false,
+        }),
+      );
+      assert.equal(result?.label, '连接已删除');
+    });
+  });
+});
