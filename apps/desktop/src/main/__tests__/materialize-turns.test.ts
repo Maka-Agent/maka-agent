@@ -8,7 +8,7 @@
 
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
-import { materializeTurns } from '@maka/ui';
+import { deriveTurnLineageMap, materializeTurns } from '@maka/ui';
 import type { StoredMessage } from '@maka/core';
 
 function userMsg(turnId: string, ts: number, text: string, id?: string): StoredMessage {
@@ -52,6 +52,7 @@ describe('materializeTurns', () => {
     assert.equal(turn.tools.length, 1);
     assert.equal(turn.tools[0]?.toolName, 'Read');
     assert.equal(turn.tools[0]?.status, 'completed');
+    assert.equal(turn.status, 'completed');
   });
 
   it('preserves turn order across multiple turns and isolates tools', () => {
@@ -145,6 +146,38 @@ describe('materializeTurns', () => {
     assert.equal(turns[0]?.assistant, undefined);
   });
 
+  it('surfaces persisted turn status + lineage fields', () => {
+    const turns = materializeTurns([
+      userMsg('old', 1, 'first'),
+      {
+        type: 'turn_state',
+        id: 'state-old',
+        turnId: 'old',
+        ts: 2,
+        status: 'aborted',
+        abortedAt: 2,
+        partialOutputRetained: false,
+      },
+      userMsg('retry', 3, 'first'),
+      {
+        type: 'turn_state',
+        id: 'state-retry',
+        turnId: 'retry',
+        ts: 4,
+        status: 'running',
+        parentTurnId: 'old',
+        retriedFromTurnId: 'old',
+        partialOutputRetained: false,
+      },
+    ]);
+
+    assert.equal(turns[0]?.status, 'aborted');
+    assert.equal(turns[0]?.abortedAt, 2);
+    assert.equal(turns[1]?.status, 'running');
+    assert.equal(turns[1]?.parentTurnId, 'old');
+    assert.equal(turns[1]?.retriedFromTurnId, 'old');
+  });
+
   it('sums token_usage messages within the turn', () => {
     const turns = materializeTurns([
       userMsg('t1', 100, 'q'),
@@ -199,5 +232,20 @@ describe('materializeTurns', () => {
     );
     assert.equal(turns[0]?.tools.length, 1);
     assert.equal(turns[0]?.tools[0]?.status, 'running');
+  });
+});
+
+describe('deriveTurnLineageMap', () => {
+  it('derives reverse links without mutating old turns', () => {
+    const map = deriveTurnLineageMap([
+      { turnId: 'old' },
+      { turnId: 'retry', retriedFromTurnId: 'old' },
+      { turnId: 'regen', regeneratedFromTurnId: 'old' },
+    ]);
+
+    assert.deepEqual(map.get('old'), {
+      retriedToTurnId: 'retry',
+      regeneratedToTurnId: 'regen',
+    });
   });
 });

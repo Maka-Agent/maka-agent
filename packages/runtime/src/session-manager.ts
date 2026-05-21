@@ -29,6 +29,7 @@ import type {
   SessionStatus,
   SessionSummary,
   StoredMessage,
+  TurnRecord,
   UserMessage,
   PermissionDecisionMessage,
   SystemNoteMessage,
@@ -36,6 +37,9 @@ import type {
 } from '@maka/core/session';
 import type {
   CreateSessionInput,
+  BranchFromTurnInput,
+  RegenerateTurnInput,
+  RetryTurnInput,
   UserMessageInput,
   SessionListFilter,
 } from '@maka/core/runtime-inputs';
@@ -53,6 +57,7 @@ export interface SessionStore {
   list(filter?: SessionListFilter): Promise<SessionSummary[]>;
   readHeader(sessionId: string): Promise<SessionHeader>;
   readMessages(sessionId: string): Promise<StoredMessage[]>;
+  listTurns(sessionId: string): Promise<TurnRecord[]>;
   appendMessage(sessionId: string, m: StoredMessage): Promise<void>;
   appendMessages(sessionId: string, ms: StoredMessage[]): Promise<void>;
   updateHeader(sessionId: string, patch: Partial<SessionHeader>): Promise<SessionHeader>;
@@ -111,6 +116,8 @@ interface ActiveSession {
   /** Tracks the latest header we've read (used to short-circuit some reads). */
   cachedHeader: SessionHeader;
   activeStreams: number;
+  activeTurnIds: Set<string>;
+  activeTurnLineage: Map<string, Partial<Pick<UserMessageInput, 'parentTurnId' | 'retriedFromTurnId' | 'regeneratedFromTurnId' | 'branchOfTurnId' | 'parentSessionId'>>>;
 }
 
 export class SessionManager {
@@ -133,6 +140,10 @@ export class SessionManager {
 
   async getMessages(sessionId: string): Promise<StoredMessage[]> {
     return this.deps.store.readMessages(sessionId);
+  }
+
+  async listTurns(sessionId: string): Promise<TurnRecord[]> {
+    return this.deps.store.listTurns(sessionId);
   }
 
   async updateSession(
@@ -258,6 +269,7 @@ export class SessionManager {
       ...(input.attachments ? { attachments: input.attachments } : {}),
     };
     await this.deps.store.appendMessage(sessionId, userMsg);
+    await this.appendTurnState(sessionId, input.turnId, 'running', input);
 
     // 3. Lock connection right after the user message is flushed (§9 Step 2.3).
     //    Even if backend startup fails next, the session's backend choice is
@@ -276,6 +288,14 @@ export class SessionManager {
     let finalStatus: { status: SessionStatus; blockedReason?: SessionBlockedReason } | undefined;
     await this.updateStatus(sessionId, 'running', undefined, lastTs);
     active.activeStreams += 1;
+    active.activeTurnIds.add(input.turnId);
+    active.activeTurnLineage.set(input.turnId, {
+      ...(input.parentTurnId ? { parentTurnId: input.parentTurnId } : {}),
+      ...(input.retriedFromTurnId ? { retriedFromTurnId: input.retriedFromTurnId } : {}),
+      ...(input.regeneratedFromTurnId ? { regeneratedFromTurnId: input.regeneratedFromTurnId } : {}),
+      ...(input.branchOfTurnId ? { branchOfTurnId: input.branchOfTurnId } : {}),
+      ...(input.parentSessionId ? { parentSessionId: input.parentSessionId } : {}),
+    });
 
     try {
       for await (const ev of active.backend.send({
@@ -292,17 +312,33 @@ export class SessionManager {
         if (ev.type === 'complete' || ev.type === 'abort') {
           sawCompletion = true;
           finalStatus = transition ?? { status: 'active' };
+          const turnStatus = turnStatusFromEvent(ev);
+          if (turnStatus) {
+            await this.appendTurnState(sessionId, input.turnId, turnStatus.status, input, {
+              ts: ev.ts,
+              errorClass: turnStatus.errorClass,
+            });
+          }
         }
         if (ev.type === 'error') {
           finalStatus = transition ?? { status: 'blocked', blockedReason: 'unknown' };
+          await this.appendTurnState(sessionId, input.turnId, 'failed', input, {
+            ts: ev.ts,
+            errorClass: ev.reason ?? ev.code ?? 'unknown',
+          });
         }
         yield ev;
       }
     } catch (error) {
       finalStatus = { status: 'blocked', blockedReason: 'unknown' };
+      await this.appendTurnState(sessionId, input.turnId, 'failed', input, {
+        errorClass: error instanceof Error ? error.name : 'unknown',
+      }).catch(() => {});
       throw error;
     } finally {
       active.activeStreams = Math.max(0, active.activeStreams - 1);
+      active.activeTurnIds.delete(input.turnId);
+      active.activeTurnLineage.delete(input.turnId);
       const nextStatus = active.activeStreams > 0
         ? { status: 'running' as const }
         : (finalStatus ?? { status: 'active' as const });
@@ -337,6 +373,15 @@ export class SessionManager {
     if (!active) return;
     await active.backend.stop('user_stop');
     await this.updateStatus(sessionId, 'aborted');
+    for (const turnId of active.activeTurnIds) {
+      await this.appendTurnState(
+        sessionId,
+        turnId,
+        'aborted',
+        active.activeTurnLineage.get(turnId) ?? {},
+        { ts: this.deps.now() },
+      ).catch(() => {});
+    }
     // Append the abort SystemNote synchronously (matches §9 Step 6 step 4).
     await this.deps.store.appendMessage(sessionId, {
       type: 'system_note',
@@ -344,6 +389,67 @@ export class SessionManager {
       ts: this.deps.now(),
       kind: 'abort',
     } satisfies SystemNoteMessage);
+  }
+
+  async *retryTurn(
+    sessionId: string,
+    input: RetryTurnInput,
+  ): AsyncIterable<SessionEvent> {
+    const source = await this.requireTurnForAction(sessionId, input.sourceTurnId, ['failed', 'aborted'], 'retry');
+    const user = await this.requireUserMessageForTurn(sessionId, source.turnId);
+    yield* this.sendMessage(sessionId, {
+      turnId: input.turnId ?? this.deps.newId(),
+      text: user.text,
+      ...(user.attachments ? { attachments: user.attachments } : {}),
+      parentTurnId: source.turnId,
+      retriedFromTurnId: source.turnId,
+    });
+  }
+
+  async *regenerateTurn(
+    sessionId: string,
+    input: RegenerateTurnInput,
+  ): AsyncIterable<SessionEvent> {
+    const source = await this.requireTurnForAction(sessionId, input.sourceTurnId, ['completed'], 'regenerate');
+    const user = await this.requireUserMessageForTurn(sessionId, source.turnId);
+    yield* this.sendMessage(sessionId, {
+      turnId: input.turnId ?? this.deps.newId(),
+      text: user.text,
+      ...(user.attachments ? { attachments: user.attachments } : {}),
+      parentTurnId: source.turnId,
+      regeneratedFromTurnId: source.turnId,
+    });
+  }
+
+  async branchFromTurn(
+    sessionId: string,
+    input: BranchFromTurnInput,
+  ): Promise<SessionSummary> {
+    const header = await this.deps.store.readHeader(sessionId);
+    const messages = await this.deps.store.readMessages(sessionId);
+    const copied = copyMessagesThroughTurnBoundary(messages, input.sourceTurnId);
+    if (copied.length === 0) throw new Error(`Cannot branch from unknown turn ${input.sourceTurnId}`);
+    const next = await this.deps.store.create({
+      cwd: header.cwd,
+      backend: header.backend,
+      llmConnectionSlug: header.llmConnectionSlug,
+      model: header.model,
+      permissionMode: header.permissionMode,
+      name: input.name ?? `${header.name} · 分支`,
+      labels: header.labels,
+      parentSessionId: sessionId,
+      branchOfTurnId: input.sourceTurnId,
+      status: 'active',
+    });
+    await this.deps.store.appendMessages(next.id, copied);
+    await this.deps.store.appendMessage(next.id, {
+      type: 'system_note',
+      id: this.deps.newId(),
+      ts: this.deps.now(),
+      kind: 'session_start',
+      data: { parentSessionId: sessionId, branchOfTurnId: input.sourceTurnId },
+    });
+    return headerToSummary(await this.deps.store.readHeader(next.id));
   }
 
   async respondToPermission(
@@ -374,7 +480,14 @@ export class SessionManager {
       header,
       store: this.deps.store,
     });
-    const entry: ActiveSession = { sessionId, backend, cachedHeader: header, activeStreams: 0 };
+    const entry: ActiveSession = {
+      sessionId,
+      backend,
+      cachedHeader: header,
+      activeStreams: 0,
+      activeTurnIds: new Set(),
+      activeTurnLineage: new Map(),
+    };
     this.active.set(sessionId, entry);
     return entry;
   }
@@ -400,6 +513,60 @@ export class SessionManager {
     const active = this.active.get(sessionId);
     if (active) active.cachedHeader = next;
   }
+
+  private async appendTurnState(
+    sessionId: string,
+    turnId: string,
+    status: TurnRecord['status'],
+    lineage: Partial<Pick<UserMessageInput, 'parentTurnId' | 'retriedFromTurnId' | 'regeneratedFromTurnId' | 'branchOfTurnId' | 'parentSessionId'>> = {},
+    options: { ts?: number; errorClass?: string } = {},
+  ): Promise<void> {
+    const ts = options.ts ?? this.deps.now();
+    await this.deps.store.appendMessage(sessionId, {
+      type: 'turn_state',
+      id: this.deps.newId(),
+      turnId,
+      ts,
+      status,
+      ...(lineage.parentTurnId ? { parentTurnId: lineage.parentTurnId } : {}),
+      ...(lineage.retriedFromTurnId ? { retriedFromTurnId: lineage.retriedFromTurnId } : {}),
+      ...(lineage.regeneratedFromTurnId ? { regeneratedFromTurnId: lineage.regeneratedFromTurnId } : {}),
+      ...(lineage.branchOfTurnId ? { branchOfTurnId: lineage.branchOfTurnId } : {}),
+      ...(lineage.parentSessionId ? { parentSessionId: lineage.parentSessionId } : {}),
+      ...(status === 'aborted' ? { abortedAt: ts } : {}),
+      ...(status === 'failed' ? { errorClass: options.errorClass ?? 'unknown' } : {}),
+      partialOutputRetained: await this.turnHasRetainedOutput(sessionId, turnId),
+    });
+  }
+
+  private async turnHasRetainedOutput(sessionId: string, turnId: string): Promise<boolean> {
+    const messages = await this.deps.store.readMessages(sessionId).catch(() => []);
+    return messages.some((message) =>
+      (message.type === 'assistant' && message.turnId === turnId && message.text.trim().length > 0) ||
+      (message.type === 'tool_result' && message.turnId === turnId),
+    );
+  }
+
+  private async requireTurnForAction(
+    sessionId: string,
+    turnId: string,
+    allowed: readonly TurnRecord['status'][],
+    action: string,
+  ): Promise<TurnRecord> {
+    const turn = (await this.deps.store.listTurns(sessionId)).find((candidate) => candidate.turnId === turnId);
+    if (!turn) throw new Error(`Cannot ${action}: unknown turn ${turnId}`);
+    if (!allowed.includes(turn.status)) {
+      throw new Error(`Cannot ${action}: turn ${turnId} is ${turn.status}`);
+    }
+    return turn;
+  }
+
+  private async requireUserMessageForTurn(sessionId: string, turnId: string): Promise<UserMessage> {
+    const user = (await this.deps.store.readMessages(sessionId))
+      .find((message): message is UserMessage => message.type === 'user' && message.turnId === turnId);
+    if (!user) throw new Error(`Turn ${turnId} has no user message`);
+    return user;
+  }
 }
 
 // ============================================================================
@@ -417,6 +584,8 @@ export function headerToSummary(h: SessionHeader): SessionSummary {
     status: h.status,
     ...(h.blockedReason ? { blockedReason: h.blockedReason } : {}),
     ...(h.statusUpdatedAt !== undefined ? { statusUpdatedAt: h.statusUpdatedAt } : {}),
+    ...(h.parentSessionId ? { parentSessionId: h.parentSessionId } : {}),
+    ...(h.branchOfTurnId ? { branchOfTurnId: h.branchOfTurnId } : {}),
     backend: h.backend,
     llmConnectionSlug: h.llmConnectionSlug,
     permissionMode: h.permissionMode ?? 'ask',
@@ -454,12 +623,46 @@ function statusFromEvent(event: SessionEvent): { status: SessionStatus; blockedR
     case 'abort':
       return { status: 'aborted' };
     case 'complete':
-      return event.stopReason === 'permission_handoff'
-        ? { status: 'waiting_for_user', blockedReason: 'permission_required' }
-        : { status: 'active' };
+      if (event.stopReason === 'permission_handoff') return { status: 'waiting_for_user', blockedReason: 'permission_required' };
+      if (event.stopReason === 'user_stop') return { status: 'aborted' };
+      if (event.stopReason === 'error') return { status: 'blocked', blockedReason: 'unknown' };
+      return { status: 'active' };
     default:
       return undefined;
   }
+}
+
+function turnStatusFromEvent(event: SessionEvent): { status: TurnRecord['status']; errorClass?: string } | undefined {
+  switch (event.type) {
+    case 'abort':
+      return { status: 'aborted' };
+    case 'error':
+      return { status: 'failed', errorClass: event.reason ?? event.code ?? 'unknown' };
+    case 'complete':
+      if (event.stopReason === 'user_stop') return { status: 'aborted' };
+      if (event.stopReason === 'error') return { status: 'failed', errorClass: 'unknown' };
+      if (event.stopReason === 'permission_handoff') return { status: 'running' };
+      return { status: 'completed' };
+    default:
+      return undefined;
+  }
+}
+
+function copyMessagesThroughTurnBoundary(messages: readonly StoredMessage[], turnId: string): StoredMessage[] {
+  let lastIndex = -1;
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index]!;
+    if ((message as { turnId?: string }).turnId === turnId) {
+      lastIndex = index;
+    }
+  }
+  if (lastIndex < 0) return [];
+  // Branch v1 copies conversation context only. Turn metadata is intentionally
+  // not copied into the child session; lineage lives on the child session
+  // header (`parentSessionId` + `branchOfTurnId`) and future turns.
+  return messages
+    .slice(0, lastIndex + 1)
+    .filter((message) => message.type !== 'turn_state');
 }
 
 function blockedReasonFromErrorReason(reason: string | undefined): SessionBlockedReason {

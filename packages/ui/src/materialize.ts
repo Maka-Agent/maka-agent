@@ -1,4 +1,5 @@
-import type { StoredMessage, ToolResultContent } from '@maka/core';
+import { deriveTurnRecords } from '@maka/core';
+import type { StoredMessage, ToolResultContent, TurnRecord, TurnStatus } from '@maka/core';
 
 export interface ChatItem {
   id: string;
@@ -80,6 +81,15 @@ export function materializeTools(messages: StoredMessage[]): ToolActivityItem[] 
  */
 export interface TurnViewModel {
   turnId: string;
+  status: TurnStatus;
+  parentTurnId?: string;
+  retriedFromTurnId?: string;
+  regeneratedFromTurnId?: string;
+  branchOfTurnId?: string;
+  parentSessionId?: string;
+  abortedAt?: number;
+  errorClass?: string;
+  partialOutputRetained: boolean;
   user?: ChatItem;
   tools: ToolActivityItem[];
   assistant?: ChatItem;
@@ -117,6 +127,8 @@ export function materializeTurns(
   messages: StoredMessage[],
   liveTools: ToolActivityItem[] = [],
 ): TurnViewModel[] {
+  const turnRecords = deriveTurnRecords(messages);
+  const turnRecordById = new Map(turnRecords.map((turn) => [turn.turnId, turn]));
   const turnsByMsg = new Map<string, string>();
   const order: string[] = [];
   const byId = new Map<string, TurnViewModel>();
@@ -125,7 +137,22 @@ export function materializeTurns(
   function ensureTurn(turnId: string, startedAt: number): TurnViewModel {
     let turn = byId.get(turnId);
     if (!turn) {
-      turn = { turnId, tools: [], notes: [], startedAt };
+      const record = turnRecordById.get(turnId);
+      turn = {
+        turnId,
+        status: record?.status ?? 'completed',
+        ...(record?.parentTurnId ? { parentTurnId: record.parentTurnId } : {}),
+        ...(record?.retriedFromTurnId ? { retriedFromTurnId: record.retriedFromTurnId } : {}),
+        ...(record?.regeneratedFromTurnId ? { regeneratedFromTurnId: record.regeneratedFromTurnId } : {}),
+        ...(record?.branchOfTurnId ? { branchOfTurnId: record.branchOfTurnId } : {}),
+        ...(record?.parentSessionId ? { parentSessionId: record.parentSessionId } : {}),
+        ...(record?.abortedAt !== undefined ? { abortedAt: record.abortedAt } : {}),
+        ...(record?.errorClass ? { errorClass: record.errorClass } : {}),
+        partialOutputRetained: record?.partialOutputRetained ?? false,
+        tools: [],
+        notes: [],
+        startedAt,
+      };
       byId.set(turnId, turn);
       order.push(turnId);
     } else if (startedAt < turn.startedAt) {
@@ -199,4 +226,30 @@ export function materializeTurns(
   }
 
   return order.map((turnId) => byId.get(turnId)!);
+}
+
+export interface TurnLineageTarget {
+  retriedToTurnId?: string;
+  regeneratedToTurnId?: string;
+}
+
+export function deriveTurnLineageMap(
+  turns: readonly Pick<TurnRecord, 'turnId' | 'retriedFromTurnId' | 'regeneratedFromTurnId'>[],
+): Map<string, TurnLineageTarget> {
+  const out = new Map<string, TurnLineageTarget>();
+  for (const turn of turns) {
+    if (turn.retriedFromTurnId) {
+      out.set(turn.retriedFromTurnId, {
+        ...(out.get(turn.retriedFromTurnId) ?? {}),
+        retriedToTurnId: turn.turnId,
+      });
+    }
+    if (turn.regeneratedFromTurnId) {
+      out.set(turn.regeneratedFromTurnId, {
+        ...(out.get(turn.regeneratedFromTurnId) ?? {}),
+        regeneratedToTurnId: turn.turnId,
+      });
+    }
+  }
+  return out;
 }

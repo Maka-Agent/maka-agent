@@ -725,6 +725,46 @@ badge ("进行中") is visible in the screenshot alongside the sidebar.
 
 ---
 
+## Path 15 — Turn control contract API (§9.9, PR109c)
+
+**Scope.** PR109c is contract/runtime only. It does not add footer
+buttons yet; PR109d will add UI smoke coverage after consuming the
+IPC surface.
+
+**Automated coverage now.**
+- `TurnStatus = running / completed / aborted / failed` locked in
+  `@maka/core`.
+- Storage projects `TurnRecord[]` from JSONL `turn_state` messages and
+  legacy message-only turns.
+- Runtime tests cover:
+  - completed turn writes `completed`,
+  - backend error writes `failed` + `errorClass`,
+  - cancel/abort writes `aborted` and preserves partial output,
+  - retry creates a new sibling turn with `retriedFromTurnId`,
+  - regenerate creates a new sibling turn with `regeneratedFromTurnId`,
+  - branch creates a new session with `parentSessionId` +
+    `branchOfTurnId` and copies messages only to the selected boundary.
+- Desktop exposes:
+  - `sessions:listTurns`
+  - `sessions:retryTurn`
+  - `sessions:regenerateTurn`
+  - `sessions:branchFromTurn`
+
+**Manual smoke after PR109d.**
+Use a future `turn-control-affordances` fixture and verify footer
+actions call the IPC handlers without optimistic status writes.
+
+**Pass signals.**
+- Old turns are immutable after retry/regenerate; no old assistant
+  output is overwritten.
+- Branch from an aborted turn is allowed; the child session copies to
+  the interrupted turn boundary and can show "从中断前分支".
+- `SessionChangedReason` includes `turn-status-change` so renderer
+  reloads turn metadata without pretending this is a session lifecycle
+  status change.
+
+---
+
 ## When to run
 
 - Before merging any large UI / runtime / credential / permission

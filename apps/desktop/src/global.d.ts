@@ -27,6 +27,10 @@ import type {
   ArtifactRecord,
   ArtifactSaveResult,
   ArtifactTextReadResult,
+  BranchFromTurnInput,
+  RegenerateTurnInput,
+  RetryTurnInput,
+  TurnRecord,
 } from '@maka/core';
 import type {
   PricingConfig,
@@ -49,6 +53,10 @@ declare global {
         send(sessionId: string, command: SessionCommand): Promise<void>;
         stop(sessionId: string): Promise<void>;
         readMessages(sessionId: string): Promise<StoredMessage[]>;
+        listTurns(sessionId: string): Promise<TurnRecord[]>;
+        retryTurn(sessionId: string, input: RetryTurnInput): Promise<void>;
+        regenerateTurn(sessionId: string, input: RegenerateTurnInput): Promise<void>;
+        branchFromTurn(sessionId: string, input: BranchFromTurnInput): Promise<SessionSummary>;
         respondToPermission(sessionId: string, response: PermissionResponse): Promise<void>;
         subscribeEvents(sessionId: string, handler: (event: SessionEvent) => void): () => void;
         subscribeChanges(handler: (event: SessionChangedEvent) => void): () => void;

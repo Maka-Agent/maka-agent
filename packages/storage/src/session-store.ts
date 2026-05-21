@@ -1,13 +1,14 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { isPermissionMode, isSessionBlockedReason, isSessionStatus } from '@maka/core';
+import { deriveTurnRecords, isPermissionMode, isSessionBlockedReason, isSessionStatus } from '@maka/core';
 import type {
   CreateSessionInput,
   SessionHeader,
   SessionListFilter,
   SessionSummary,
   StoredMessage,
+  TurnRecord,
   UserMessage,
 } from '@maka/core';
 
@@ -16,6 +17,7 @@ export interface SessionStore {
   list(filter?: SessionListFilter): Promise<SessionSummary[]>;
   readHeader(sessionId: string): Promise<SessionHeader>;
   readMessages(sessionId: string): Promise<StoredMessage[]>;
+  listTurns(sessionId: string): Promise<TurnRecord[]>;
   appendMessage(sessionId: string, message: StoredMessage): Promise<void>;
   appendMessages(sessionId: string, messages: StoredMessage[]): Promise<void>;
   updateHeader(sessionId: string, patch: Partial<SessionHeader>): Promise<SessionHeader>;
@@ -54,6 +56,8 @@ class FileSessionStore implements SessionStore {
       status: input.status ?? 'active',
       ...(input.blockedReason ? { blockedReason: input.blockedReason } : {}),
       statusUpdatedAt: now,
+      ...(input.parentSessionId ? { parentSessionId: input.parentSessionId } : {}),
+      ...(input.branchOfTurnId ? { branchOfTurnId: input.branchOfTurnId } : {}),
       hasUnread: false,
       backend: input.backend,
       llmConnectionSlug: input.llmConnectionSlug,
@@ -114,6 +118,10 @@ class FileSessionStore implements SessionStore {
       await this.updateHeader(sessionId, { connectionLocked: true });
     }
     return messages;
+  }
+
+  async listTurns(sessionId: string): Promise<TurnRecord[]> {
+    return deriveTurnRecords(await this.readMessages(sessionId));
   }
 
   async appendMessage(sessionId: string, message: StoredMessage): Promise<void> {
@@ -268,6 +276,8 @@ function toSummary(header: SessionHeader, messages: StoredMessage[] = []): Sessi
     status: header.status,
     ...(header.blockedReason ? { blockedReason: header.blockedReason } : {}),
     ...(header.statusUpdatedAt !== undefined ? { statusUpdatedAt: header.statusUpdatedAt } : {}),
+    ...(header.parentSessionId ? { parentSessionId: header.parentSessionId } : {}),
+    ...(header.branchOfTurnId ? { branchOfTurnId: header.branchOfTurnId } : {}),
     backend: header.backend,
     llmConnectionSlug: header.llmConnectionSlug,
     permissionMode: header.permissionMode,

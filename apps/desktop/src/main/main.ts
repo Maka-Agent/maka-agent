@@ -16,6 +16,9 @@ import type {
   ConnectionEvent,
   CreateConnectionInput,
   CreateSessionInput,
+  BranchFromTurnInput,
+  RegenerateTurnInput,
+  RetryTurnInput,
   SessionCommand,
   SessionChangedEvent,
   SessionChangedReason,
@@ -751,6 +754,7 @@ function registerIpc(): void {
     return session;
   });
   ipcMain.handle('sessions:readMessages', (_event, sessionId: string) => runtime.getMessages(sessionId));
+  ipcMain.handle('sessions:listTurns', (_event, sessionId: string) => runtime.listTurns(sessionId));
   ipcMain.handle('sessions:stop', (_event, sessionId: string) => runtime.stopSession(sessionId));
   ipcMain.handle('sessions:respondToPermission', (_event, sessionId: string, response) =>
     runtime.respondToPermission(sessionId, response),
@@ -764,6 +768,19 @@ function registerIpc(): void {
       attachments: command.attachments,
     });
     void streamEvents(sessionId, iterator);
+  });
+  ipcMain.handle('sessions:retryTurn', async (_event, sessionId: string, input: RetryTurnInput) => {
+    await ensureSessionCanSend(sessionId);
+    void streamEvents(sessionId, runtime.retryTurn(sessionId, input));
+  });
+  ipcMain.handle('sessions:regenerateTurn', async (_event, sessionId: string, input: RegenerateTurnInput) => {
+    await ensureSessionCanSend(sessionId);
+    void streamEvents(sessionId, runtime.regenerateTurn(sessionId, input));
+  });
+  ipcMain.handle('sessions:branchFromTurn', async (_event, sessionId: string, input: BranchFromTurnInput) => {
+    const session = await runtime.branchFromTurn(sessionId, input);
+    emitSessionsChanged('created', session.id);
+    return session;
   });
   ipcMain.handle('sessions:archive', async (_event, sessionId: string) => {
     await runtime.archive(sessionId);
@@ -1023,6 +1040,9 @@ async function streamEvents(sessionId: string, iterator: AsyncIterable<SessionEv
       if (isStatusChangingSessionEvent(event)) {
         emitSessionsChanged('status-change', sessionId);
       }
+      if (isTurnStatusChangingSessionEvent(event)) {
+        emitSessionsChanged('turn-status-change', sessionId);
+      }
       if (!finalAppendBroadcasted && isFinalSessionEvent(event)) {
         emitSessionsChanged('message-appended', sessionId);
         finalAppendBroadcasted = true;
@@ -1055,6 +1075,10 @@ function isStatusChangingSessionEvent(event: SessionEvent): boolean {
     event.type === 'complete' ||
     event.type === 'abort' ||
     event.type === 'error';
+}
+
+function isTurnStatusChangingSessionEvent(event: SessionEvent): boolean {
+  return event.type === 'complete' || event.type === 'abort' || event.type === 'error';
 }
 
 async function ensureSessionCanSend(sessionId: string): Promise<void> {

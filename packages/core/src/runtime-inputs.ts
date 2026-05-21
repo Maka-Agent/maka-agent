@@ -20,6 +20,8 @@ export interface CreateSessionInput {
   permissionMode: PermissionMode;
   status?: SessionStatus;
   blockedReason?: SessionBlockedReason;
+  parentSessionId?: string;
+  branchOfTurnId?: string;
   labels?: string[];
 }
 
@@ -29,6 +31,26 @@ export interface UserMessageInput {
   turnId: string;
   text: string;
   attachments?: AttachmentRef[];
+  parentTurnId?: string;
+  retriedFromTurnId?: string;
+  regeneratedFromTurnId?: string;
+  branchOfTurnId?: string;
+  parentSessionId?: string;
+}
+
+export interface RetryTurnInput {
+  sourceTurnId: string;
+  turnId?: string;
+}
+
+export interface RegenerateTurnInput {
+  sourceTurnId: string;
+  turnId?: string;
+}
+
+export interface BranchFromTurnInput {
+  sourceTurnId: string;
+  name?: string;
 }
 
 export interface SessionListFilter {

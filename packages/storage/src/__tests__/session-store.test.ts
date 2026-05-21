@@ -37,6 +37,22 @@ describe('FileSessionStore CRUD', () => {
     });
   });
 
+  test('persists session branch lineage in header and summaries', async () => {
+    await withStore(async (store) => {
+      const header = await store.create(makeInput({
+        name: 'Branch',
+        parentSessionId: 'parent-session',
+        branchOfTurnId: 'turn-parent',
+      }));
+
+      assert.equal(header.parentSessionId, 'parent-session');
+      assert.equal(header.branchOfTurnId, 'turn-parent');
+      const [summary] = await store.list();
+      assert.equal(summary?.parentSessionId, 'parent-session');
+      assert.equal(summary?.branchOfTurnId, 'turn-parent');
+    });
+  });
+
   test('setFlagged toggles the flag without touching other fields', async () => {
     await withStore(async (store) => {
       const header = await store.create(makeInput({ name: 'Pin me' }));
@@ -215,6 +231,53 @@ describe('FileSessionStore CRUD', () => {
 
       const [summary] = await store.list();
       assert.equal(summary?.lastMessagePreview, '附件');
+    });
+  });
+
+  test('listTurns derives latest persisted turn states and lineage', async () => {
+    await withStore(async (store) => {
+      const header = await store.create(makeInput({ name: 'Turns' }));
+
+      await store.appendMessages(header.id, [
+        { type: 'user', id: 'u1', turnId: 't1', ts: 1, text: 'hello' },
+        { type: 'turn_state', id: 'state-1', turnId: 't1', ts: 2, status: 'running', partialOutputRetained: false },
+        { type: 'assistant', id: 'a1', turnId: 't1', ts: 3, text: 'partial', modelId: 'fake' },
+        {
+          type: 'turn_state',
+          id: 'state-2',
+          turnId: 't1',
+          ts: 4,
+          status: 'aborted',
+          retriedFromTurnId: 't0',
+          abortedAt: 4,
+          partialOutputRetained: false,
+        },
+      ]);
+
+      assert.deepEqual(await store.listTurns(header.id), [
+        {
+          turnId: 't1',
+          status: 'aborted',
+          retriedFromTurnId: 't0',
+          abortedAt: 4,
+          partialOutputRetained: true,
+        },
+      ]);
+    });
+  });
+
+  test('listTurns projects legacy message-only turns as completed', async () => {
+    await withStore(async (store) => {
+      const header = await store.create(makeInput({ name: 'Legacy turn' }));
+      await store.appendMessages(header.id, [
+        { type: 'user', id: 'u1', turnId: 'legacy', ts: 1, text: 'hello' },
+        { type: 'assistant', id: 'a1', turnId: 'legacy', ts: 2, text: 'world', modelId: 'fake' },
+      ]);
+
+      const turns = await store.listTurns(header.id);
+      assert.equal(turns[0]?.turnId, 'legacy');
+      assert.equal(turns[0]?.status, 'completed');
+      assert.equal(turns[0]?.partialOutputRetained, true);
     });
   });
 });

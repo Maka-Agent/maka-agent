@@ -35,12 +35,25 @@ export const SESSION_BLOCKED_REASONS = [
 
 export type SessionBlockedReason = typeof SESSION_BLOCKED_REASONS[number];
 
+export const TURN_STATUSES = [
+  'running',
+  'completed',
+  'aborted',
+  'failed',
+] as const;
+
+export type TurnStatus = typeof TURN_STATUSES[number];
+
 export function isSessionStatus(value: unknown): value is SessionStatus {
   return typeof value === 'string' && (SESSION_STATUSES as readonly string[]).includes(value);
 }
 
 export function isSessionBlockedReason(value: unknown): value is SessionBlockedReason {
   return typeof value === 'string' && (SESSION_BLOCKED_REASONS as readonly string[]).includes(value);
+}
+
+export function isTurnStatus(value: unknown): value is TurnStatus {
+  return typeof value === 'string' && (TURN_STATUSES as readonly string[]).includes(value);
 }
 
 // ============================================================================
@@ -68,6 +81,8 @@ export interface SessionHeader {
   status: SessionStatus;
   blockedReason?: SessionBlockedReason;
   statusUpdatedAt?: number;
+  parentSessionId?: string;
+  branchOfTurnId?: string;
 
   // Unread tracking
   lastReadMessageId?: string;
@@ -100,6 +115,8 @@ export interface SessionSummary {
   status: SessionStatus;
   blockedReason?: SessionBlockedReason;
   statusUpdatedAt?: number;
+  parentSessionId?: string;
+  branchOfTurnId?: string;
   backend: BackendKind;
   llmConnectionSlug: string;
   permissionMode: PermissionMode;
@@ -115,6 +132,7 @@ export type SessionChangedReason =
   | 'renamed'
   | 'mode-change'
   | 'status-change'
+  | 'turn-status-change'
   | 'rebound';
 
 export interface SessionChangedEvent {
@@ -137,6 +155,7 @@ export type StoredMessage =
   | ToolResultMessage
   | PermissionDecisionMessage
   | TokenUsageMessage
+  | TurnStateMessage
   | SystemNoteMessage;
 
 export interface UserMessage {
@@ -213,6 +232,35 @@ export interface TokenUsageMessage {
   costUsd?: number;
 }
 
+export interface TurnStateMessage {
+  type: 'turn_state';
+  id: string;
+  turnId: string;
+  ts: number;
+  status: TurnStatus;
+  parentTurnId?: string;
+  retriedFromTurnId?: string;
+  regeneratedFromTurnId?: string;
+  branchOfTurnId?: string;
+  parentSessionId?: string;
+  abortedAt?: number;
+  errorClass?: string;
+  partialOutputRetained: boolean;
+}
+
+export interface TurnRecord {
+  turnId: string;
+  status: TurnStatus;
+  parentTurnId?: string;
+  retriedFromTurnId?: string;
+  regeneratedFromTurnId?: string;
+  branchOfTurnId?: string;
+  parentSessionId?: string;
+  abortedAt?: number;
+  errorClass?: string;
+  partialOutputRetained: boolean;
+}
+
 export interface SystemNoteMessage {
   type: 'system_note';
   id: string;
@@ -228,4 +276,55 @@ export interface SystemNoteMessage {
     | 'abort';
   /** Shape depends on `kind`. */
   data?: unknown;
+}
+
+export function deriveTurnRecords(messages: readonly StoredMessage[]): TurnRecord[] {
+  const order: string[] = [];
+  const buckets = new Map<string, StoredMessage[]>();
+  for (const message of messages) {
+    const turnId = (message as { turnId?: string }).turnId;
+    if (!turnId) continue;
+    if (!buckets.has(turnId)) {
+      buckets.set(turnId, []);
+      order.push(turnId);
+    }
+    buckets.get(turnId)!.push(message);
+  }
+
+  return order.map((turnId) => {
+    const bucket = buckets.get(turnId) ?? [];
+    const latestState = bucket
+      .filter((message): message is TurnStateMessage => message.type === 'turn_state')
+      .at(-1);
+    const partialOutputRetained = bucket.some((message) =>
+      (message.type === 'assistant' && message.text.trim().length > 0) ||
+      message.type === 'tool_result',
+    );
+    if (latestState) {
+      return {
+        turnId,
+        status: latestState.status,
+        ...(latestState.parentTurnId ? { parentTurnId: latestState.parentTurnId } : {}),
+        ...(latestState.retriedFromTurnId ? { retriedFromTurnId: latestState.retriedFromTurnId } : {}),
+        ...(latestState.regeneratedFromTurnId ? { regeneratedFromTurnId: latestState.regeneratedFromTurnId } : {}),
+        ...(latestState.branchOfTurnId ? { branchOfTurnId: latestState.branchOfTurnId } : {}),
+        ...(latestState.parentSessionId ? { parentSessionId: latestState.parentSessionId } : {}),
+        ...(latestState.abortedAt !== undefined ? { abortedAt: latestState.abortedAt } : {}),
+        ...(latestState.errorClass ? { errorClass: latestState.errorClass } : {}),
+        partialOutputRetained: latestState.partialOutputRetained || partialOutputRetained,
+      };
+    }
+    return {
+      turnId,
+      status: inferLegacyTurnStatus(bucket),
+      partialOutputRetained,
+    };
+  });
+}
+
+function inferLegacyTurnStatus(messages: readonly StoredMessage[]): TurnStatus {
+  if (messages.some((message) => message.type === 'system_note' && message.kind === 'abort')) return 'aborted';
+  if (messages.some((message) => message.type === 'assistant')) return 'completed';
+  if (messages.some((message) => message.type === 'tool_result' && message.isError)) return 'failed';
+  return 'completed';
 }

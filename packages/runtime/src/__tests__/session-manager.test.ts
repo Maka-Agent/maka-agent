@@ -1,4 +1,5 @@
 import { describe, test } from 'node:test';
+import { deriveTurnRecords } from '@maka/core';
 import type {
   CreateSessionInput,
   PermissionMode,
@@ -7,6 +8,7 @@ import type {
   SessionListFilter,
   SessionSummary,
   StoredMessage,
+  TurnRecord,
 } from '@maka/core';
 import type { BackendSendInput, PermissionDecision } from '@maka/core/backend-types';
 import { expect } from '../test-helpers.js';
@@ -213,6 +215,8 @@ describe('SessionManager permission mode updates', () => {
     const header = await store.readHeader(session.id);
     expect(header.status).toBe('active');
     expect(header.blockedReason).toBe(undefined);
+    const turns = await store.listTurns(session.id);
+    expect(turns.find((turn) => turn.turnId === 'turn-1')?.status).toBe('completed');
   });
 
   test('marks permission handoff as waiting_for_user', async () => {
@@ -246,6 +250,9 @@ describe('SessionManager permission mode updates', () => {
     const header = await store.readHeader(session.id);
     expect(header.status).toBe('blocked');
     expect(header.blockedReason).toBe('tool_failed');
+    const [turn] = await store.listTurns(session.id);
+    expect(turn?.status).toBe('failed');
+    expect(turn?.errorClass).toBe('tool_failed');
   });
 
   test('marks aborts as aborted', async () => {
@@ -261,6 +268,90 @@ describe('SessionManager permission mode updates', () => {
 
     const header = await store.readHeader(session.id);
     expect(header.status).toBe('aborted');
+    const [turn] = await store.listTurns(session.id);
+    expect(turn?.status).toBe('aborted');
+    expect(turn?.partialOutputRetained).toBe(false);
+  });
+
+  test('cancel keeps partial assistant output and marks the turn aborted', async () => {
+    const store = new MemorySessionStore();
+    const backends = new BackendRegistry();
+    backends.register('fake', (ctx) => new PartialAbortBackend(ctx));
+    const manager = new SessionManager({ store, backends, newId: nextId(), now: nextNow(12_000) });
+    const session = await manager.createSession(makeInput());
+
+    await drain(manager.sendMessage(session.id, { turnId: 'turn-1', text: 'hello' }));
+
+    const [turn] = await store.listTurns(session.id);
+    expect(turn?.status).toBe('aborted');
+    expect(turn?.partialOutputRetained).toBe(true);
+    expect((await store.readMessages(session.id)).some((message) =>
+      message.type === 'assistant' && message.turnId === 'turn-1' && message.text === 'partial answer',
+    )).toBe(true);
+  });
+
+  test('retry creates a new sibling turn and does not rewrite the aborted source turn', async () => {
+    const store = new MemorySessionStore();
+    const backends = new BackendRegistry();
+    const events: PartialEvent[] = [
+      { type: 'abort', reason: 'user_stop' },
+    ];
+    backends.register('fake', (ctx) => new EventBackend(ctx, events));
+    const manager = new SessionManager({ store, backends, newId: nextId(), now: nextNow(13_000) });
+    const session = await manager.createSession(makeInput());
+    await drain(manager.sendMessage(session.id, { turnId: 'source', text: 'try this' }));
+
+    events.splice(0, events.length, { type: 'complete', stopReason: 'end_turn' });
+    await drain(manager.retryTurn(session.id, { sourceTurnId: 'source', turnId: 'retry-1' }));
+
+    const turns = await store.listTurns(session.id);
+    expect(turns.find((turn) => turn.turnId === 'source')?.status).toBe('aborted');
+    const retry = turns.find((turn) => turn.turnId === 'retry-1');
+    expect(retry?.status).toBe('completed');
+    expect(retry?.retriedFromTurnId).toBe('source');
+    const retryUser = (await store.readMessages(session.id))
+      .find((message) => message.type === 'user' && message.turnId === 'retry-1');
+    expect(retryUser?.type === 'user' ? retryUser.text : undefined).toBe('try this');
+  });
+
+  test('regenerate creates a new sibling turn from a completed source turn', async () => {
+    const store = new MemorySessionStore();
+    const backends = new BackendRegistry();
+    backends.register('fake', (ctx) => new EventBackend(ctx, [
+      { type: 'complete', stopReason: 'end_turn' },
+    ]));
+    const manager = new SessionManager({ store, backends, newId: nextId(), now: nextNow(14_000) });
+    const session = await manager.createSession(makeInput());
+    await drain(manager.sendMessage(session.id, { turnId: 'source', text: 'answer this' }));
+
+    await drain(manager.regenerateTurn(session.id, { sourceTurnId: 'source', turnId: 'regen-1' }));
+
+    const turns = await store.listTurns(session.id);
+    expect(turns.find((turn) => turn.turnId === 'source')?.status).toBe('completed');
+    const regen = turns.find((turn) => turn.turnId === 'regen-1');
+    expect(regen?.status).toBe('completed');
+    expect(regen?.regeneratedFromTurnId).toBe('source');
+  });
+
+  test('branchFromTurn creates a new session with parent lineage and copied message boundary', async () => {
+    const store = new MemorySessionStore();
+    const backends = new BackendRegistry();
+    backends.register('fake', (ctx) => new EventBackend(ctx, [
+      { type: 'complete', stopReason: 'end_turn' },
+    ]));
+    const manager = new SessionManager({ store, backends, newId: nextId(), now: nextNow(15_000) });
+    const session = await manager.createSession(makeInput({ name: 'Parent' }));
+    await drain(manager.sendMessage(session.id, { turnId: 'source', text: 'context' }));
+    await drain(manager.sendMessage(session.id, { turnId: 'after', text: 'do not copy' }));
+
+    const child = await manager.branchFromTurn(session.id, { sourceTurnId: 'source', name: 'Child' });
+
+    expect(child.parentSessionId).toBe(session.id);
+    expect(child.branchOfTurnId).toBe('source');
+    const childMessages = await store.readMessages(child.id);
+    expect(childMessages.some((message) => (message as { turnId?: string }).turnId === 'source')).toBe(true);
+    expect(childMessages.some((message) => (message as { turnId?: string }).turnId === 'after')).toBe(false);
+    expect(childMessages.some((message) => message.type === 'turn_state')).toBe(false);
   });
 });
 
@@ -320,6 +411,31 @@ class EventBackend implements AgentBackend {
   async dispose(): Promise<void> {}
 }
 
+class PartialAbortBackend implements AgentBackend {
+  readonly kind = 'fake' as const;
+  readonly sessionId: string;
+
+  constructor(private readonly ctx: BackendFactoryContext) {
+    this.sessionId = ctx.sessionId;
+  }
+
+  async *send(input: BackendSendInput): AsyncIterable<SessionEvent> {
+    await this.ctx.store.appendMessage(this.sessionId, {
+      type: 'assistant',
+      id: `${input.turnId}-assistant`,
+      turnId: input.turnId,
+      ts: 12_001,
+      text: 'partial answer',
+      modelId: 'fake-model',
+    });
+    yield { type: 'abort', id: `${input.turnId}-abort`, turnId: input.turnId, ts: 12_002, reason: 'user_stop' };
+  }
+
+  async stop(): Promise<void> {}
+  async respondToPermission(_decision: PermissionDecision): Promise<void> {}
+  async dispose(): Promise<void> {}
+}
+
 class MemorySessionStore implements SessionStore {
   private headers = new Map<string, SessionHeader>();
   private messages = new Map<string, StoredMessage[]>();
@@ -339,6 +455,8 @@ class MemorySessionStore implements SessionStore {
       status: input.status ?? 'active',
       ...(input.blockedReason ? { blockedReason: input.blockedReason } : {}),
       statusUpdatedAt: 1,
+      ...(input.parentSessionId ? { parentSessionId: input.parentSessionId } : {}),
+      ...(input.branchOfTurnId ? { branchOfTurnId: input.branchOfTurnId } : {}),
       hasUnread: false,
       backend: input.backend,
       llmConnectionSlug: input.llmConnectionSlug,
@@ -364,6 +482,10 @@ class MemorySessionStore implements SessionStore {
 
   async readMessages(sessionId: string): Promise<StoredMessage[]> {
     return [...(this.messages.get(sessionId) ?? [])];
+  }
+
+  async listTurns(sessionId: string): Promise<TurnRecord[]> {
+    return deriveTurnRecords(await this.readMessages(sessionId));
   }
 
   async appendMessage(sessionId: string, message: StoredMessage): Promise<void> {

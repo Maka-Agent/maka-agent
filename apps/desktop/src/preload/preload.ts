@@ -28,6 +28,10 @@ import type {
   ArtifactRecord,
   ArtifactSaveResult,
   ArtifactTextReadResult,
+  BranchFromTurnInput,
+  RegenerateTurnInput,
+  RetryTurnInput,
+  TurnRecord,
 } from '@maka/core';
 import type {
   PricingConfig,
@@ -57,6 +61,18 @@ contextBridge.exposeInMainWorld('maka', {
     },
     readMessages(sessionId: string): Promise<StoredMessage[]> {
       return ipcRenderer.invoke('sessions:readMessages', sessionId);
+    },
+    listTurns(sessionId: string): Promise<TurnRecord[]> {
+      return ipcRenderer.invoke('sessions:listTurns', sessionId);
+    },
+    retryTurn(sessionId: string, input: RetryTurnInput): Promise<void> {
+      return ipcRenderer.invoke('sessions:retryTurn', sessionId, input);
+    },
+    regenerateTurn(sessionId: string, input: RegenerateTurnInput): Promise<void> {
+      return ipcRenderer.invoke('sessions:regenerateTurn', sessionId, input);
+    },
+    branchFromTurn(sessionId: string, input: BranchFromTurnInput): Promise<SessionSummary> {
+      return ipcRenderer.invoke('sessions:branchFromTurn', sessionId, input);
     },
     respondToPermission(sessionId: string, response: PermissionResponse): Promise<void> {
       return ipcRenderer.invoke('sessions:respondToPermission', sessionId, response);

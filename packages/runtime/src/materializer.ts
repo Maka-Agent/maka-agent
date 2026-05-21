@@ -239,6 +239,11 @@ export function applyAppendedMessage(
     case 'token_usage':
       // No item to render; UI aggregates separately.
       return { items: [...items] };
+
+    case 'turn_state':
+      // Turn metadata feeds the higher-level TurnViewModel projection; the
+      // incremental ChatItem stream has no standalone row for it.
+      return { items: [...items] };
   }
 }
 

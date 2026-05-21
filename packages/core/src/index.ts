@@ -39,6 +39,9 @@ export type {
   SessionChangedReason,
   SessionStatus,
   SessionBlockedReason,
+  TurnRecord,
+  TurnStateMessage,
+  TurnStatus,
   BackendKind,
   StoredMessage,
   UserMessage,
@@ -52,8 +55,11 @@ export type {
 export {
   SESSION_STATUSES,
   SESSION_BLOCKED_REASONS,
+  TURN_STATUSES,
+  deriveTurnRecords,
   isSessionStatus,
   isSessionBlockedReason,
+  isTurnStatus,
 } from './session.js';
 
 // permission.ts
@@ -108,7 +114,14 @@ export type {
 } from './artifacts.js';
 
 // runtime-inputs.ts
-export type { CreateSessionInput, UserMessageInput, SessionListFilter } from './runtime-inputs.js';
+export type {
+  BranchFromTurnInput,
+  CreateSessionInput,
+  RegenerateTurnInput,
+  RetryTurnInput,
+  UserMessageInput,
+  SessionListFilter,
+} from './runtime-inputs.js';
 
 // visual-smoke.ts
 export type {
