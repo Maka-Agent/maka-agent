@@ -60,6 +60,9 @@ export interface LlmConnection {
   defaultModel: string;
   enabled: boolean;
   models?: ModelInfo[];
+  modelSource?: ModelDiscoverySource;
+  /** Unix ms timestamp for the last successful model discovery result. */
+  modelsFetchedAt?: number;
   lastTestStatus?: ConnectionLastTestStatus;
   /** ISO timestamp of the last explicit connection test. */
   lastTestAt?: string;
@@ -325,6 +328,8 @@ export interface UpdateConnectionInput {
   enabled?: boolean;
   apiKey?: string;
   models?: ModelInfo[];
+  modelSource?: ModelDiscoverySource;
+  modelsFetchedAt?: number;
   lastTestStatus?: ConnectionLastTestStatus;
   lastTestAt?: string;
   lastTestMessage?: string;

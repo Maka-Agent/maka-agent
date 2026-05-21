@@ -449,10 +449,18 @@ function registerIpc(): void {
       throw new Error('No API key set for this connection');
     }
     try {
+      const fetchedAt = Date.now();
+      const models = await fetchProviderModels(connection, apiKey ?? '');
+      await connectionStore.update(slug, {
+        models,
+        modelSource: 'fetched',
+        modelsFetchedAt: fetchedAt,
+      });
+      emitConnectionListChanged();
       return {
-        models: await fetchProviderModels(connection, apiKey ?? ''),
+        models,
         source: 'fetched',
-        fetchedAt: Date.now(),
+        fetchedAt,
       };
     } catch (error) {
       throw new Error(generalizedErrorMessage(error, 'Failed to fetch provider models'));

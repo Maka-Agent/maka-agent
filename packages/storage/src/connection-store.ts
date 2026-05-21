@@ -90,6 +90,16 @@ class FileConnectionStore implements ConnectionStore {
         Object.prototype.hasOwnProperty.call(patch, 'lastTestStatus')
         || Object.prototype.hasOwnProperty.call(patch, 'lastTestAt')
         || Object.prototype.hasOwnProperty.call(patch, 'lastTestMessage');
+      const updatesModelCache =
+        Object.prototype.hasOwnProperty.call(patch, 'models')
+        || Object.prototype.hasOwnProperty.call(patch, 'modelSource')
+        || Object.prototype.hasOwnProperty.call(patch, 'modelsFetchedAt');
+      const clearsModelCache =
+        !updatesModelCache
+        && (
+          patch.apiKey !== undefined
+          || patch.baseUrl !== undefined
+        );
       const clearsTestStatus =
         !updatesTestStatus
         && (
@@ -104,7 +114,9 @@ class FileConnectionStore implements ConnectionStore {
         baseUrl: patch.baseUrl !== undefined ? patch.baseUrl || undefined : current.baseUrl,
         defaultModel: patch.defaultModel ?? current.defaultModel,
         enabled: patch.enabled ?? current.enabled,
-        models: patch.models ?? current.models,
+        models: updatesModelCache ? patch.models : (clearsModelCache ? undefined : current.models),
+        modelSource: updatesModelCache ? patch.modelSource : (clearsModelCache ? undefined : current.modelSource),
+        modelsFetchedAt: updatesModelCache ? patch.modelsFetchedAt : (clearsModelCache ? undefined : current.modelsFetchedAt),
         lastTestStatus: updatesTestStatus ? patch.lastTestStatus : (clearsTestStatus ? undefined : current.lastTestStatus),
         lastTestAt: updatesTestStatus ? patch.lastTestAt : (clearsTestStatus ? undefined : current.lastTestAt),
         lastTestMessage: updatesTestStatus ? patch.lastTestMessage : (clearsTestStatus ? undefined : current.lastTestMessage),

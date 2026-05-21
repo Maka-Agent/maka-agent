@@ -435,15 +435,12 @@ function ConnectionDetail(props: {
   const [baseUrl, setBaseUrl] = useState(connection.baseUrl ?? defaults.baseUrl);
   const [defaultModel, setDefaultModel] = useState(connection.defaultModel);
   const [models, setModels] = useState<ModelInfo[]>(connection.models ?? []);
-  // Track the model-list source explicitly instead of inferring from array
-  // length, per @kenji's review of PR73: "等 @xuan 后端不再 silent fallback
-  // 后，UI 的 fetched/fallback source 标记要以 backend 返回 source 或实际
-  // 错误分支为准，别只按数组非空判断." A successful fetch that legitimately
-  // returns 0 models is still 'fetched'; a failed fetch leaves the source
-  // at 'fallback'. Persisted models on mount are assumed 'fetched' (they
-  // were written by a previous successful fetch via `connections.update`).
+  // Backend persists the model-list source alongside the model cache, so a
+  // Settings restart no longer has to infer "fetched" from a non-empty array.
+  // A successful provider response may legitimately contain 0 models; source
+  // and length remain separate facts.
   const [modelSource, setModelSource] = useState<'fetched' | 'fallback'>(
-    (connection.models?.length ?? 0) > 0 ? 'fetched' : 'fallback',
+    connection.modelSource ?? 'fallback',
   );
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -529,7 +526,6 @@ function ConnectionDetail(props: {
       const result = await props.bridge.fetchModels(connection.slug);
       setModels(result.models);
       setModelSource(result.source);
-      await props.bridge.update(connection.slug, { models: result.models });
       await props.onChanged();
       if (!opts.silent) {
         toast.success(`已拉取 ${result.models.length} 个模型 · ${connection.name}`);
