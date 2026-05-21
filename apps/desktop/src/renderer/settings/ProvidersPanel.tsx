@@ -747,8 +747,16 @@ function ModelTable(props: {
     }
     if (nextIndex === currentIndex) return;
     event.preventDefault();
-    radios[nextIndex]?.focus({ preventScroll: false });
-    radios[nextIndex]?.scrollIntoView({ block: 'nearest' });
+    const next = radios[nextIndex];
+    next?.focus({ preventScroll: false });
+    next?.scrollIntoView({ block: 'nearest' });
+    // ARIA radiogroup pattern (per @xuan PR92 follow-up): arrow keys move
+    // focus AND select. We can do this safely here because `onPickDefault`
+    // updates local form state only — the persistence happens on "保存修改",
+    // so scanning through models with the arrow keys doesn't write to disk
+    // on every keystroke.
+    const nextId = filtered[nextIndex]?.id;
+    if (nextId !== undefined) props.onPickDefault(nextId);
   }
 
   // @kenji PR91 follow-up #2: when search filters out the currently-selected
