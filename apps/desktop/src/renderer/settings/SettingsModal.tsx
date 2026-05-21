@@ -1125,6 +1125,47 @@ const DENSITY_OPTIONS: Array<{ value: UiDensity; label: string; help: string }> 
   { value: 'spacious', label: '宽松', help: '更大留白，适合长会话沉浸阅读。' },
 ];
 
+/**
+ * Mini chat-surface mockup rendered inside each theme radio tile. Replaces
+ * the generic gradient swatch with a representative preview so the user
+ * can see roughly what light vs dark looks like before clicking. The mock
+ * uses hardcoded color values per variant (deliberately not tokenized) so
+ * the preview tiles don't all shift to match the *currently active* theme
+ * — that would defeat the comparison.
+ *
+ * Per @kenji's PR79 review: preview is purely visual; click commits. We
+ * deliberately do not do a "hover to apply globally" flow because it
+ * makes Settings feel like it's mutating state on idle pointer movement.
+ */
+function ThemePreviewMock(props: { variant: ThemePreference }) {
+  if (props.variant === 'auto') {
+    return (
+      <div className="settingsThemePreview settingsThemePreviewSplit" aria-hidden="true">
+        <ThemePreviewPane mode="light" />
+        <ThemePreviewPane mode="dark" />
+      </div>
+    );
+  }
+  return (
+    <div className="settingsThemePreview" aria-hidden="true">
+      <ThemePreviewPane mode={props.variant} />
+    </div>
+  );
+}
+
+function ThemePreviewPane(props: { mode: 'light' | 'dark' }) {
+  return (
+    <div className="settingsThemePreviewPane" data-mode={props.mode}>
+      <div className="settingsThemePreviewSidebar" />
+      <div className="settingsThemePreviewChat">
+        <div className="settingsThemePreviewLine settingsThemePreviewLine-assistant" />
+        <div className="settingsThemePreviewLine settingsThemePreviewLine-assistant settingsThemePreviewLine-short" />
+        <div className="settingsThemePreviewBubble" />
+      </div>
+    </div>
+  );
+}
+
 function ThemeSettingsPage(props: {
   themePref: ThemePreference;
   density: UiDensity;
@@ -1148,7 +1189,7 @@ function ThemeSettingsPage(props: {
   return (
     <div className="settingsStructuredPage">
       <h3 className="settingsSubheading">主题</h3>
-      <div className="settingsThemeOptions" role="radiogroup" aria-label="主题">
+      <div className="settingsThemeOptions settingsThemeOptionsPreview" role="radiogroup" aria-label="主题">
         {THEME_OPTIONS.map((option) => (
           <button
             key={option.value}
@@ -1156,10 +1197,10 @@ function ThemeSettingsPage(props: {
             role="radio"
             aria-checked={props.themePref === option.value}
             data-active={props.themePref === option.value}
-            className="settingsThemeOption"
+            className="settingsThemeOption settingsThemeOptionPreview"
             onClick={() => void setTheme(option.value)}
           >
-            <span className="settingsThemeSwatch" data-variant={option.value} aria-hidden="true" />
+            <ThemePreviewMock variant={option.value} />
             <span className="settingsThemeLabel">
               <strong>{option.label}</strong>
               <small>{option.help}</small>

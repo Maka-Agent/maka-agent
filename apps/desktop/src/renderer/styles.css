@@ -3007,6 +3007,107 @@ button:active {
   text-align: left;
 }
 
+/* Preview variant: tile stacks vertically (mock on top, label below) and
+ * gives the mock more room. Used by the theme picker, not the density picker. */
+.settingsThemeOptionPreview {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto;
+  gap: 10px;
+}
+
+/* Mini chat-surface mock rendered inside each theme tile. Hardcodes colors
+ * per variant so the preview doesn't track the active theme — comparing
+ * tiles is the whole point. */
+.settingsThemePreview {
+  width: 100%;
+  aspect-ratio: 16 / 8;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  display: flex;
+  background: var(--foreground-5);
+}
+
+.settingsThemePreviewSplit > .settingsThemePreviewPane:first-child {
+  border-right: 1px solid var(--border);
+}
+
+.settingsThemePreviewPane {
+  flex: 1 1 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.settingsThemePreviewPane[data-mode="light"] {
+  background: oklch(0.985 0.003 265);
+  color: oklch(0.16 0.01 270);
+}
+
+.settingsThemePreviewPane[data-mode="dark"] {
+  background: oklch(0.18 0.005 270);
+  color: oklch(0.92 0.008 270);
+}
+
+.settingsThemePreviewSidebar {
+  height: 100%;
+}
+
+.settingsThemePreviewPane[data-mode="light"] .settingsThemePreviewSidebar {
+  background: oklch(0.96 0.003 265);
+  border-right: 1px solid oklch(0.88 0.005 265);
+}
+
+.settingsThemePreviewPane[data-mode="dark"] .settingsThemePreviewSidebar {
+  background: oklch(0.14 0.005 270);
+  border-right: 1px solid oklch(0.22 0.005 270);
+}
+
+.settingsThemePreviewChat {
+  padding: 6px 8px;
+  display: grid;
+  gap: 4px;
+  align-content: end;
+  min-width: 0;
+}
+
+.settingsThemePreviewLine {
+  height: 5px;
+  border-radius: 999px;
+  width: 90%;
+}
+
+.settingsThemePreviewLine-short {
+  width: 56%;
+}
+
+.settingsThemePreviewPane[data-mode="light"] .settingsThemePreviewLine-assistant {
+  background: oklch(0.78 0.01 265);
+}
+.settingsThemePreviewPane[data-mode="dark"] .settingsThemePreviewLine-assistant {
+  background: oklch(0.36 0.01 270);
+}
+
+.settingsThemePreviewBubble {
+  align-self: end;
+  justify-self: end;
+  width: 60%;
+  height: 12px;
+  border-radius: 7px 2px 7px 7px;
+  margin-top: 2px;
+}
+
+.settingsThemePreviewPane[data-mode="light"] .settingsThemePreviewBubble {
+  background: oklch(0.85 0.02 250);
+}
+.settingsThemePreviewPane[data-mode="dark"] .settingsThemePreviewBubble {
+  background: oklch(0.32 0.025 250);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settingsThemePreview { transition: none; }
+}
+
 .settingsThemeOption:hover {
   border-color: oklch(from var(--accent) l c h / 0.22);
   background: var(--foreground-3);
