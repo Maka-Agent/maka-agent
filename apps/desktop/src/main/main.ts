@@ -86,6 +86,7 @@ import { resolveOpenPath, type OpenPathResult } from './open-path-guard.js';
 import { buildPersonalizationPromptFragment } from './personalization-prompt.js';
 import { buildSettingsUpdateResult, maskAppSettings, preserveSensitivePlaceholders, toSettingsTestResult } from './settings-ipc-helpers.js';
 import { buildSkillsPromptFragment, listInstalledSkills } from './skills.js';
+import { buildWorkspaceInstructionsPromptFragment } from './workspace-instructions.js';
 import { buildCapabilitySnapshotCollection, buildPermissionSnapshot } from './capability-snapshot.js';
 import {
   getVisualSmokeState,
@@ -205,7 +206,7 @@ backends.register('ai-sdk', async (ctx) => {
     permissionEngine,
     modelFactory: getAIModel,
     tools: builtinTools,
-    systemPrompt: buildSystemPrompt,
+    systemPrompt: ({ cwd }) => buildSystemPrompt(cwd),
     recordLlmCall: (event) => recordLlmCall({ repo: telemetryRepo, lookupPricing }, event),
     recordToolInvocation: (event) => recordToolInvocation({ repo: telemetryRepo }, event),
     recordToolArtifacts: (event) => persistToolArtifacts(ctx.header.cwd, event),
@@ -1146,13 +1147,15 @@ async function handleQuickChatStart(rawInput: unknown): Promise<QuickChatResult>
   });
 }
 
-async function buildSystemPrompt(): Promise<string | undefined> {
+async function buildSystemPrompt(cwd?: string): Promise<string | undefined> {
   const settings = await settingsStore.get();
   const personalization = buildPersonalizationPromptFragment(settings.personalization);
   const skills = await buildSkillsPromptFragment(workspaceRoot);
+  const workspaceInstructions = cwd ? await buildWorkspaceInstructionsPromptFragment(cwd) : undefined;
   const fragments = [
     personalization.text,
     skills,
+    workspaceInstructions,
   ].filter((fragment): fragment is string => Boolean(fragment));
   return fragments.length > 0 ? fragments.join('\n\n') : undefined;
 }
