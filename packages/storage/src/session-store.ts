@@ -12,6 +12,8 @@ import type {
   UserMessage,
 } from '@maka/core';
 
+const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
 export interface SessionStore {
   create(input: CreateSessionInput): Promise<SessionHeader>;
   list(filter?: SessionListFilter): Promise<SessionSummary[]>;
@@ -81,6 +83,7 @@ class FileSessionStore implements SessionStore {
     const summaries: SessionSummary[] = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
+      if (!isSafeSessionId(entry.name)) continue;
       try {
         const { header, messages } = await this.readFileParts(entry.name);
         if (filter?.isArchived !== undefined && header.isArchived !== filter.isArchived) continue;
@@ -184,6 +187,7 @@ class FileSessionStore implements SessionStore {
   }
 
   private sessionDir(sessionId: string): string {
+    assertSafeSessionId(sessionId);
     return join(this.sessionsRoot, sessionId);
   }
 
@@ -212,6 +216,7 @@ class FileSessionStore implements SessionStore {
   }
 
   private withQueue(sessionId: string, operation: () => Promise<void>): Promise<void> {
+    assertSafeSessionId(sessionId);
     const previous = this.writeQueues.get(sessionId) ?? Promise.resolve();
     const next = previous.then(operation, operation);
     this.writeQueues.set(
@@ -222,6 +227,16 @@ class FileSessionStore implements SessionStore {
     );
     return next;
   }
+}
+
+function assertSafeSessionId(sessionId: string): void {
+  if (!isSafeSessionId(sessionId)) {
+    throw new Error('Invalid session id');
+  }
+}
+
+function isSafeSessionId(sessionId: string): boolean {
+  return SESSION_ID_PATTERN.test(sessionId);
 }
 
 type StoredSessionHeader = Omit<SessionHeader, 'backend' | 'permissionMode' | 'status' | 'blockedReason'> & {

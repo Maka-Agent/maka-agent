@@ -182,6 +182,23 @@ Fix:
 - `Edit` now reuses the existing realpath containment helper and rejects absolute paths, parent traversal, and symlink file escapes.
 - Regression tests added for both mutation tools.
 
+### 13. Session store accepted path-shaped session ids
+
+Commit: current session-id containment change set
+
+Evidence:
+- `FileSessionStore.sessionDir(sessionId)` joined renderer/runtime supplied session ids directly under `workspaceRoot/sessions`.
+- Operations such as `remove(sessionId)` could receive a traversal-shaped id before path validation existed.
+
+Impact:
+- Most normal calls use generated UUIDs, but IPC/runtime boundaries should still reject path-shaped ids before any filesystem operation.
+
+Fix:
+- Session store now accepts only bounded ids matching `[A-Za-z0-9_-]{1,128}`.
+- `list()` skips malformed folders.
+- All filesystem paths and write queues assert the same id contract before reading, writing, or removing.
+- Regression test verifies traversal ids reject and do not delete an outside victim directory.
+
 ## Remaining Product / Architecture Findings
 
 ### A. Coming Soon settings surfaces still need a product decision

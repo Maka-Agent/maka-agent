@@ -102,6 +102,19 @@ describe('FileSessionStore CRUD', () => {
     });
   });
 
+  test('rejects traversal-style session ids before touching the filesystem', async () => {
+    await withStore(async (store, workspaceRoot) => {
+      const victim = join(workspaceRoot, 'outside-victim');
+      await mkdir(victim, { recursive: true });
+      await writeFile(join(victim, 'keep.txt'), 'keep', 'utf8');
+
+      await assert.rejects(store.readMessages('../outside-victim'), /Invalid session id/);
+      await assert.rejects(store.remove('../outside-victim'), /Invalid session id/);
+
+      assert.equal(await readFile(join(victim, 'keep.txt'), 'utf8'), 'keep');
+    });
+  });
+
   test('migrates legacy headers without permissionMode to ask', async () => {
     await withStore(async (store, workspaceRoot) => {
       const sessionId = 'legacy-session';
