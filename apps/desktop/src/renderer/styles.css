@@ -987,6 +987,16 @@ button:active {
   opacity: 0.6;
   cursor: not-allowed;
 }
+/* PR-UI-15 (@yuejing 2026-05-22): small example hint shown below the
+ * quickChat textarea so first-run users still see an example of what
+ * to type after we shortened the placeholder to "Message Maka…". */
+.maka-onboarding-quickchat-example {
+  margin-top: -2px;
+  color: var(--foreground-50);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  font-style: italic;
+}
 .maka-onboarding-quickchat .maka-button {
   align-self: flex-end;
   min-width: 120px;

@@ -773,14 +773,25 @@ const PROMPT_SUGGESTIONS_BY_LOCALE: Record<PromptSuggestionLocale, PromptSuggest
   ],
 };
 
-function detectPromptSuggestionLocale(): PromptSuggestionLocale {
+/**
+ * Detects the renderer-side UI locale family. Used by EmptyChatHero
+ * chips + hero copy (PR-UI-14) and Composer / OnboardingHero quickChat
+ * placeholders (PR-UI-15). Centralized here so all UI surfaces fall
+ * onto the same `zh` / `en` split — there's no per-component drift.
+ */
+export type UiLocale = PromptSuggestionLocale;
+
+export function detectUiLocale(): UiLocale {
   if (typeof navigator === 'undefined') return 'zh';
   const lang = navigator.language?.toLowerCase() ?? '';
   return lang.startsWith('zh') ? 'zh' : 'en';
 }
 
+// Back-compat alias for the helper introduced in PR-UI-14.
+const detectPromptSuggestionLocale = detectUiLocale;
+
 export function getPromptSuggestions(locale?: PromptSuggestionLocale): PromptSuggestion[] {
-  return PROMPT_SUGGESTIONS_BY_LOCALE[locale ?? detectPromptSuggestionLocale()];
+  return PROMPT_SUGGESTIONS_BY_LOCALE[locale ?? detectUiLocale()];
 }
 
 function SessionRow(props: {
@@ -2005,6 +2016,44 @@ function ChatTab(props: {
 
 const COMPOSER_MAX_HEIGHT = 240;
 
+/**
+ * PR-UI-15 (@yuejing 2026-05-22): Composer copy is locale-aware.
+ *
+ * Audit §3.5 — placeholder + state copy were hardcoded zh and drifted
+ * stylistically from OnboardingHero's quickChat input (which used a
+ * long example sentence as the placeholder). Unified style: both
+ * surfaces show the same short action-oriented placeholder, and
+ * OnboardingHero gets a separate `<small>` example hint below the
+ * textarea so first-run users still know what to type.
+ */
+const COMPOSER_COPY_BY_LOCALE: Record<UiLocale, {
+  placeholder: string;
+  awaitingPermission: string;
+  streamingHintPrefix: string;
+  streamingHintInterrupt: string;
+  enterHint: { send: string; newline: string };
+}> = {
+  zh: {
+    placeholder: '给 Maka 发消息…',
+    awaitingPermission: '等待你确认权限…',
+    streamingHintPrefix: 'Maka 正在思考…',
+    streamingHintInterrupt: '或点 Stop 中断',
+    enterHint: { send: '发送', newline: '换行' },
+  },
+  en: {
+    placeholder: 'Message Maka…',
+    awaitingPermission: 'Waiting for your permission decision…',
+    streamingHintPrefix: 'Maka is thinking…',
+    streamingHintInterrupt: 'or click Stop to interrupt',
+    enterHint: { send: 'to send', newline: 'for newline' },
+  },
+};
+
+const COMPOSER_BUTTON_COPY_BY_LOCALE: Record<UiLocale, { sendLabel: string; stopLabel: string }> = {
+  zh: { sendLabel: 'Send', stopLabel: 'Stop' },
+  en: { sendLabel: 'Send', stopLabel: 'Stop' },
+};
+
 export interface ComposerHandle {
   /** Replace the textarea value and resize, leaving focus on the input. */
   setText(text: string): void;
@@ -2029,6 +2078,14 @@ export const Composer = forwardRef<
 >(function Composer(props, ref) {
   const formRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // PR-UI-15: locale-aware copy for placeholder + toolbar states. We
+  // detect once per render (cheap) rather than memoizing — the locale
+  // is effectively constant for the lifetime of the renderer but the
+  // few ns of detection cost beats wiring up a context provider just
+  // for this bundle.
+  const locale = detectUiLocale();
+  const copy = COMPOSER_COPY_BY_LOCALE[locale];
+  const buttonCopy = COMPOSER_BUTTON_COPY_BY_LOCALE[locale];
 
   function autoResize() {
     const el = textareaRef.current;
@@ -2108,7 +2165,7 @@ export const Composer = forwardRef<
         <textarea
           ref={textareaRef}
           name="text"
-          placeholder="给 Maka 发消息…"
+          placeholder={copy.placeholder}
           disabled={props.disabled}
           onKeyDown={onTextareaKeyDown}
           onInput={autoResize}
@@ -2119,24 +2176,24 @@ export const Composer = forwardRef<
         <div className="maka-composer-toolbar composerActions" data-streaming={props.streaming ? 'true' : undefined}>
           <span>
             {props.disabled ? (
-              '等待你确认权限…'
+              copy.awaitingPermission
             ) : props.streaming ? (
               <span className="maka-composer-streaming-hint">
                 <span className="maka-composer-streaming-dot" aria-hidden="true" />
-                Maka 正在思考… <kbd>Esc</kbd> 或点 Stop 中断
+                {copy.streamingHintPrefix} <kbd>Esc</kbd> {copy.streamingHintInterrupt}
               </span>
             ) : (
-              <><kbd>Enter</kbd> 发送 · <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行</>
+              <><kbd>Enter</kbd> {copy.enterHint.send} · <kbd>Shift</kbd>+<kbd>Enter</kbd> {copy.enterHint.newline}</>
             )}
           </span>
           <div>
             {props.streaming ? (
               <button className="maka-button" data-variant="primary" type="button" onClick={props.onStop}>
-                Stop
+                {buttonCopy.stopLabel}
               </button>
             ) : (
               <button className="maka-button" data-variant="primary" type="submit" disabled={props.disabled}>
-                Send
+                {buttonCopy.sendLabel}
               </button>
             )}
           </div>

@@ -22,7 +22,51 @@
 import { ArrowRight, Sparkles, KeyRound, Settings as SettingsIcon, Cpu, AlertCircle } from 'lucide-react';
 import { useCallback, useState, type KeyboardEvent } from 'react';
 import type { OnboardingState, ProviderType, SettingsSection } from '@maka/core';
+import { detectUiLocale, type UiLocale } from '@maka/ui';
 import { ProviderLogo, providerDisplay } from './settings/ProvidersPanel';
+
+/**
+ * PR-UI-15 (@yuejing 2026-05-22): unify OnboardingHero quickChat
+ * placeholder style with the main Composer. v1 used a long example
+ * sentence as placeholder which stylistically conflicted with the
+ * Composer's short action-oriented placeholder. New design: same
+ * short placeholder, example sentence moved to a `<small>` hint
+ * below the textarea so first-run users still know what to type.
+ */
+const READY_HERO_COPY_BY_LOCALE: Record<UiLocale, {
+  ariaLabel: string;
+  eyebrow: string;
+  headline: string;
+  intro: string;
+  quickChatPlaceholder: string;
+  quickChatAria: string;
+  quickChatExample: string;
+  submitIdleLabel: string;
+  submitPendingLabel: string;
+}> = {
+  zh: {
+    ariaLabel: '开始对话',
+    eyebrow: 'READY · 开始对话',
+    headline: '你已经配置好了 —— 直接说说你想做什么。',
+    intro: '下面这个输入框会用默认模型开新会话；空提交也会打开一个空会话，方便你之后再输入。',
+    quickChatPlaceholder: '给 Maka 发消息…',
+    quickChatAria: 'Quick Chat 输入框',
+    quickChatExample: '例如：帮我读一下这个项目的目录结构，告诉我入口在哪里。',
+    submitIdleLabel: '开始对话',
+    submitPendingLabel: '正在创建…',
+  },
+  en: {
+    ariaLabel: 'Start a conversation',
+    eyebrow: 'READY · Start a conversation',
+    headline: 'You\'re all set — just say what you want to do.',
+    intro: 'The box below opens a new session with your default model; empty submit also opens a session so you can type later.',
+    quickChatPlaceholder: 'Message Maka…',
+    quickChatAria: 'Quick Chat input',
+    quickChatExample: 'Example: walk me through this project\'s directory layout and where the entry point lives.',
+    submitIdleLabel: 'Start chat',
+    submitPendingLabel: 'Creating…',
+  },
+};
 
 const FEATURED: Array<{ type: ProviderType; tag: string }> = [
   { type: 'anthropic', tag: 'Claude · Anthropic' },
@@ -234,6 +278,7 @@ function ReadyEmptyHero(props: {
   quickChatPending: boolean;
 }) {
   const [draft, setDraft] = useState('');
+  const copy = READY_HERO_COPY_BY_LOCALE[detectUiLocale()];
 
   const submit = useCallback(() => {
     if (props.quickChatPending) return;
@@ -256,27 +301,30 @@ function ReadyEmptyHero(props: {
   );
 
   return (
-    <section className="maka-onboarding maka-onboarding-ready" aria-label="开始对话">
+    <section className="maka-onboarding maka-onboarding-ready" aria-label={copy.ariaLabel}>
       <header>
         <span className="maka-onboarding-eyebrow">
           <Sparkles size={12} strokeWidth={2} aria-hidden="true" />
-          <span>READY · 开始对话</span>
+          <span>{copy.eyebrow}</span>
         </span>
-        <h1>你已经配置好了 —— 直接说说你想做什么。</h1>
-        <p>下面这个输入框会用默认模型开新会话；空提交也会打开一个空会话，方便你之后再输入。</p>
+        <h1>{copy.headline}</h1>
+        <p>{copy.intro}</p>
       </header>
 
       <div className="maka-onboarding-quickchat">
         <textarea
           className="maka-onboarding-quickchat-input"
-          placeholder="例如：帮我读一下这个项目的目录结构，告诉我入口在哪里。"
+          placeholder={copy.quickChatPlaceholder}
           rows={3}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={handleKey}
           disabled={props.quickChatPending}
-          aria-label="Quick Chat 输入框"
+          aria-label={copy.quickChatAria}
         />
+        <small className="maka-onboarding-quickchat-example" aria-hidden="true">
+          {copy.quickChatExample}
+        </small>
         <button
           type="button"
           className="maka-button"
@@ -284,7 +332,7 @@ function ReadyEmptyHero(props: {
           onClick={submit}
           disabled={props.quickChatPending}
         >
-          {props.quickChatPending ? '正在创建…' : '开始对话'}
+          {props.quickChatPending ? copy.submitPendingLabel : copy.submitIdleLabel}
         </button>
       </div>
     </section>
