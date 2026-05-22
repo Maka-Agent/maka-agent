@@ -810,9 +810,13 @@
   .maka-bubble-assistant code {
     font-family: var(--font-mono);
     font-size: 0.86em;
-    padding: 1px 5px;
-    border-radius: 4px;
+    padding: 1px 6px;
+    /* PR-UI-LAYOUT-28: inline code radius 4 → 5. Tiny bump but
+     * pulls it slightly out of the "tight tag" feel into a calmer
+     * pill rhythm that matches the rest of the warm-canvas chrome. */
+    border-radius: 5px;
     background: var(--foreground-5);
+    border: 1px solid oklch(from var(--foreground) l c h / 0.03);
   }
   /* Block code goes inside a maka-code-block wrapper that adds a language
      pill + copy button on top of the pre. Pre keeps its monospace styling
@@ -846,14 +850,26 @@
     display: grid;
     place-items: center;
     border: 0;
-    border-radius: 5px;
+    /* PR-UI-LAYOUT-28: code-block copy button — radius 5 → 7 to
+     * match the small-button family + add focus-visible ring + a
+     * smoother transition. Width/height stay 22 because the copy
+     * icon sits inside the code-block header strip and growing it
+     * would change the header height. */
+    border-radius: 7px;
     background: transparent;
     color: var(--foreground-50);
     cursor: pointer;
+    transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
   }
   .maka-code-block-copy:hover {
     color: var(--foreground);
     background: var(--foreground-10);
+  }
+  .maka-code-block-copy:focus-visible {
+    outline: none;
+    color: var(--foreground);
+    background: var(--foreground-10);
+    box-shadow: 0 0 0 3px oklch(from var(--accent) l c h / 0.14);
   }
   .maka-code-block-copy[data-copied="true"] {
     color: var(--success-text);
