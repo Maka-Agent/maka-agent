@@ -427,6 +427,7 @@ export class AiSdkBackend implements AgentBackend {
         this.input.recordLlmCall?.({
           sessionId: this.sessionId,
           turnId,
+          connectionSlug: this.input.connection.slug,
           providerId: this.input.connection.providerType,
           modelId: this.input.modelId,
           inputTokens: tokenUsage?.promptTokens ?? 0,

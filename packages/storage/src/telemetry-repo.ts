@@ -43,6 +43,7 @@ export interface TelemetryRepo {
   summary(query: UsageQuery): UsageSummaryV2;
   buckets(query: UsageQuery, groupBy: UsageGroupBy): UsageBucket[];
   logs(query: UsageQuery, offset?: number, limit?: number): { rows: UsageLogRow[]; total: number };
+  latestLlmRuntimeProbe(connectionSlug: string, modelId?: string): UsageLogRow | undefined;
   listPricingOverrides(): PricingConfig[];
   upsertPricing(pricing: PricingConfig): Promise<void>;
   deletePricing(modelKey: string): Promise<void>;
@@ -134,6 +135,7 @@ class FileTelemetryRepo implements TelemetryRepo {
       .map((row) => ({
         id: row.id,
         ts: row.ts,
+        ...(row.connectionSlug ? { connectionSlug: row.connectionSlug } : {}),
         providerId: row.providerId,
         modelId: row.modelId,
         inputTokens: row.inputTokens,
@@ -150,6 +152,14 @@ class FileTelemetryRepo implements TelemetryRepo {
         ...(row.turnId ? { turnId: row.turnId } : {}),
       } satisfies UsageLogRow));
     return { rows: rows.slice(offset, offset + limit), total: rows.length };
+  }
+
+  latestLlmRuntimeProbe(connectionSlug: string, modelId?: string): UsageLogRow | undefined {
+    return this.logs({
+      range: 'all',
+      connectionSlug,
+      ...(modelId ? { modelId } : {}),
+    }, 0, 1).rows[0];
   }
 
   listPricingOverrides(): PricingConfig[] {
@@ -172,6 +182,7 @@ class FileTelemetryRepo implements TelemetryRepo {
   private filteredUsageRows(query: UsageQuery, from: number, to: number): PersistedLlmCallRecord[] {
     return this.file.usageRecords.filter((row) => {
       if (row.ts < from || row.ts > to) return false;
+      if (query.connectionSlug && row.connectionSlug !== query.connectionSlug) return false;
       if (query.providerId && row.providerId !== query.providerId) return false;
       if (query.modelId && row.modelId !== query.modelId) return false;
       if (query.status && query.status !== 'all' && row.status !== query.status) return false;

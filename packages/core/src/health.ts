@@ -1,5 +1,6 @@
 import type { CapabilityId, CapabilityReadinessState, CapabilitySnapshot } from './capabilities.js';
 import type { LlmConnection } from './llm-connections.js';
+import type { UsageLogRow } from './usage-stats/types.js';
 
 export const HEALTH_SIGNAL_STATUSES = [
   'ok',
@@ -190,6 +191,43 @@ export function healthSignalFromConnection(connection: LlmConnection, checkedAt:
   };
 }
 
+export function healthSignalFromConnectionRuntime(
+  connection: LlmConnection,
+  latestRuntimeProbe: UsageLogRow | undefined,
+  checkedAt: number,
+): HealthSignal | undefined {
+  if (!connection.enabled || !connection.defaultModel) return undefined;
+
+  if (!latestRuntimeProbe) {
+    return {
+      id: `connection:${connection.slug}:runtime`,
+      label: `${connection.name} runtime`,
+      scope: 'llm_connection',
+      layer: 'runtime_probe',
+      status: 'unknown',
+      source: 'runtime_probe',
+      checkedAt,
+      message: 'No recorded agent send runtime probe yet.',
+      detail: 'Credential validation is separate from live send/stream/abort health.',
+      blocksSend: false,
+    };
+  }
+
+  const status = runtimeStatusToHealth(latestRuntimeProbe.status);
+  return {
+    id: `connection:${connection.slug}:runtime`,
+    label: `${connection.name} runtime`,
+    scope: 'llm_connection',
+    layer: 'runtime_probe',
+    status,
+    source: 'runtime_probe',
+    checkedAt: latestRuntimeProbe.ts,
+    message: runtimeProbeMessage(latestRuntimeProbe.status),
+    detail: runtimeProbeDetail(latestRuntimeProbe),
+    blocksSend: latestRuntimeProbe.status === 'error',
+  };
+}
+
 function healthStatusFromCapabilityReadiness(readiness: CapabilityReadinessState): HealthSignalStatus {
   switch (readiness) {
     case 'enabled':
@@ -240,4 +278,35 @@ function timeFromIso(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function runtimeStatusToHealth(status: UsageLogRow['status']): HealthSignalStatus {
+  switch (status) {
+    case 'success':
+      return 'ok';
+    case 'aborted':
+      return 'info';
+    case 'error':
+      return 'warning';
+  }
+}
+
+function runtimeProbeMessage(status: UsageLogRow['status']): string {
+  switch (status) {
+    case 'success':
+      return 'Last recorded agent send completed.';
+    case 'aborted':
+      return 'Last recorded agent send was stopped by the user.';
+    case 'error':
+      return 'Last recorded agent send failed.';
+  }
+}
+
+function runtimeProbeDetail(row: UsageLogRow): string {
+  const parts = [
+    `model=${row.modelId}`,
+    `latency=${row.latencyMs}ms`,
+  ];
+  if (row.errorClass) parts.push(`errorClass=${row.errorClass}`);
+  return parts.join(' · ');
 }

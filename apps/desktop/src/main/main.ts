@@ -10,6 +10,7 @@ import {
   buildHealthSnapshot,
   healthSignalFromCapability,
   healthSignalFromConnection,
+  healthSignalFromConnectionRuntime,
   isPermissionMode,
 } from '@maka/core';
 import type {
@@ -854,8 +855,16 @@ function registerIpc(): void {
       now,
     });
     const connections = await connectionStore.list();
+    const connectionSignals = connections.flatMap((connection) => [
+      healthSignalFromConnection(connection, now),
+      healthSignalFromConnectionRuntime(
+        connection,
+        telemetryRepo.latestLlmRuntimeProbe(connection.slug, connection.defaultModel),
+        now,
+      ),
+    ].filter((signal): signal is NonNullable<typeof signal> => Boolean(signal)));
     return buildHealthSnapshot(now, [
-      ...connections.map((connection) => healthSignalFromConnection(connection, now)),
+      ...connectionSignals,
       ...capabilitySnapshot.capabilities.map(healthSignalFromCapability),
     ]);
   });

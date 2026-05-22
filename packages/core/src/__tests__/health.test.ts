@@ -4,6 +4,7 @@ import {
   buildHealthSnapshot,
   healthSignalFromCapability,
   healthSignalFromConnection,
+  healthSignalFromConnectionRuntime,
   isHealthSignalStatus,
   type HealthSignal,
 } from '../health.js';
@@ -42,6 +43,60 @@ describe('HealthSignal contract', () => {
     expect(result.source).toBe('connection_test');
     expect(result.message).toBe('Credential and endpoint validation passed.');
     expect(result.detail).toContain('does not mean an agent send/stream/abort path is operational');
+  });
+
+  test('LLM runtime probe is separate from credential validation', () => {
+    const unknown = healthSignalFromConnectionRuntime(connection({ lastTestStatus: 'verified' }), undefined, 30);
+    expect(unknown?.status).toBe('unknown');
+    expect(unknown?.layer).toBe('runtime_probe');
+    expect(unknown?.source).toBe('runtime_probe');
+    expect(unknown?.message).toContain('No recorded agent send');
+
+    const ok = healthSignalFromConnectionRuntime(connection({ lastTestStatus: 'verified' }), {
+      id: 'usage_turn_1',
+      ts: 40,
+      connectionSlug: 'zai',
+      providerId: 'zai-coding-plan',
+      modelId: 'glm-4.7',
+      inputTokens: 1,
+      outputTokens: 2,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      reasoningTokens: 0,
+      totalTokens: 3,
+      costUsd: 0,
+      latencyMs: 250,
+      status: 'success',
+    }, 30);
+    expect(ok?.status).toBe('ok');
+    expect(ok?.checkedAt).toBe(40);
+    expect(ok?.detail).toContain('model=glm-4.7');
+
+    const failed = healthSignalFromConnectionRuntime(connection({ lastTestStatus: 'verified' }), {
+      id: 'usage_turn_2',
+      ts: 50,
+      connectionSlug: 'zai',
+      providerId: 'zai-coding-plan',
+      modelId: 'glm-4.7',
+      inputTokens: 1,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      reasoningTokens: 0,
+      totalTokens: 1,
+      costUsd: 0,
+      latencyMs: 90,
+      status: 'error',
+      errorClass: 'auth',
+    }, 30);
+    expect(failed?.status).toBe('warning');
+    expect(failed?.blocksSend).toBe(true);
+    expect(failed?.detail).toContain('errorClass=auth');
+  });
+
+  test('disabled or unconfigured connections do not emit runtime probe health', () => {
+    expect(healthSignalFromConnectionRuntime(connection({ enabled: false }), undefined, 30)).toBe(undefined);
+    expect(healthSignalFromConnectionRuntime(connection({ defaultModel: '' }), undefined, 30)).toBe(undefined);
   });
 
   test('missing default model blocks send at configuration layer', () => {

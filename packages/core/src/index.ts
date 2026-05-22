@@ -190,6 +190,7 @@ export {
   buildHealthSnapshot,
   healthSignalFromCapability,
   healthSignalFromConnection,
+  healthSignalFromConnectionRuntime,
   isHealthSignalStatus,
 } from './health.js';
 

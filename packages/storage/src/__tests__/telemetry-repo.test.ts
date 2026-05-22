@@ -44,6 +44,43 @@ describe('FileTelemetryRepo', () => {
     });
   });
 
+  test('filters and returns latest LLM runtime probes by connection slug', async () => {
+    await withRepo(async (repo) => {
+      await repo.load();
+      repo.insertLlmCall(llmRecord({
+        id: 'conn-a-old',
+        connectionSlug: 'conn-a',
+        modelId: 'glm-4.7',
+        ts: 10,
+        status: 'success',
+      }));
+      repo.insertLlmCall(llmRecord({
+        id: 'conn-b-new',
+        connectionSlug: 'conn-b',
+        modelId: 'glm-4.7',
+        ts: 50,
+        status: 'error',
+      }));
+      repo.insertLlmCall(llmRecord({
+        id: 'conn-a-new',
+        connectionSlug: 'conn-a',
+        modelId: 'glm-4.7',
+        ts: 40,
+        status: 'aborted',
+      }));
+      await flushWrites();
+
+      const logs = repo.logs({ range: 'all', connectionSlug: 'conn-a' });
+      const latest = repo.latestLlmRuntimeProbe('conn-a', 'glm-4.7');
+
+      assert.equal(logs.total, 2);
+      assert.equal(logs.rows[0]?.id, 'conn-a-new');
+      assert.equal(logs.rows[0]?.connectionSlug, 'conn-a');
+      assert.equal(latest?.id, 'conn-a-new');
+      assert.equal(repo.latestLlmRuntimeProbe('missing'), undefined);
+    });
+  });
+
   test('builds provider, model, day, hour, and tool buckets', async () => {
     await withRepo(async (repo) => {
       await repo.load();

@@ -9,6 +9,7 @@ export type UsageGroupBy = 'provider' | 'model' | 'tool' | 'day' | 'hour';
 
 export interface UsageQuery {
   range: TimeRange;
+  connectionSlug?: string;
   providerId?: string;
   modelId?: string;
   toolName?: string;
@@ -50,6 +51,7 @@ export interface UsageBucket {
 export interface UsageLogRow {
   id: string;
   ts: number;
+  connectionSlug?: string;
   providerId: string;
   modelId: string;
   toolName?: string;
@@ -78,6 +80,7 @@ export interface PricingConfig {
 export interface LlmCallRecord {
   sessionId?: string;
   turnId?: string;
+  connectionSlug?: string;
   providerId: string;
   modelId: string;
   inputTokens: number;

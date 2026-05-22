@@ -135,6 +135,36 @@ Fix:
 - Send/retry/regenerate/quick-chat now generate explicit turn ids and pass them as `fallbackTurnId` into `streamEvents()`.
 - Catch uses that id and emits both session and turn status change events.
 
+### 10. Prompt assembly lacked workspace instruction context
+
+Commit: `0afcf2e Inject workspace instructions into prompts`
+
+Evidence:
+- `buildSystemPrompt()` included personalization and installed skills, but did not read project-local engineering instructions from the active session cwd.
+
+Impact:
+- Coding sessions could ignore repository-local rules such as `AGENTS.md` unless the user repeated them manually.
+
+Fix:
+- Runtime system-prompt callbacks now receive `{ sessionId, cwd, workspaceRoot }`.
+- Desktop prompt assembly reads bounded allowlisted files from the session cwd: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`.
+- The loader realpath-checks containment, skips symlink escapes, strips control chars, caps per-file and total prompt size, and marks workspace files as lower-priority/untrusted context that cannot grant tools or weaken permissions.
+
+### 11. Health Center had validation signals but no LLM runtime probe signal
+
+Commit: current runtime health-probe change set
+
+Evidence:
+- `health:getSnapshot` emitted `healthSignalFromConnection()` only, so LLM rows represented connection-test validation (`lastTestStatus`) but not the real send/stream/abort path.
+
+Impact:
+- The UI correctly said "verified != operational", but had no first runtime signal to show whether a connection had actually sent successfully, failed, or been aborted.
+
+Fix:
+- LLM telemetry records now include `connectionSlug`.
+- `TelemetryRepo` can return the latest runtime probe per connection/model.
+- Health snapshots now emit a separate `runtime_probe` signal per configured enabled connection: unknown before first send, ok after last success, info after user abort, warning after last runtime error.
+
 ## Remaining Product / Architecture Findings
 
 ### A. Coming Soon settings surfaces still need a product decision
@@ -150,33 +180,22 @@ Recommendation:
 - @WAWQAQ should choose per page: implement now, hide from nav, or keep as disabled roadmap copy.
 - If kept visible, each page needs a real snapshot/status source before it becomes actionable.
 
-### B. Health / Capability center is contract-first, not probe-complete
+### B. Health / Capability center is still only partially probe-complete
 
 Evidence:
 - `apps/desktop/src/main/capability-snapshot.ts` marks Computer Use, Activity, Voice, Open Gateway, and Memory Write as `not_available` with scaffold reasons.
-- Bot readiness is now safer, but most non-bot runtime probes are still placeholders.
+- Bot readiness is now safer.
+- LLM connection health now has a first real runtime signal from usage telemetry.
+- Most non-LLM runtime probes are still placeholders.
 
 Risk:
 - UI is no longer lying about operational state, but the actual parity capabilities are not implemented.
 
 Recommendation:
-- Next engineering PRs should implement real probes before flipping any row to enabled/operational.
+- Next engineering PRs should implement real probes before flipping any non-LLM row to enabled/operational.
 - Computer Use requires real helper process + AX/screenshot probe; Voice requires mic/TTS chunk probe; Open Gateway requires heartbeat.
 
-### C. Prompt assembly still lacks workspace context beyond personalization + skills
-
-Evidence:
-- `buildSystemPrompt()` currently joins personalization and installed skills.
-- No AGENTS.md / repository instructions / workspace summary is injected.
-
-Risk:
-- For coding workflows, the model lacks project-specific rules unless the user repeats them.
-
-Recommendation:
-- Add a bounded workspace-instructions loader with containment and precedence rules.
-- Treat workspace files as untrusted lower-priority context; include source path and truncation metadata.
-
-### D. Main / renderer / settings / UI component files are still too large
+### C. Main / renderer / settings / UI component files are still too large
 
 Current sizes:
 - `apps/desktop/src/main/main.ts`: 1300 lines
@@ -195,7 +214,7 @@ Recommendation:
   - ui components: chat, sessions, permissions, composer, tool activity modules
   - runtime backend: stream pump, tool wrapper, telemetry/artifact hooks
 
-### E. Open Gateway / search / voice / daily review are still no-op roadmap features
+### D. Open Gateway / search / voice / daily review are still no-op roadmap features
 
 Evidence:
 - They have Coming Soon UI copy and capability snapshot placeholders but no backend implementations.
@@ -212,5 +231,6 @@ Recommendation:
 After the latest fixes:
 - `git diff --check` passed.
 - `npm run typecheck` passed.
-- Full `npm test --workspaces --if-present` passed: core 122 / storage 38 / runtime 99 / desktop 323 = 582.
-- Pushed commits: `778077d`, `a4a9b7e`, `21522a9`, `1e41f64`.
+- Full `npm test --workspaces --if-present` passed after `0afcf2e`: core 122 / storage 38 / runtime 99 / desktop 327 = 586.
+- Full `npm test --workspaces --if-present` passed after runtime health probe work: core 124 / storage 39 / runtime 99 / desktop 327 = 589.
+- Pushed commits so far: `778077d`, `a4a9b7e`, `21522a9`, `1e41f64`, `5c324c4`, `0afcf2e`.
