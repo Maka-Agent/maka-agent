@@ -1512,7 +1512,11 @@
 .maka-skeleton-line[data-size="sm"] { height: 9px; }
 .maka-skeleton-card {
   height: 92px;
-  border-radius: 14px;
+  /* PR-UI-LAYOUT-32: skeleton card radius 14 → 12 to match the
+   * card family (chips 10, cards 12, modals 16-18). Subtle but
+   * keeps the loading state visually consistent with the actual
+   * card it's standing in for. */
+  border-radius: 12px;
 }
 .maka-skeleton-stack {
   display: grid;
