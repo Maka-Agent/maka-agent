@@ -803,16 +803,33 @@
     color: var(--accent);
     text-decoration: none;
     border-bottom: 1px solid oklch(from var(--accent) l c h / 0.4);
+    /* PR-UI-LAYOUT-34: explicit transition so focus state animates
+     * smoothly. Also: explicit padding-inline + negative margin so
+     * the focus halo has hit area without pushing inline content
+     * around. */
+    padding: 0 2px;
+    margin: 0 -2px;
+    border-radius: 3px;
+    transition: border-bottom-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
   }
   .maka-bubble-assistant a:hover {
     border-bottom-color: var(--accent);
   }
+  .maka-bubble-assistant a:focus-visible {
+    outline: none;
+    background: oklch(from var(--accent) l c h / 0.06);
+    box-shadow: 0 0 0 2px oklch(from var(--accent) l c h / 0.20);
+  }
   .maka-bubble-assistant code {
     font-family: var(--font-mono);
     font-size: 0.86em;
-    padding: 1px 5px;
-    border-radius: 4px;
+    padding: 1px 6px;
+    /* PR-UI-LAYOUT-28: inline code radius 4 → 5. Tiny bump but
+     * pulls it slightly out of the "tight tag" feel into a calmer
+     * pill rhythm that matches the rest of the warm-canvas chrome. */
+    border-radius: 5px;
     background: var(--foreground-5);
+    border: 1px solid oklch(from var(--foreground) l c h / 0.03);
   }
   /* Block code goes inside a maka-code-block wrapper that adds a language
      pill + copy button on top of the pre. Pre keeps its monospace styling
@@ -846,14 +863,26 @@
     display: grid;
     place-items: center;
     border: 0;
-    border-radius: 5px;
+    /* PR-UI-LAYOUT-28: code-block copy button — radius 5 → 7 to
+     * match the small-button family + add focus-visible ring + a
+     * smoother transition. Width/height stay 22 because the copy
+     * icon sits inside the code-block header strip and growing it
+     * would change the header height. */
+    border-radius: 7px;
     background: transparent;
     color: var(--foreground-50);
     cursor: pointer;
+    transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
   }
   .maka-code-block-copy:hover {
     color: var(--foreground);
     background: var(--foreground-10);
+  }
+  .maka-code-block-copy:focus-visible {
+    outline: none;
+    color: var(--foreground);
+    background: var(--foreground-10);
+    box-shadow: 0 0 0 3px oklch(from var(--accent) l c h / 0.14);
   }
   .maka-code-block-copy[data-copied="true"] {
     color: var(--success-text);
@@ -908,8 +937,23 @@
   .hljs-strong     { font-weight: 700; }
   .maka-bubble-assistant blockquote {
     margin: 0 0 12px;
-    padding: 4px 14px;
-    border-left: 3px solid var(--foreground-20);
+    /* PR-UI-LAYOUT-29: blockquote feels slim on the new warm canvas.
+     * Bump padding so the quote actually has air around it, switch
+     * left rule to accent at 28% so it visually anchors the quote
+     * without overpowering.
+     *
+     * PR-UI-LAYOUT-31 (@kenji contract review): drop the accent
+     * fill (`oklch from --accent / 0.04`) — accent tint, even at
+     * very low alpha, can blur the line between markdown content
+     * quote and system alert/callout. Switch to neutral
+     * `--foreground-3` so the block reads as "highlighted content
+     * passage" while system alerts continue to own the
+     * icon + border + saturated tone pattern. The left rule keeps
+     * the accent tie so quotes still feel branded, not generic. */
+    padding: 8px 16px;
+    border-left: 3px solid oklch(from var(--accent) l c h / 0.28);
+    background: var(--foreground-3);
+    border-radius: 0 8px 8px 0;
     color: var(--foreground-70);
   }
   .maka-bubble-assistant table {
@@ -918,18 +962,34 @@
     border-collapse: collapse;
     font-size: 13px;
     overflow: hidden;
-    border-radius: 8px;
+    /* PR-UI-LAYOUT-28: table radius 8 → 10 joins the card family,
+     * and a hairline outer border gives the table chrome a clean
+     * edge against the warm panel. Without the border the rounded
+     * corners would clip nothing visible. */
+    border-radius: 10px;
+    border: 1px solid var(--border);
   }
   .maka-bubble-assistant th,
   .maka-bubble-assistant td {
-    padding: 7px 10px;
+    padding: 8px 12px;
     border-bottom: 1px solid var(--border);
     text-align: left;
+  }
+  /* PR-UI-LAYOUT-28: drop the trailing border on the last row so the
+   * rounded corner reads cleanly. */
+  .maka-bubble-assistant tr:last-child th,
+  .maka-bubble-assistant tr:last-child td {
+    border-bottom: 0;
   }
   .maka-bubble-assistant th {
     color: var(--foreground-70);
     font-weight: 600;
     background: var(--foreground-3);
+    /* PR-UI-LAYOUT-28: header tone slightly darker than body cell
+     * to make the header row read at first glance — was the same
+     * `--foreground-3` as nothing else, now sits between cell and
+     * code-block tints. */
+    letter-spacing: 0.01em;
   }
   .maka-bubble-assistant hr {
     margin: 16px 0;
