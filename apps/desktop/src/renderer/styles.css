@@ -953,12 +953,24 @@ button:active {
   cursor: pointer;
   font-size: 13px;
   text-decoration: none;
-  padding: 6px 4px;
+  /* PR-UI-LAYOUT-26: bumped padding slightly + added focus-visible
+   * ring + radius so keyboard users see the skip button focus state
+   * (was invisible before — only browser default). */
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 
 .maka-onboarding-skip:hover {
   color: var(--foreground);
   text-decoration: underline;
+}
+
+.maka-onboarding-skip:focus-visible {
+  outline: none;
+  color: var(--foreground);
+  background: var(--foreground-3);
+  box-shadow: 0 0 0 3px oklch(from var(--accent) l c h / 0.14);
 }
 
 /* PR110c: extended OnboardingHero variants. The setup variants
