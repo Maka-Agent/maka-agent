@@ -934,18 +934,34 @@
     border-collapse: collapse;
     font-size: 13px;
     overflow: hidden;
-    border-radius: 8px;
+    /* PR-UI-LAYOUT-28: table radius 8 → 10 joins the card family,
+     * and a hairline outer border gives the table chrome a clean
+     * edge against the warm panel. Without the border the rounded
+     * corners would clip nothing visible. */
+    border-radius: 10px;
+    border: 1px solid var(--border);
   }
   .maka-bubble-assistant th,
   .maka-bubble-assistant td {
-    padding: 7px 10px;
+    padding: 8px 12px;
     border-bottom: 1px solid var(--border);
     text-align: left;
+  }
+  /* PR-UI-LAYOUT-28: drop the trailing border on the last row so the
+   * rounded corner reads cleanly. */
+  .maka-bubble-assistant tr:last-child th,
+  .maka-bubble-assistant tr:last-child td {
+    border-bottom: 0;
   }
   .maka-bubble-assistant th {
     color: var(--foreground-70);
     font-weight: 600;
     background: var(--foreground-3);
+    /* PR-UI-LAYOUT-28: header tone slightly darker than body cell
+     * to make the header row read at first glance — was the same
+     * `--foreground-3` as nothing else, now sits between cell and
+     * code-block tints. */
+    letter-spacing: 0.01em;
   }
   .maka-bubble-assistant hr {
     margin: 16px 0;
