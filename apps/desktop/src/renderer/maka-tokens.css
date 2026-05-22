@@ -138,8 +138,16 @@
   /* === typography ===
      Primary face is Geist (variable). Falls back to system-ui so the app stays
      legible if the bundled font fails to load. Mono pairs with Geist Mono. */
-  --font-sans: "Geist Variable", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "Geist Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* PR-UI-10 (@yuejing 2026-05-22): explicit Chinese fallback chain.
+   * macOS: PingFang SC → Hiragino Sans GB
+   * Win: Microsoft YaHei → Microsoft YaHei UI
+   * Linux: Noto Sans CJK SC → Noto Sans SC → WenQuanYi Micro Hei
+   * Latin script still goes through Geist first (variable axis support);
+   * CJK falls back to the platform's preferred Chinese face. This is
+   * critical on Win/Linux where system-ui can fall back to a serif
+   * for CJK without explicit handling. */
+  --font-sans: "Geist Variable", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Microsoft YaHei UI", "Noto Sans CJK SC", "Noto Sans SC", "WenQuanYi Micro Hei", "Source Han Sans SC", sans-serif;
+  --font-mono: "Geist Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --font-default: var(--font-sans);
 
   /* === layout === */
@@ -296,10 +304,21 @@
   }
 
   /* Scrollbars: thin, accent-on-hover, transparent track. */
-  ::-webkit-scrollbar        { width: 8px; height: 8px; }
+  /* PR-UI-10: thinner default scrollbar (8→6) + smoother hover state
+   * + Firefox `scrollbar-width: thin` for parity. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  ::-webkit-scrollbar        { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track  { background: transparent; }
-  ::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+  ::-webkit-scrollbar-thumb  {
+    background: var(--border);
+    border-radius: 4px;
+    transition: background 120ms ease;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--foreground-30); }
+  ::-webkit-scrollbar-corner { background: transparent; }
 
   ::selection { background: var(--selection); }
 
@@ -327,13 +346,24 @@
     body::after { display: none; }
   }
 
+  /* PR-UI-10: kbd polish — slightly bolder + 1px inset shadow for
+   * tactile "physical key" look. Avoid `box-shadow` outline so kbd
+   * inside chips/buttons doesn't add a second visible ring. */
   kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
     font-family: var(--font-mono);
-    font-size: 0.85em;
-    padding: 1px 5px;
-    border-radius: 4px;
+    font-size: 0.82em;
+    font-weight: 600;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 5px;
     background: var(--foreground-5);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-strong);
+    box-shadow: inset 0 -1px 0 var(--border);
+    color: var(--foreground-80);
   }
 }
 

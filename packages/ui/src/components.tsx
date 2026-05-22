@@ -734,14 +734,65 @@ const BLOCKED_REASON_TOOLTIP = {
 
 const SCROLL_BOTTOM_THRESHOLD = 64; // px
 
-const PROMPT_SUGGESTIONS: Array<{ label: string; prompt: string }> = [
-  { label: '总结代码库', prompt: '帮我总结当前代码库的目录结构和关键模块。' },
-  { label: '解释这段代码', prompt: '我贴一段代码进来，请帮我逐行解释它做什么、有没有坑：\n\n```\n\n```' },
-  { label: '规划一个新功能', prompt: '我想实现以下功能，请帮我拆任务、列依赖、估算工作量：\n\n' },
-  { label: '调试一个 bug', prompt: '我遇到一个 bug，现象是 ____，复现步骤是 ____，已经尝试过 ____。可能的原因是？' },
-  { label: '写单元测试', prompt: '请为下面这个模块写 node:test 覆盖关键路径：\n\n```ts\n\n```' },
-  { label: 'Code review', prompt: '请帮我 review 这段代码，重点关注可读性、错误处理和潜在性能问题：\n\n```\n\n```' },
-];
+/**
+ * PR-UI-14 (@yuejing 2026-05-22): locale-aware prompt suggestions.
+ *
+ * Audit §3.7 — the v1 chip set was 6 dev-heavy zh prompts (code review,
+ * unit tests, debugging…). Two problems:
+ *   1. English-locale users saw a wall of Chinese chips on first run.
+ *   2. Non-developer users (PMs, writers, students) saw nothing
+ *      universally relevant — the chips read as "Maka is only for
+ *      programmers".
+ *
+ * Fix: detect locale family (zh / en) via `navigator.language` and
+ * return a balanced mix of dev + general starting points. Each locale
+ * keeps 3 dev chips (codebase summary / explain code / Code review)
+ * for the power-user path and adds 3 general chips (read a long doc,
+ * translate, draft a message) so the empty-chat surface reads as a
+ * general assistant first, a coding assistant second.
+ */
+type PromptSuggestionLocale = 'zh' | 'en';
+type PromptSuggestion = { label: string; prompt: string };
+
+const PROMPT_SUGGESTIONS_BY_LOCALE: Record<PromptSuggestionLocale, PromptSuggestion[]> = {
+  zh: [
+    { label: '总结代码库', prompt: '帮我总结当前代码库的目录结构和关键模块。' },
+    { label: '解释这段代码', prompt: '我贴一段代码进来，请帮我逐行解释它做什么、有没有坑：\n\n```\n\n```' },
+    { label: '读一份长文', prompt: '我贴一篇文章/文档过来，请帮我提炼核心观点、列出关键事实、找出我可能漏看的地方：\n\n' },
+    { label: '翻译并润色', prompt: '把下面这段翻译成英文，保持原意，语气专业自然：\n\n' },
+    { label: '起草一条消息', prompt: '帮我起草一条 ____ 风格的消息，对象是 ____，目的是 ____：\n\n要点：\n- \n- ' },
+    { label: 'Code review', prompt: '请帮我 review 这段代码，重点关注可读性、错误处理和潜在性能问题：\n\n```\n\n```' },
+  ],
+  en: [
+    { label: 'Summarize this codebase', prompt: 'Help me map this codebase: directory layout, key modules, and how they fit together.' },
+    { label: 'Explain this code', prompt: 'Paste a snippet — explain it line by line and flag any pitfalls:\n\n```\n\n```' },
+    { label: 'Read this for me', prompt: 'Here\'s an article or doc — pull out the core argument, list the key facts, and tell me what I might be missing:\n\n' },
+    { label: 'Translate & polish', prompt: 'Translate the text below into Chinese; keep the meaning, tone should stay natural and professional:\n\n' },
+    { label: 'Draft a message', prompt: 'Help me draft a ____ message to ____, with the goal of ____:\n\nPoints to cover:\n- \n- ' },
+    { label: 'Code review', prompt: 'Please review this code — readability, error handling, performance concerns:\n\n```\n\n```' },
+  ],
+};
+
+/**
+ * Detects the renderer-side UI locale family. Used by EmptyChatHero
+ * chips + hero copy (PR-UI-14) and Composer / OnboardingHero quickChat
+ * placeholders (PR-UI-15). Centralized here so all UI surfaces fall
+ * onto the same `zh` / `en` split — there's no per-component drift.
+ */
+export type UiLocale = PromptSuggestionLocale;
+
+export function detectUiLocale(): UiLocale {
+  if (typeof navigator === 'undefined') return 'zh';
+  const lang = navigator.language?.toLowerCase() ?? '';
+  return lang.startsWith('zh') ? 'zh' : 'en';
+}
+
+// Back-compat alias for the helper introduced in PR-UI-14.
+const detectPromptSuggestionLocale = detectUiLocale;
+
+export function getPromptSuggestions(locale?: PromptSuggestionLocale): PromptSuggestion[] {
+  return PROMPT_SUGGESTIONS_BY_LOCALE[locale ?? detectUiLocale()];
+}
 
 function SessionRow(props: {
   session: SessionSummary;
@@ -1366,22 +1417,70 @@ function collectCodeText(children: ReactNode): string {
   return '';
 }
 
+/**
+ * Locale-aware copy bundle for the empty-chat hero. Mirrors the
+ * locale split applied to `PROMPT_SUGGESTIONS_BY_LOCALE` (PR-UI-14)
+ * so the eyebrow, headline, and intro paragraph don't fall back to
+ * Chinese while the chips switch to English.
+ */
+const EMPTY_HERO_COPY_BY_LOCALE: Record<PromptSuggestionLocale, {
+  ariaLabel: string;
+  eyebrow: string;
+  headlineWithLabel: (label: string) => string;
+  headlineFallback: string;
+  intro: string;
+  promptListLabel: string;
+}> = {
+  zh: {
+    ariaLabel: '开始对话',
+    eyebrow: 'READY · 想一起做点什么？',
+    headlineWithLabel: (label) => `${label}，今天想做点什么？`,
+    headlineFallback: '直接说说你想做什么。',
+    intro: '说一下你要改的、想问的、想查的；下面是几个常用起点，也可以直接在下方输入框里描述需求。',
+    promptListLabel: '提示建议',
+  },
+  en: {
+    ariaLabel: 'Start a conversation',
+    eyebrow: 'READY · What shall we work on?',
+    headlineWithLabel: (label) => `Hey ${label}, what shall we tackle today?`,
+    headlineFallback: 'Just tell me what you’re trying to do.',
+    intro: 'Describe what you want to change, ask, or look up. Here are a few common starting points — or just type in the composer below.',
+    promptListLabel: 'Prompt suggestions',
+  },
+};
+
 function EmptyChatHero(props: { onPromptSuggestion?(prompt: string): void; userLabel?: string }) {
   // Greet the user by name when they've set one in Personalization Settings.
   // Falls back to a neutral title so first-run users don't see "Hi 你, …".
+  //
+  // PR-UI-1 (@yuejing 2026-05-22): visual unification with OnboardingHero
+  // ReadyEmptyHero. Both heroes now use the same Sparkles-eyebrow chrome,
+  // same headline scale, same chip suggestion grid — so users don't see
+  // a jarring visual switch between "first-run" and "empty session" surfaces.
+  //
+  // PR-UI-14 (@yuejing 2026-05-22): locale-aware chips + hero copy. We
+  // detect `navigator.language` once per render and use it to pick both
+  // the prompt suggestion set and the surrounding copy bundle, so users
+  // on en locale never see a mixed-language hero.
   const label = props.userLabel?.trim();
+  const locale = detectPromptSuggestionLocale();
+  const copy = EMPTY_HERO_COPY_BY_LOCALE[locale];
+  const suggestions = getPromptSuggestions(locale);
   return (
-    <div className="emptyChat compact">
-      <span className="eyebrow">Maka</span>
-      <h1>
-        {label
-          ? `${label}，今天想一起做点什么？`
-          : '想一起做点什么？'}
-      </h1>
-      <p>说一下你要改的、想问的、想查的；下面是几个常用起点。</p>
+    <section className="maka-hero maka-hero-empty-chat" aria-label={copy.ariaLabel}>
+      <header>
+        <span className="maka-hero-eyebrow">
+          <Sparkles size={12} strokeWidth={2} aria-hidden="true" />
+          <span>{copy.eyebrow}</span>
+        </span>
+        <h1>
+          {label ? copy.headlineWithLabel(label) : copy.headlineFallback}
+        </h1>
+        <p>{copy.intro}</p>
+      </header>
       {props.onPromptSuggestion && (
-        <ul className="maka-prompt-suggestions" aria-label="提示建议">
-          {PROMPT_SUGGESTIONS.map((suggestion) => (
+        <ul className="maka-prompt-suggestions" aria-label={copy.promptListLabel}>
+          {suggestions.map((suggestion) => (
             <li key={suggestion.label}>
               <button
                 type="button"
@@ -1395,7 +1494,7 @@ function EmptyChatHero(props: { onPromptSuggestion?(prompt: string): void; userL
           ))}
         </ul>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -1851,12 +1950,19 @@ function TurnFooterActions(props: {
         // label visible (not a spinner-only) so screen readers can hear
         // which action is processing. `aria-busy="true"` is the AT signal.
         const isPending = action.tooltip === '正在处理…';
+        // PR-UI-17 (@yuejing 2026-05-22): action priority is presentation
+        // only — has NO bearing on the lifecycle/status semantics encoded
+        // by `deriveTurnFooterActions`. Pending state always forces
+        // priority back to "primary" so the user sees full label + icon
+        // while the action processes.
+        const priority = isPending ? 'primary' : STATUS_FOOTER_PRIORITY[action.id];
         return (
           <button
             key={action.id}
             type="button"
             className="maka-turn-footer-action"
             data-action={action.id}
+            data-priority={priority}
             data-pending={isPending || undefined}
             disabled={!action.enabled}
             aria-disabled={!action.enabled}
@@ -1878,6 +1984,25 @@ const STATUS_FOOTER_ICON: Record<TurnFooterActionMeta['id'], ReactNode> = {
   regenerate: <RefreshCcw size={12} strokeWidth={2} aria-hidden="true" />,
   branch: <GitBranch size={12} strokeWidth={2} aria-hidden="true" />,
   copy: <Copy size={12} strokeWidth={2} aria-hidden="true" />,
+};
+
+/**
+ * PR-UI-17 (audit §3.4): action priority controls visual density —
+ * `primary` actions render with full icon+label always; `secondary`
+ * actions render icon-only by default with a hover/focus-within
+ * expansion that reveals the label. This addresses the noise complaint
+ * "重试 + 重新生成 + 分支 + 复制 buttons accumulate visually when
+ * combined with lineage badges + status pills" without dropping any
+ * functionality or changing the lifecycle semantics encoded by
+ * `deriveTurnFooterActions`. The action label is always present in
+ * the DOM (aria + visually-hidden when collapsed) so screen readers
+ * read it identically regardless of presentation state.
+ */
+const STATUS_FOOTER_PRIORITY: Record<TurnFooterActionMeta['id'], 'primary' | 'secondary'> = {
+  retry: 'primary',
+  regenerate: 'primary',
+  branch: 'secondary',
+  copy: 'secondary',
 };
 
 function MessageMeta(props: { role: string; userLabel?: string; ts?: number }) {
@@ -1917,6 +2042,44 @@ function ChatTab(props: {
 
 const COMPOSER_MAX_HEIGHT = 240;
 
+/**
+ * PR-UI-15 (@yuejing 2026-05-22): Composer copy is locale-aware.
+ *
+ * Audit §3.5 — placeholder + state copy were hardcoded zh and drifted
+ * stylistically from OnboardingHero's quickChat input (which used a
+ * long example sentence as the placeholder). Unified style: both
+ * surfaces show the same short action-oriented placeholder, and
+ * OnboardingHero gets a separate `<small>` example hint below the
+ * textarea so first-run users still know what to type.
+ */
+const COMPOSER_COPY_BY_LOCALE: Record<UiLocale, {
+  placeholder: string;
+  awaitingPermission: string;
+  streamingHintPrefix: string;
+  streamingHintInterrupt: string;
+  enterHint: { send: string; newline: string };
+}> = {
+  zh: {
+    placeholder: '给 Maka 发消息…',
+    awaitingPermission: '等待你确认权限…',
+    streamingHintPrefix: 'Maka 正在思考…',
+    streamingHintInterrupt: '或点 Stop 中断',
+    enterHint: { send: '发送', newline: '换行' },
+  },
+  en: {
+    placeholder: 'Message Maka…',
+    awaitingPermission: 'Waiting for your permission decision…',
+    streamingHintPrefix: 'Maka is thinking…',
+    streamingHintInterrupt: 'or click Stop to interrupt',
+    enterHint: { send: 'to send', newline: 'for newline' },
+  },
+};
+
+const COMPOSER_BUTTON_COPY_BY_LOCALE: Record<UiLocale, { sendLabel: string; stopLabel: string }> = {
+  zh: { sendLabel: 'Send', stopLabel: 'Stop' },
+  en: { sendLabel: 'Send', stopLabel: 'Stop' },
+};
+
 export interface ComposerHandle {
   /** Replace the textarea value and resize, leaving focus on the input. */
   setText(text: string): void;
@@ -1941,6 +2104,14 @@ export const Composer = forwardRef<
 >(function Composer(props, ref) {
   const formRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // PR-UI-15: locale-aware copy for placeholder + toolbar states. We
+  // detect once per render (cheap) rather than memoizing — the locale
+  // is effectively constant for the lifetime of the renderer but the
+  // few ns of detection cost beats wiring up a context provider just
+  // for this bundle.
+  const locale = detectUiLocale();
+  const copy = COMPOSER_COPY_BY_LOCALE[locale];
+  const buttonCopy = COMPOSER_BUTTON_COPY_BY_LOCALE[locale];
 
   function autoResize() {
     const el = textareaRef.current;
@@ -2020,7 +2191,7 @@ export const Composer = forwardRef<
         <textarea
           ref={textareaRef}
           name="text"
-          placeholder="给 Maka 发消息…"
+          placeholder={copy.placeholder}
           disabled={props.disabled}
           onKeyDown={onTextareaKeyDown}
           onInput={autoResize}
@@ -2031,24 +2202,24 @@ export const Composer = forwardRef<
         <div className="maka-composer-toolbar composerActions" data-streaming={props.streaming ? 'true' : undefined}>
           <span>
             {props.disabled ? (
-              '等待你确认权限…'
+              copy.awaitingPermission
             ) : props.streaming ? (
               <span className="maka-composer-streaming-hint">
                 <span className="maka-composer-streaming-dot" aria-hidden="true" />
-                Maka 正在思考… <kbd>Esc</kbd> 或点 Stop 中断
+                {copy.streamingHintPrefix} <kbd>Esc</kbd> {copy.streamingHintInterrupt}
               </span>
             ) : (
-              <><kbd>Enter</kbd> 发送 · <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行</>
+              <><kbd>Enter</kbd> {copy.enterHint.send} · <kbd>Shift</kbd>+<kbd>Enter</kbd> {copy.enterHint.newline}</>
             )}
           </span>
           <div>
             {props.streaming ? (
               <button className="maka-button" data-variant="primary" type="button" onClick={props.onStop}>
-                Stop
+                {buttonCopy.stopLabel}
               </button>
             ) : (
               <button className="maka-button" data-variant="primary" type="submit" disabled={props.disabled}>
-                Send
+                {buttonCopy.sendLabel}
               </button>
             )}
           </div>
