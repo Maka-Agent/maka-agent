@@ -963,21 +963,43 @@ button:active {
 
 /* PR110c: extended OnboardingHero variants. The setup variants
    reuse the base `.maka-onboarding` chrome but skip the provider
-   grid; we add a compact body + a single CTA. */
+   grid; we add a compact body + a single CTA.
+   PR-UI-LAYOUT-25: clearer tone treatment on the warm canvas.
+   - Headline color stays neutral for `setup` (default), shifts
+     warm/amber for `warning` (info family), shifts destructive
+     for `blocked` so a stranded user immediately sees gravity. */
 .maka-onboarding-setup header h1 {
   font-size: 22px;
 }
 .maka-onboarding-setup header p {
   margin-top: 8px;
+  color: var(--foreground-70);
+  line-height: 1.55;
 }
 .maka-onboarding-setup[data-tone="warning"] header h1 {
-  color: var(--warning, var(--foreground));
+  color: var(--warning, var(--info-text));
 }
+.maka-onboarding-setup[data-tone="destructive"] header h1 {
+  color: var(--destructive-text);
+}
+
+/* PR-UI-LAYOUT-25: setup hero eyebrow icon picks up the tone for
+ * each variant so the visual hierarchy reads (icon tone → headline
+ * tone → body) instead of relying on copy alone. */
+.maka-onboarding-setup[data-tone="warning"] .maka-onboarding-eyebrow {
+  color: var(--info-text);
+}
+.maka-onboarding-setup[data-tone="destructive"] .maka-onboarding-eyebrow {
+  color: var(--destructive-text);
+}
+
 .maka-onboarding-slug {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 13px;
   padding: 2px 6px;
-  border-radius: 6px;
+  /* PR-UI-LAYOUT-25: slug radius 6 → 8 to join the form input
+   * family (same chrome as inline code badges). */
+  border-radius: 8px;
   background: var(--foreground-5, oklch(from var(--foreground) l c h / 0.06));
   color: var(--foreground-80, oklch(from var(--foreground) l c h / 0.80));
 }

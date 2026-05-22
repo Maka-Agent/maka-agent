@@ -268,7 +268,11 @@ function BlockedHero(props: {
         </>
       }
       primaryCta={{ label: '打开设置 · 账号', onClick: () => props.onOpenSettings('account') }}
-      tone="warning"
+      // PR-UI-LAYOUT-25: 'destructive' (vs the previous 'warning') so
+      // the user sees "all connections unhealthy" at full gravity —
+      // distinct from "missing default model" or "needs reauth" which
+      // are recoverable yellow states.
+      tone="destructive"
     />
   );
 }
@@ -345,7 +349,15 @@ interface SetupHeroProps {
   title: string;
   body: React.ReactNode;
   primaryCta: { label: string; onClick: () => void };
-  tone?: 'warning';
+  /**
+   * PR-UI-LAYOUT-25 (@yuejing 2026-05-22): extended from `'warning'`
+   * only to also accept `'destructive'` so a blocked-state hero
+   * ("all_connections_unhealthy") reads with genuine gravity
+   * instead of "yellow warning". CSS rules for
+   * `.maka-onboarding-setup[data-tone="destructive"]` paint the
+   * eyebrow + headline in destructive tone.
+   */
+  tone?: 'warning' | 'destructive';
 }
 
 function SetupHero(props: SetupHeroProps) {
