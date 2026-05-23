@@ -1316,29 +1316,33 @@ Doc convention is the same as Path 17:
 ### S14 — Focus + click pass-through: overlay must never steal input
 
 **Contract invariant.**
-- The overlay window MUST set
-  `ignoresMouseEvents = true` (NSWindow) and equivalent for
-  keyboard (no `acceptsFirstResponder`). It is purely a visual
-  affordance; the underlying app is what receives clicks /
-  keystrokes from the CU runtime.
+- The overlay window MUST call Electron's
+  `BrowserWindow.setIgnoreMouseEvents(true, { forward: true })`
+  (or equivalent for the chosen overlay mechanism) AND construct
+  with `focusable: false`. It is purely a visual affordance; the
+  underlying app is what receives clicks / keystrokes from the CU
+  runtime via the action runner's `CGEventPostToPid` / accessibility
+  dispatch path.
 - Overlay never becomes a `<button>` / `<a>` / tab-order target /
   ARIA-interactive element in the renderer. The user CANNOT
   interact with the overlay itself; their input lands on the
   target app (or, if Maka window is foreground, on Maka).
 - Overlay `pointer-events: none` (CSS) is the renderer-side mirror
-  of the AppKit `ignoresMouseEvents` constraint. Both must hold;
-  the AppKit setting is load-bearing because CSS alone doesn't
-  stop the OS-level window from grabbing focus on click.
+  of the BrowserWindow `setIgnoreMouseEvents(true)` constraint.
+  Both must hold; the BrowserWindow setting is load-bearing
+  because CSS alone doesn't stop the OS-level window from
+  grabbing focus on click.
 
 **Source-gate grep.**
 - `<ComputerUseOverlay>` root element carries `pointer-events: none`
   (CSS class or inline style) and NEVER mounts inside a
   `<button>` / `<a>` / role-button context.
-- The overlay window (if a separate AppKit window in the main
-  process) is configured with `ignoresMouseEvents = true` and
-  `acceptsFirstResponder = false`. Grep main process: any
-  `new BrowserWindow({ ... })` flagged as the CU overlay window
-  must set these. No `focusable: true`.
+- The overlay BrowserWindow (in the main process) is configured
+  with `focusable: false`, and the runtime calls
+  `setIgnoreMouseEvents(true, { forward: true })` on it before
+  showing. Grep main process: any `new BrowserWindow({ ... })`
+  flagged as the CU overlay window must satisfy both invariants.
+  No `focusable: true`; no missing `setIgnoreMouseEvents`.
 - No keyboard event handler attaches to the overlay
   (`addEventListener('keydown'` / `onKeyDown`).
 
@@ -1346,7 +1350,7 @@ Doc convention is the same as Path 17:
 - Multi-monitor placement: overlay placement on the active screen
   the action targets — wired in PR-RUNTIME-CU.
 
-### S15 — Screenshot + coordinate trust boundary: runtime owns, renderer displays
+### S15 — Coordinate authority + screenshot binary display path
 
 **Contract invariant.**
 - Coordinate authority: ONLY the runtime (main process or signed
@@ -1354,23 +1358,26 @@ Doc convention is the same as Path 17:
   NEVER initiates a raw `{x, y}` click. The renderer's role is
   display-only: it shows the runtime's planned action as overlay,
   and surfaces user abort.
-- Screenshots are sensitive: a screenshot capture can include
-  passwords, banking, private chat. CU screenshots MUST run through
-  the existing renderer redaction chokepoint (the same `redactSecrets`
-  + per-payload cap pattern Path 17 S1-S6 lock for tool/thinking/
-  assistant text) BEFORE entering React state OR the artifact pane
-  OR session log persistence.
-- Image payload caps follow C3 (S5): base64 length compare, no
-  decode. Oversize screenshots fall back to `{ kind:
-  'unsupported', reason: 'oversize' }` with a user-facing
-  "screenshot too large to display inline" copy. The runtime side
-  saves the file to the workspace artifact directory; the
-  renderer displays a Finder-open affordance, never inline-base64
-  for an oversize capture.
+- Screenshot pixels (binary `Uint8Array` / PNG / JPEG) MUST flow
+  through the artifact preview registry (S5) — sniffed MIME
+  through `normalizeAllowedImageMime` allowlist, base64 length
+  cap via `IMAGE_PAYLOAD_MAX_BASE64_LENGTH` (no `atob` decode),
+  oversize → `unsupported(oversize)` with a Finder-open
+  affordance instead of inline base64. Pixels MUST NOT travel any
+  "fast path" that skips this gate.
+- Text-shaped data captured ALONGSIDE a screenshot — window title,
+  app bundle id, focused element label, URL bar contents — IS
+  text and IS subject to S16's `redactSecrets` chokepoint before
+  reaching React state, the artifact pane, or session log.
+- `redactSecrets` is text-only and CANNOT clean screenshot pixels.
+  Removing sensitive pixels happens upstream (per-app sensitivity
+  blocks, OS-level screen-capture exclusion, per-frame masking
+  the runtime applies before delivery) — never as a renderer-side
+  pass over a base64 string.
 - The metadata MIME the runtime claims (e.g. `image/png`) is
-  user-controllable when the screenshot comes from an external
-  pipeline; the renderer MUST re-validate via main-process sniffed
-  MIME (same `normalizeAllowedImageMime` allowlist used in S5).
+  untrusted; the renderer MUST build the final `<img src="data:…">`
+  attribute from main-process **sniffed** MIME re-validated
+  through `normalizeAllowedImageMime` (same gate as S5).
 
 **Source-gate grep.**
 - Renderer never imports a coordinate-click IPC and never calls
@@ -1379,51 +1386,128 @@ Doc convention is the same as Path 17:
   `tool_use(computer-use:*)` event flow that arrives via
   `session.subscribeEvents`.
 - CU screenshot delivery into the artifact pane goes through
-  `applyToolOutputChunk` (S1) for any text component + the
-  artifact preview registry (S5) for the image component. No
-  separate "fast path" that skips redaction.
+  the artifact preview registry (S5) for the image component;
+  text metadata around it goes through `applyToolOutputChunk`
+  (S1). No separate "fast path" that bypasses either gate.
+- `redactSecrets(screenshot.base64)` MUST NOT appear anywhere
+  (text helper applied to binary is a sign the boundary is
+  misunderstood).
 - Look for `data:image/...;base64,` strings in renderer code —
   these may ONLY come from `safeMime + base64` post the
   `decideImageReadOutcome` chokepoint.
 
 **Deferred.**
-- OCR / "what's on screen" extraction: when the runtime extracts
-  text from a screenshot via Vision / accessibility tree, the
-  extracted text MUST also flow through `redactSecrets` before the
-  LLM receives it (covered by S16 below).
+- Per-app sensitivity policy: per-bundle-id denylist (1Password,
+  banking apps, password fields detected via AX tree) where the
+  runtime drops the frame BEFORE upload, BEFORE persistence, and
+  BEFORE display — wired in PR-RUNTIME-CU.
 
-### S16 — Log + screen-state redaction: runtime-side, before LLM sees it
+### S15b — Provider exposure boundary: screen content sent to LLM
+
+**Contract invariant.**
+- macOS TCC permission to capture the screen ≠ user consent to
+  upload that capture to a remote LLM provider. The two are
+  separate gates; the user-facing connection setup that grants
+  CU access to a provider must surface "screenshot uploads will
+  reach this provider" explicitly. (Renderer copy beyond this
+  gate's scope; the gate locks the runtime side.)
+- Any screenshot frame the runtime sends to an LLM/provider call
+  MUST be wrapped in a typed `ComputerUseScreenFrame` (or
+  equivalent) carrying:
+  - the `actionId` that scoped the capture (so the frame belongs
+    to ONE in-flight action; cross-action reuse is invalid),
+  - the source kind (`'live-capture' | 'cached-still'`) so the
+    review path can distinguish a fresh frame from a stale one,
+  - a max-size invariant matching the artifact preview cap
+    (`IMAGE_PAYLOAD_MAX_BYTES` = 2 MB; oversize → sensitivity
+    block, not silent downscale-and-upload).
+- A screenshot frame MUST NOT be persisted raw to the session log.
+  The session log records the action's outcome + a redacted text
+  summary; the raw frame is held in main-process memory for the
+  duration of the action and discarded on action end. If the user
+  saves it explicitly via the artifact pane "Save As" affordance,
+  that's a separate write path the user opts into.
+- The provider route is **explicit**: if a provider does not
+  support image input, OR if the user's account-level vision
+  toggle is off, the CU action returns
+  `error: 'sensitivity_blocked'` with `reason: 'no_vision_route'`.
+  There is NO silent fallback that converts a planned vision
+  call into a text-only call (which would mean the screenshot
+  was silently dropped and the LLM made decisions without seeing
+  it).
+- `sensitivity_blocked` (the closed error from S17) applies
+  BEFORE provider upload, not only before renderer display.
+  A frame the runtime won't render is also a frame the runtime
+  won't upload.
+
+**Source-gate grep.**
+- Provider client call sites that accept `imageContent` /
+  `imageUrl` / `base64Image` parameters: every such call site
+  must consume a `ComputerUseScreenFrame` (or equivalent typed
+  shape), never a raw `string` / `Uint8Array` directly from a
+  capture call.
+- `appendToSessionLog` (or whatever the writer is) must reject
+  raw screenshot payloads. Look for any path that writes
+  `kind: 'image'` content WITH `base64` data into a session log
+  record — that's a contract violation; the log should hold a
+  reference to the artifact id, never the inline frame.
+- "no_vision_route" sensitivity-block path must exist in every
+  provider client that supports vision. Look for capability
+  checks like `if (provider.supportsVision) { … } else { …
+  return error('sensitivity_blocked', 'no_vision_route') }`. No
+  silent fallback to text-only.
+
+**Deferred.**
+- Per-provider differential consent: separate the "I configured
+  this provider" act from the "I let CU upload screenshots to
+  this provider" act. UX surface for the second consent — wired
+  in PR-UI-CU-1.
+- Frame retention metering: how many frames the runtime is
+  allowed to hold in memory across a single LLM turn (a long
+  CU plan = many captures). Default and per-provider limit —
+  wired in PR-RUNTIME-CU.
+
+### S16 — Screen-derived text redaction: runtime-side, before LLM sees it
 
 **Contract invariant.**
 - Any text Maka extracts from a screen — OCR output, AX tree dump,
-  selected-text query result, clipboard sample — MUST run through
-  the runtime's `redactSecrets` (the `@maka/runtime` import of the
-  same helper renderer uses) BEFORE it lands in the LLM's tool
-  result message, BEFORE it lands in the session log, and BEFORE
-  it lands in the artifact pane.
-- Screenshots themselves are NOT text; they don't go through
-  `redactSecrets` (binary image data). But the metadata captured
-  alongside (window title, app bundle id, focused element label,
-  URL bar contents) IS text and IS subject to redaction.
-- The runtime-side redaction is the SOURCE-OF-TRUTH gate. The
-  renderer's `applyToolOutputChunk` secondary redaction (S1) is
-  defense-in-depth, not the primary boundary — CU
-  screen-state can contain credentials the model would never
-  intentionally emit but a capture-without-redaction would leak.
+  selected-text query result, clipboard sample, window title, app
+  bundle id, focused element label, URL bar contents — MUST run
+  through the runtime's `redactSecrets` (the `@maka/runtime`
+  re-export of the same helper the renderer uses) BEFORE it
+  lands in the LLM's tool result message, BEFORE it lands in the
+  session log, and BEFORE it lands in the artifact pane.
+- Scope clarification (refer to S15 / S15b for the non-text path):
+  this gate is **text-only**. Screenshot pixels are not text and
+  flow through the artifact preview registry (S15) for display and
+  the `ComputerUseScreenFrame` provider boundary (S15b) for LLM
+  exposure. Applying `redactSecrets` to a base64 image string is
+  a category error — pixels can carry sensitive content
+  `redactSecrets` cannot see.
+- The runtime-side redaction on screen-derived text is the
+  SOURCE-OF-TRUTH gate. The renderer's `applyToolOutputChunk`
+  secondary redaction (S1) is defense-in-depth, not the primary
+  boundary — CU screen-state can contain credentials the model
+  would never intentionally emit but a capture-without-redaction
+  would leak.
 
 **Source-gate grep.**
 - Every CU action handler in `@maka/runtime` that returns
-  `ToolResultContent` containing screen-derived text must call
+  `ToolResultContent` containing screen-derived TEXT must call
   `redactSecrets(value)` on that text before constructing the
   result. No `JSON.stringify(rawScreenState)` straight into a
   result block.
 - Session log writer must call redact before `appendToLog`;
   look for any path that bypasses the existing log redaction wrap.
+- `redactSecrets(screenshot.base64)` MUST NOT appear (S15 grep
+  also locks this; both gates flag it).
 
 **Deferred.**
 - Per-app redaction policies (e.g. 1Password / browser password
   field detection → drop entirely rather than mask) — beyond
   initial scope; locked here only as a known gap to revisit.
+  Related: per-app pixel-side denylist is the S15 deferred item;
+  these two policies should land in the same runtime PR.
 
 ### S17 — Fail-closed: every gate failure aborts the action, never silently continues
 
