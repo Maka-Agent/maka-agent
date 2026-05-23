@@ -28,6 +28,7 @@ import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 import {
   computeFrameAdvance,
+  prepareSmoothStreamText,
   resolveInitialDisplayedCount,
   segmentGraphemes,
   shouldSnapForBacklog,
@@ -328,5 +329,78 @@ describe('resolveInitialDisplayedCount', () => {
       resolveInitialDisplayedCount({ rawGraphemeCount: 0, streaming: true, snap: false }),
       0,
     );
+  });
+});
+
+describe('prepareSmoothStreamText — secret-prefix safety gate (@kenji msg fbb8f119)', () => {
+  /**
+   * The smoother typewriters PREFIXES of its input. So the trust
+   * contract we want from `prepareSmoothStreamText` is:
+   *   for any raw input containing a known secret pattern,
+   *   no prefix of `prepareSmoothStreamText(raw)` reveals the raw
+   *   secret token.
+   *
+   * Easiest check: ensure `prepared` itself never contains the
+   * raw secret. Since every prefix of `prepared` is a substring of
+   * `prepared`, that's sufficient.
+   */
+  it('masks Authorization: Bearer in raw text', () => {
+    const raw = 'response: Authorization: Bearer sk-test1234567890ABCDEF\nmore text';
+    const prepared = prepareSmoothStreamText(raw);
+    assert.equal(
+      prepared.includes('sk-test1234567890ABCDEF'),
+      false,
+      'raw bearer token must not survive into prepared text',
+    );
+  });
+
+  it('masks bare API-key prefixes', () => {
+    const raw = 'planning to use sk-ant-1234567890abcdefghijklmnopqrstuvwxyz';
+    const prepared = prepareSmoothStreamText(raw);
+    assert.equal(prepared.includes('sk-ant-1234567890abcdefghijklmnopqrstuvwxyz'), false);
+  });
+
+  it('every prefix of prepared output is secret-free', () => {
+    // The contract that matters for the smoother: every typewriter
+    // frame renders some prefix of the prepared text. We can't
+    // enumerate every prefix at runtime, but we can verify the
+    // load-bearing invariant: the SECRET TOKEN does not appear in
+    // the prepared text, so every prefix is by definition free of
+    // the secret token (a string contains a substring iff one of
+    // its prefixes ends with that substring).
+    const raw = 'Authorization: Bearer sk-secret123ABCDEFG more text';
+    const prepared = prepareSmoothStreamText(raw);
+    // Sample 5 prefixes across the prepared length; none should
+    // contain the secret.
+    for (const len of [10, 25, 50, prepared.length - 1, prepared.length]) {
+      const prefix = prepared.slice(0, Math.max(0, len));
+      assert.equal(
+        prefix.includes('sk-secret123ABCDEFG'),
+        false,
+        `prefix length=${len} unexpectedly contains the secret`,
+      );
+    }
+  });
+
+  it('is idempotent on already-redacted text (safe to apply twice)', () => {
+    // Defense-in-depth use case (ReasoningPanel): C0's
+    // `applyThinkingDelta` already redacted the text, then
+    // `prepareSmoothStreamText` runs again in the renderer. Must be
+    // a no-op on already-clean text.
+    const clean = 'normal reasoning step about the math';
+    assert.equal(prepareSmoothStreamText(clean), clean);
+    // And applying twice on a raw-secret input must be stable.
+    const onceMasked = prepareSmoothStreamText('Bearer sk-test1234567890ABCDEF rest');
+    const twiceMasked = prepareSmoothStreamText(onceMasked);
+    assert.equal(twiceMasked, onceMasked);
+  });
+
+  it('returns empty string for non-string input (defensive)', () => {
+    // @ts-expect-error — defensive
+    assert.equal(prepareSmoothStreamText(null), '');
+    // @ts-expect-error — defensive
+    assert.equal(prepareSmoothStreamText(undefined), '');
+    // @ts-expect-error — defensive
+    assert.equal(prepareSmoothStreamText(42), '');
   });
 });

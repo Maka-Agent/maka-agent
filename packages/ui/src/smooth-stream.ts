@@ -43,6 +43,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { redactSecrets } from './redact.js';
 
 const DEFAULT_MIN_CPS = 30;
 const DEFAULT_MAX_CPS = 400;
@@ -376,4 +377,38 @@ function nowMs(): number {
     return performance.now();
   }
   return Date.now();
+}
+
+/**
+ * PR-UI-C1 review fixup (@kenji msg fbb8f119) — pure trust-boundary
+ * gate that callers MUST apply before feeding text to
+ * `useSmoothStreamContent`.
+ *
+ * The smoother typewriters by rendering successive PREFIXES of its
+ * input string. If the raw input contains a partially-emitted
+ * secret (e.g. mid-delta `Authorization: Bearer sk-secret123`), the
+ * smoother would briefly paint each prefix to the DOM — even though
+ * the FULL string would later be masked by the downstream Markdown
+ * redactor. The prefix `Authorization: Bearer s` doesn't match any
+ * secret pattern by itself, so it would leak to the screen for a
+ * frame or two.
+ *
+ * Solution: callers run the raw text through `prepareSmoothStreamText`
+ * BEFORE handing it to `useSmoothStreamContent`. The function
+ * applies `redactSecrets` on the full input, so the smoother only
+ * ever sees already-masked text — every prefix of which is
+ * guaranteed secret-free. The downstream `<Markdown>` (or `<pre>`)
+ * stays in place as defense in depth.
+ *
+ * `redactSecrets` is idempotent on already-masked text, so it's
+ * safe to apply this helper even when the upstream path already
+ * redacted (e.g. ReasoningPanel, where C0's `applyThinkingDelta`
+ * already ran `redactSecrets` on each delta).
+ *
+ * The function is pure and exported so callers can also use it in
+ * tests / non-React contexts to verify the trust boundary.
+ */
+export function prepareSmoothStreamText(raw: string): string {
+  if (typeof raw !== 'string') return '';
+  return redactSecrets(raw);
 }

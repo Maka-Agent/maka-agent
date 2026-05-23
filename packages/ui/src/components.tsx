@@ -35,7 +35,7 @@ import {
   Wifi,
 } from 'lucide-react';
 import { redactSecrets } from './redact.js';
-import { useSmoothStreamContent } from './smooth-stream.js';
+import { prepareSmoothStreamText, useSmoothStreamContent } from './smooth-stream.js';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -2182,8 +2182,18 @@ const STATUS_FOOTER_PRIORITY: Record<TurnFooterActionMeta['id'], 'primary' | 'se
  * the parent only renders it when the stream is in progress.
  */
 function StreamingAssistantBubble(props: { text: string }) {
+  // PR-UI-C1 review fixup (@kenji msg fbb8f119): the smoother
+  // typewriters PREFIXES of its input string. If the raw text
+  // contains a mid-delta secret like `Authorization: Bearer sk-...`,
+  // prefixes such as `Authorization: Bearer s` don't match any
+  // redaction pattern by themselves and would leak to the DOM for
+  // a frame or two before the downstream Markdown redactor sees
+  // the full token. `prepareSmoothStreamText` runs `redactSecrets`
+  // on the FULL raw text BEFORE the smoother sees it, so every
+  // displayed prefix is guaranteed secret-free.
   const snap = useStreamSnap();
-  const { displayed } = useSmoothStreamContent(props.text, {
+  const safeText = prepareSmoothStreamText(props.text);
+  const { displayed } = useSmoothStreamContent(safeText, {
     streaming: true,
     snap,
   });
@@ -2199,8 +2209,14 @@ function ReasoningPanel(props: { text: string; live: boolean; truncated: boolean
   // of the C0 redaction/cap chokepoint. `props.text` is the already-
   // redacted-and-capped buffer (renderer ran it through
   // `applyThinkingDelta` / `applyThinkingComplete` before passing
-  // here), so the smoother is purely a visual frame-pacing layer; it
-  // does NOT see raw event text and cannot widen the trust boundary.
+  // here), so the smoother is purely a visual frame-pacing layer.
+  //
+  // C1 review fixup (@kenji msg fbb8f119) — defense in depth: even
+  // though C0 already redacted, we run `prepareSmoothStreamText`
+  // again before the smoother. `redactSecrets` is idempotent on
+  // already-masked text, and the gate guarantees the smoother
+  // contract ("smoother never sees raw secrets") holds even if a
+  // future change accidentally bypasses the C0 chokepoint.
   //
   // `live=true` means thinking is still flowing (no answer yet) →
   // streaming=true so the smoother typewriters. `live=false` means
@@ -2209,7 +2225,8 @@ function ReasoningPanel(props: { text: string; live: boolean; truncated: boolean
   // also forces snap so deterministic capture sees the final text
   // immediately.
   const snap = useStreamSnap();
-  const { displayed } = useSmoothStreamContent(props.text, {
+  const safeText = prepareSmoothStreamText(props.text);
+  const { displayed } = useSmoothStreamContent(safeText, {
     streaming: props.live,
     snap,
   });
