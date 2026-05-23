@@ -1451,8 +1451,23 @@ function collectCodeText(children: ReactNode): string {
  */
 type DayPeriod = 'morning' | 'noon' | 'afternoon' | 'evening';
 
-function detectDayPeriod(date: Date = new Date()): DayPeriod {
-  const hour = date.getHours();
+/**
+ * PR-UI-LAYOUT-4 / B1-a1 review fixup (@kenji msg 1d7ba56c):
+ * Compute the day-period bucket from a millisecond epoch timestamp,
+ * not from `new Date()`. Visual-smoke fixtures freeze `Date.now()`
+ * to a deterministic value (see `applyVisualSmokeFixture` in
+ * `apps/desktop/src/renderer/main.tsx`) but do NOT freeze the
+ * `Date` constructor itself; reading `new Date()` directly would
+ * pick up the host clock and let screenshot baselines drift at the
+ * 11:00 / 14:00 / 18:00 boundaries.
+ *
+ * Default arg is `Date.now()`, which the visual-smoke renderer
+ * replaces with `state.now`. Tests pass an explicit timestamp.
+ * Exported so the day-period boundary contract is reachable from
+ * `apps/desktop/src/main/__tests__/empty-hero-day-period.test.ts`.
+ */
+export function detectDayPeriod(nowMs: number = Date.now()): DayPeriod {
+  const hour = new Date(nowMs).getHours();
   if (hour < 5) return 'evening';
   if (hour < 11) return 'morning';
   if (hour < 14) return 'noon';
@@ -1560,8 +1575,18 @@ function EmptyChatHero(props: { onPromptSuggestion?(prompt: string): void; userL
           {label ? copy.headlineWithLabel(greeting, label) : copy.headlineFallback(greeting, greetingTail)}
         </h1>
         <p>{copy.intro}</p>
-        <span className="maka-hero-palette-hint" aria-hidden="true">
-          <kbd>⌘</kbd><kbd>K</kbd>
+        {/* PR-UI-LAYOUT-5b / B1-a1 review fixup (@kenji msg 708255f3):
+         *   - Outer wrapper is NOT `aria-hidden` — the hint copy
+         *     announces a real keyboard shortcut and command-palette
+         *     entrypoint to assistive tech users; hiding it strips
+         *     real navigation info from the AT tree.
+         *   - Only the visual `<kbd>` glyphs are aria-hidden (their
+         *     content reads noisily as "command K"); the textual hint
+         *     stays in the AT tree.
+         *   - `aria-keyshortcuts` lets AT users know the chord without
+         *     parsing the visual `<kbd>` glyphs. */}
+        <span className="maka-hero-palette-hint" aria-keyshortcuts="Meta+K">
+          <kbd aria-hidden="true">⌘</kbd><kbd aria-hidden="true">K</kbd>
           <span>{copy.paletteHint}</span>
         </span>
       </header>

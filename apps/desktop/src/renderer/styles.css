@@ -2257,8 +2257,10 @@ button:active {
  * EmptyChatHero — analog of 牛马AI's "Space 可以随时唤起 AI 输入"
  * hint. Calm muted styling so it reads as a hint, not a CTA;
  * gap between kbd glyphs uses the existing kbd token chrome
- * (PR-UI-10). Hidden from a11y tree because the actual
- * shortcut is exposed via the command palette dialog. */
+ * (PR-UI-10). B1-a1 review fixup (@kenji msg 708255f3): the hint
+ * is NOT aria-hidden — it announces a real keyboard shortcut and
+ * navigation entrypoint, hiding it strips real info from the AT
+ * tree. Use `aria-keyshortcuts="Meta+K"` instead. */
 .maka-hero-palette-hint {
   display: inline-flex;
   align-items: center;
@@ -2266,17 +2268,32 @@ button:active {
   margin-top: 14px;
   padding: 6px 10px 6px 8px;
   border: 1px dashed var(--border);
-  border-radius: 999px;
+  border-radius: 14px;
   background: oklch(from var(--foreground) l c h / 0.03);
   color: var(--foreground-60);
   font-size: 12px;
-  width: fit-content;
+  /* B1-a1 review fixup (@kenji msg 708255f3): narrow-pane safety.
+   * `width: fit-content` clamped the pill to a single-line size;
+   * combined with `white-space: nowrap` on the child span this
+   * overflowed at smaller viewports (the long en/zh hint copy
+   * easily exceeds 990px hero width). Now we cap at the hero
+   * column width, allow the chip itself to grow up to that cap,
+   * and let the text wrap inside. `border-radius` drops from
+   * `999px` (pill-only) to `14px` (rounded-rect) so a 2-line wrap
+   * doesn't look like a smashed pill. */
+  max-width: 100%;
 }
 .maka-hero-palette-hint kbd {
   font-size: 11px;
+  /* Keep glyphs grouped on one line even when the text wraps. */
+  flex: 0 0 auto;
 }
 .maka-hero-palette-hint > span {
-  white-space: nowrap;
+  /* Allow the hint copy to wrap inside the chip on narrow panes.
+   * Was `white-space: nowrap`, which caused overflow at <990px. */
+  white-space: normal;
+  min-width: 0;
+  line-height: 1.4;
 }
 
 .message > span {
