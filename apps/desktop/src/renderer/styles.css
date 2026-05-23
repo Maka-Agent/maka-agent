@@ -4902,7 +4902,12 @@ button:active {
     transform 140ms var(--ease-out-strong);
 }
 
-.providerCatalogCard:hover {
+/* PR-UI-LAYOUT-15 fixup (@kenji review @msg 0e7482e5):
+ * Interactive states MUST be scoped to enabled cards. A disabled
+ * provider tile that lifts + halos on hover/focus looks actionable
+ * — exactly the misrepresentation the provider-surface gate
+ * forbids ("不可用/coming soon/gated provider 不能呈现为可点击"). */
+.providerCatalogCard:hover:not([data-disabled="true"]) {
   border-color: oklch(from var(--accent) l c h / 0.28);
   background: oklch(from var(--accent) l c h / 0.04);
   transform: translateY(-1px);
@@ -4915,7 +4920,7 @@ button:active {
   transform: translateY(0) scale(0.99);
 }
 
-.providerCatalogCard:focus-visible {
+.providerCatalogCard:focus-visible:not([data-disabled="true"]) {
   outline: none;
   border-color: oklch(from var(--accent) l c h / 0.42);
   box-shadow: 0 0 0 3px oklch(from var(--accent) l c h / 0.14);
@@ -4923,6 +4928,19 @@ button:active {
 
 .providerCatalogCard[data-disabled="true"] {
   opacity: 0.72;
+  cursor: not-allowed;
+}
+
+/* PR-UI-LAYOUT-15 fixup (@kenji review @msg 0e7482e5):
+ * Disabled cards still need keyboard focus feedback (a11y) — but
+ * the indicator MUST NOT suggest actionability. Muted variant: a
+ * neutral border color shift, no accent halo, no lift, no scale.
+ * The 1.5px outline-offset keeps the indicator visible against the
+ * card chrome without competing with the accent halo used on
+ * enabled cards. */
+.providerCatalogCard[data-disabled="true"]:focus-visible {
+  outline: 1.5px dashed var(--foreground-40);
+  outline-offset: 2px;
 }
 
 .providerIcon {
@@ -5622,13 +5640,18 @@ button:active {
     box-shadow 160ms ease;
 }
 
-.providerMarketGrid .providerCatalogCard:hover {
+/* PR-UI-PROV-POLISH fixup v3 (@xuan source-gate msg d2fdec44):
+ * Older PR-UI-1 rules also need the disabled guard so the
+ * grep-level gate ("any providerCatalogCard hover/active rule that
+ * applies actionable affordance must exclude disabled cards") holds
+ * file-wide, not just for the new LAYOUT-15 rules above. */
+.providerMarketGrid .providerCatalogCard:hover:not([data-disabled="true"]) {
   transform: translateY(-1px);
   border-color: oklch(from var(--accent) l c h / 0.2);
   box-shadow: 0 12px 28px oklch(0.35 0.02 90 / 0.08);
 }
 
-.providerCatalogCard:active {
+.providerCatalogCard:active:not([data-disabled="true"]) {
   transform: translateY(1px);
 }
 
