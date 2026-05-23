@@ -416,9 +416,27 @@ export function normalizeSettings(input: unknown): AppSettings {
     // Critical: this MUST NOT silently reset other appearance fields
     // (theme / density). We only override palette when it fails the
     // type guard; everything else keeps mergeSettings's behavior.
+    // PR-UI-D1 + PR-UI-D2 (@kenji msg 68bf2b13 / eef6f7a5): closed-
+    // enum fail-closed for both `appearance.palette` and
+    // `appearance.toastPosition`. mergeSettings spreads the raw user
+    // value straight in, so an unknown/garbage palette string would
+    // otherwise survive the normalize pass and end up driving
+    // `[data-maka-theme="evil-unknown"]` on the renderer with no
+    // matching CSS block (palette case), or position toasts in an
+    // unstyled corner (toastPosition case). Validate each against its
+    // closed allowlist and fall back to defaults on any miss
+    // (undefined, non-string, unknown string).
+    //
+    // Critical: this MUST NOT silently reset other appearance fields
+    // (theme / density). We only override the offending field when it
+    // fails the type guard; everything else keeps mergeSettings's
+    // behavior.
     appearance: {
       ...base.appearance,
       palette: isThemePalette(base.appearance.palette) ? base.appearance.palette : 'default',
+      toastPosition: isToastPosition(base.appearance.toastPosition)
+        ? base.appearance.toastPosition
+        : 'bottom-right',
     },
     botChat: {
       channels: Object.fromEntries(
@@ -430,16 +448,6 @@ export function normalizeSettings(input: unknown): AppSettings {
           ];
         }),
       ) as Record<BotProvider, BotChannelSettings>,
-    },
-    appearance: {
-      ...base.appearance,
-      // PR-UI-16: reject any toastPosition that doesn't match the closed
-      // enum. Without this guard, a manually-edited settings.json could
-      // leave the toast viewport without a corresponding CSS rule and
-      // toasts would render in an unstyled corner.
-      toastPosition: isToastPosition(base.appearance.toastPosition)
-        ? base.appearance.toastPosition
-        : 'bottom-right',
     },
     onboarding: {
       milestones: sanitizeOnboardingMilestones(rawMilestones),

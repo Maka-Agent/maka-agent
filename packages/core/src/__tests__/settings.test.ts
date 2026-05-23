@@ -2,9 +2,11 @@ import { describe, test } from 'node:test';
 import { expect } from '../test-helpers.js';
 import {
   THEME_PALETTES,
+  TOAST_POSITIONS,
   createDefaultBotChannel,
   createDefaultSettings,
   isThemePalette,
+  isToastPosition,
   mergeSettings,
   normalizeSettings,
 } from '../settings.js';
@@ -203,5 +205,158 @@ describe('theme palette settings contract (PR-UI-D1, @kenji msg 68bf2b13)', () =
     });
     const normalized = normalizeSettings(patched);
     expect(normalized.appearance.palette).toBe('default');
+  });
+});
+
+describe('toast position settings contract (PR-UI-D2, @kenji msg eef6f7a5)', () => {
+  test('TOAST_POSITIONS allowlist has 6 entries (grid corners)', () => {
+    expect(TOAST_POSITIONS.length).toBe(6);
+    expect(TOAST_POSITIONS.includes('top-left')).toBe(true);
+    expect(TOAST_POSITIONS.includes('top-center')).toBe(true);
+    expect(TOAST_POSITIONS.includes('top-right')).toBe(true);
+    expect(TOAST_POSITIONS.includes('bottom-left')).toBe(true);
+    expect(TOAST_POSITIONS.includes('bottom-center')).toBe(true);
+    expect(TOAST_POSITIONS.includes('bottom-right')).toBe(true);
+  });
+
+  test('isToastPosition accepts allowlist values, rejects everything else', () => {
+    for (const pos of TOAST_POSITIONS) {
+      expect(isToastPosition(pos)).toBe(true);
+    }
+    expect(isToastPosition('evil-corner')).toBe(false);
+    expect(isToastPosition('')).toBe(false);
+    expect(isToastPosition(undefined)).toBe(false);
+    expect(isToastPosition(null)).toBe(false);
+    expect(isToastPosition(42)).toBe(false);
+    expect(isToastPosition({ toastPosition: 'top-left' })).toBe(false);
+    expect(isToastPosition([])).toBe(false);
+    // Case-sensitive: TypeScript union is exact-case, runtime guard must agree.
+    expect(isToastPosition('Top-Left')).toBe(false);
+    expect(isToastPosition('TOP-RIGHT')).toBe(false);
+    // No abbreviations / no synonyms.
+    expect(isToastPosition('top')).toBe(false);
+    expect(isToastPosition('center')).toBe(false);
+    expect(isToastPosition('topleft')).toBe(false);
+  });
+
+  test('createDefaultSettings seeds toastPosition as `bottom-right`', () => {
+    const defaults = createDefaultSettings();
+    expect(defaults.appearance.toastPosition).toBe('bottom-right');
+  });
+
+  test('migration: settings.json without `toastPosition` field loads with bottom-right', () => {
+    // Pre-PR-UI-D2 settings.json had no `appearance.toastPosition`.
+    // normalizeSettings must seed `bottom-right` (preserves v1
+    // behavior) without touching theme/density/palette.
+    const legacy = {
+      appearance: {
+        theme: 'dark' as const,
+        density: 'compact' as const,
+        palette: 'onedark' as const,
+        // no toastPosition field
+      },
+    };
+    const normalized = normalizeSettings(legacy);
+    expect(normalized.appearance.toastPosition).toBe('bottom-right');
+    expect(normalized.appearance.theme).toBe('dark');
+    expect(normalized.appearance.density).toBe('compact');
+    expect(normalized.appearance.palette).toBe('onedark');
+  });
+
+  test('fail-closed: unknown toastPosition string falls back to bottom-right', () => {
+    const malformed = {
+      appearance: {
+        theme: 'auto' as const,
+        density: 'comfortable' as const,
+        toastPosition: 'evil-corner',
+      },
+    };
+    const normalized = normalizeSettings(malformed);
+    expect(normalized.appearance.toastPosition).toBe('bottom-right');
+  });
+
+  test('fail-closed: non-string toastPosition falls back to bottom-right', () => {
+    for (const bad of [42, true, null, {}, []]) {
+      const malformed = {
+        appearance: {
+          theme: 'auto' as const,
+          density: 'comfortable' as const,
+          toastPosition: bad,
+        },
+      };
+      const normalized = normalizeSettings(malformed);
+      expect(normalized.appearance.toastPosition).toBe('bottom-right');
+    }
+  });
+
+  test('valid toastPosition survives normalize untouched', () => {
+    for (const pos of TOAST_POSITIONS) {
+      const input = {
+        appearance: {
+          theme: 'auto' as const,
+          density: 'comfortable' as const,
+          toastPosition: pos,
+        },
+      };
+      const normalized = normalizeSettings(input);
+      expect(normalized.appearance.toastPosition).toBe(pos);
+    }
+  });
+
+  test('toastPosition validation does NOT silently reset unrelated settings fields', () => {
+    // @kenji gate: "no silent reset of unrelated settings". Even with
+    // a malformed toastPosition, all other fields (theme, density,
+    // palette, personalization, network) must keep their values.
+    const input = {
+      appearance: {
+        theme: 'dark' as const,
+        density: 'spacious' as const,
+        palette: 'tokyo-night' as const,
+        toastPosition: 'evil-corner',
+      },
+      personalization: {
+        displayName: 'Yuejing',
+        assistantTone: 'concise',
+      },
+    };
+    const normalized = normalizeSettings(input);
+    expect(normalized.appearance.toastPosition).toBe('bottom-right');
+    expect(normalized.appearance.theme).toBe('dark');
+    expect(normalized.appearance.density).toBe('spacious');
+    expect(normalized.appearance.palette).toBe('tokyo-night');
+    expect(normalized.personalization.displayName).toBe('Yuejing');
+    expect(normalized.personalization.assistantTone).toBe('concise');
+  });
+
+  test('mergeSettings carries toastPosition through patch surface', () => {
+    const current = createDefaultSettings();
+    const patched = mergeSettings(current, { appearance: { toastPosition: 'top-center' } });
+    expect(patched.appearance.toastPosition).toBe('top-center');
+    expect(patched.appearance.theme).toBe('auto'); // unchanged
+    expect(patched.appearance.palette).toBe('default'); // unchanged
+  });
+
+  test('mergeSettings + normalizeSettings: patching with unknown toastPosition ends up at default', () => {
+    const current = createDefaultSettings();
+    const patched = mergeSettings(current, {
+      appearance: { toastPosition: 'evil-corner' as 'bottom-right' /* coerced for test */ },
+    });
+    const normalized = normalizeSettings(patched);
+    expect(normalized.appearance.toastPosition).toBe('bottom-right');
+  });
+
+  test('palette + toastPosition both malformed → both fall back independently to defaults', () => {
+    // Cross-contract sanity: D1 + D2 normalizers don't interfere.
+    const input = {
+      appearance: {
+        theme: 'auto' as const,
+        density: 'comfortable' as const,
+        palette: 'evil-unknown',
+        toastPosition: 'evil-corner',
+      },
+    };
+    const normalized = normalizeSettings(input);
+    expect(normalized.appearance.palette).toBe('default');
+    expect(normalized.appearance.toastPosition).toBe('bottom-right');
   });
 });
