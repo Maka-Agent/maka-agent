@@ -273,18 +273,30 @@ button:active {
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 4px;
+  /* PR-UI-LAYOUT-39: clear button radius 4 → 6 + focus ring +
+   * smooth transition. The "×" clear is a 18×18 icon button
+   * inside the search wrapper; keyboard tab into it had no
+   * visible focus before. */
+  border-radius: 6px;
   background: transparent;
   color: var(--foreground-50);
   cursor: pointer;
   font-size: 16px;
   line-height: 1;
   padding: 0;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 
 .maka-session-search-clear:hover {
   color: var(--foreground);
   background: var(--foreground-5);
+}
+
+.maka-session-search-clear:focus-visible {
+  outline: none;
+  color: var(--foreground);
+  background: var(--foreground-5);
+  box-shadow: 0 0 0 3px oklch(from var(--accent) l c h / 0.14);
 }
 
 .maka-session-list {
