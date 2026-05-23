@@ -49,7 +49,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, copyFile, readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -345,7 +345,23 @@ async function writeCaptureSidecar(pngPath, meta) {
   await writeFile(sidecarPath, JSON.stringify(meta, null, 2) + '\n', 'utf8');
 }
 
-main().catch((err) => {
-  console.error('[capture-screenshots] fatal:', err);
-  process.exit(2);
-});
+/**
+ * PR-UI-VISUAL-SMOKE-LOCALE follow-up (@xuan merge gate
+ * msg af4d60e3): standard Node.js entrypoint guard so importing
+ * exported helpers (e.g. `resolveCaptureLocale`) from this module
+ * doesn't unconditionally trigger the CLI `main()`. Without this
+ * guard, any test or sibling script that imports the helper hits
+ * the script's "specify either --all or --scenario <name>" arg
+ * check and exits with code 2. `main()` now only runs when the
+ * module is invoked directly via `node scripts/capture-screenshots.mjs`.
+ */
+const isDirectInvocation =
+  typeof process.argv[1] === 'string' &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isDirectInvocation) {
+  main().catch((err) => {
+    console.error('[capture-screenshots] fatal:', err);
+    process.exit(2);
+  });
+}
