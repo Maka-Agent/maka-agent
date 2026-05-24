@@ -4650,6 +4650,76 @@ button:active {
   line-height: 1.5;
 }
 
+.settingsAuthContract {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--foreground-3);
+}
+
+.settingsAuthContractText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settingsAuthContractText strong {
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.settingsAuthContractText span {
+  color: var(--foreground-60);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.settingsAuthContractBadge,
+.settingsAuthActionPill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.settingsAuthContractBadge {
+  padding: 2px 9px;
+  background: var(--foreground-5);
+  color: var(--foreground-60);
+}
+
+.settingsAuthContractBadge[data-tone="success"],
+.settingsAuthActionPill[data-tone="success"] {
+  background: oklch(from var(--success) l c h / 0.12);
+  color: var(--success);
+}
+
+.settingsAuthContractBadge[data-tone="info"],
+.settingsAuthActionPill[data-tone="info"] {
+  background: oklch(from var(--info) l c h / 0.14);
+  color: var(--info-text);
+}
+
+.settingsAuthContractBadge[data-tone="warning"],
+.settingsAuthActionPill[data-tone="warning"] {
+  background: oklch(from var(--info) l c h / 0.18);
+  color: var(--info-text);
+}
+
+.settingsAuthContractBadge[data-tone="destructive"],
+.settingsAuthActionPill[data-tone="destructive"] {
+  background: oklch(from var(--destructive) l c h / 0.14);
+  color: var(--destructive);
+}
+
 .settingsConnectionMeta {
   margin: 0;
   display: flex;
@@ -4661,9 +4731,21 @@ button:active {
 
 .settingsConnectionActions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  align-items: center;
   gap: 8px;
   margin-top: 4px;
+}
+
+.settingsAuthActionPill {
+  padding: 2px 9px;
+  background: var(--foreground-5);
+  color: var(--foreground-60);
+}
+
+.settingsAuthActionPill[data-kind="roadmap"] {
+  border: 1px dashed oklch(from var(--info) l c h / 0.30);
 }
 
 .providerEmpty,
