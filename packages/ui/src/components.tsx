@@ -772,11 +772,19 @@ export function SearchModal(props: {
           </button>
         </header>
         <div className="maka-search-modal-body">
+          {/*
+            PR-SIDEBAR-IA-0 Phase 3 P0 fixup v3 (xuan `a4c98a2a`):
+            modal body copy stays product-semantic — no internal
+            phase / implementation / module names. The next PR
+            wires the real search backend; until then the
+            placeholder describes the user-facing outcome
+            ("即将可用") without exposing engineering terminology.
+          */}
           <p className="maka-search-modal-placeholder">
-            搜索弹窗即将可用：下一步会接入会话内容搜索。
+            会话内容搜索即将可用。
           </p>
           <p className="maka-search-modal-placeholder-detail">
-            Phase 4 会在这里增加搜索框、结果列表，以及 incognito 隐私状态处理。
+            后续版本会在这里支持按关键词查找历史对话。
           </p>
         </div>
       </div>

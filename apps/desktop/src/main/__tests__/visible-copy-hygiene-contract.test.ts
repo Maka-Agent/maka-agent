@@ -78,14 +78,65 @@ const FORBIDDEN_VISIBLE_COPY: ForbiddenCopy[] = [
     reason:
       "mixed-language eyebrow (English uppercase prefix followed by Chinese) drifted from the rest of the Chinese-first surface (kenji `08be08d8` #4). Use a Chinese-only eyebrow on zh-locale entries; en-locale entries staying all-English is fine.",
   },
+  {
+    label: 'internal phase / PR name leaked into user-visible text',
+    // Match `Phase <N>` after comments have been stripped (see
+    // `stripComments` below). Phase identifiers are engineering-
+    // plan vocabulary and must never surface to users.
+    needle: /Phase\s+\d/,
+    reason:
+      "user-visible text must not expose internal phase identifiers like `Phase 4` (xuan `a4c98a2a`). Use product-semantic copy describing the outcome, not the engineering plan. Stripping source comments means this fires only when `Phase N` actually lands in JSX text or string literals.",
+  },
+  {
+    label: 'engineering term `incognito` leaked into user-visible text',
+    needle: /incognito/i,
+    reason:
+      "user-visible text must not expose internal engineering terms like `incognito` (xuan `a4c98a2a`). Describe the user-facing privacy state in Chinese product terms (e.g. `隐私` / `隐身`) instead. Stripping source comments means this fires only when `incognito` actually lands in JSX text or string literals.",
+  },
 ];
+
+/**
+ * Strip TypeScript / JavaScript comments from `src` so the hygiene
+ * gates only inspect ACTIVE source code (JSX text, string literals,
+ * identifiers) — not the comments that explain why a string was
+ * removed in the first place.
+ *
+ * Order matters: strip block comments (`/* ... *\/`) first so the
+ * line-comment pass doesn't choke on `//` sequences inside them.
+ * The same string is passed through three stripping passes:
+ *   1. Block comments `/* ... *\/` (non-greedy, including newlines).
+ *   2. JSX block comments `{/* ... *\/}` (also non-greedy + newline-safe).
+ *   3. Line comments `// ...\n` (per-line tail).
+ *
+ * Naive — does NOT respect string literals or template literals
+ * containing the comment delimiter sequences. The files this test
+ * scans have no such legitimate sequences in code (only inside
+ * source comments we're already stripping), so the bias is safe.
+ */
+function stripComments(src: string): string {
+  let out = src;
+  // 1. Block comments — `/* ... */` across lines.
+  out = out.replace(/\/\*[\s\S]*?\*\//g, '');
+  // 2. JSX block-comment expressions `{/* ... */}` left over from
+  //    step 1 (after the `/* */` is stripped, the wrapper braces
+  //    may remain as `{}`). Drop the empty braces too so they don't
+  //    confuse later JSX-text heuristics.
+  out = out.replace(/\{\s*\}/g, '');
+  // 3. Line comments — `// ...` to end of line. Anchor on a
+  //    leading non-`:` character so URL schemes like `http://`
+  //    aren't accidentally stripped (this codebase has none in the
+  //    scanned files, but keep the guard for safety).
+  out = out.replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  return out;
+}
 
 describe('visible-copy hygiene contract (PR-SIDEBAR-IA-0 Phase 3 P0 fixup v2)', () => {
   for (const entry of FORBIDDEN_VISIBLE_COPY) {
     it(`forbidden copy "${entry.label}" does NOT appear in any visible source file`, async () => {
       const offenders: Array<{ path: string; match: string }> = [];
       for (const path of FILES_TO_SCAN) {
-        const src = await readFile(path, 'utf8');
+        const raw = await readFile(path, 'utf8');
+        const src = stripComments(raw);
         const match = entry.needle.exec(src);
         if (match) {
           offenders.push({ path, match: match[0]! });
