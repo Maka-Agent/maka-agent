@@ -712,7 +712,8 @@ const STUB_VIEWS: Record<
 
 /**
  * PR-SIDEBAR-IA-0 Phase 2 fixup (xuan `91401163` + kenji `6465cf22`,
- * `7c320898`): Search modal SHELL.
+ * `7c320898`) + Phase 3 P0 fixup (WAWQAQ msg `d53852ac`, xuan
+ * `558f1356`, kenji `3ddc91fe`): Search modal SHELL.
  *
  * Renders a centered dialog with the title `搜索` and a single
  * placeholder line. Phase 4 will replace the placeholder body with
@@ -720,6 +721,18 @@ const STUB_VIEWS: Record<
  * `6465cf22` listed (plain text snippet / no history / no
  * `maka://session` / `incognito_active` blocked state / async race +
  * unmount safety).
+ *
+ * Lifecycle contract: SearchModal MUST be conditionally mounted by
+ * the parent (`{open && <SearchModal onClose={...} />}`), NOT
+ * always-mounted with an `open` prop. The previous pattern
+ * (`<SearchModal open=... />` with an internal `if (!open) return
+ * null`) sat hooks before a conditional return; while React allows
+ * this in principle, in production WAWQAQ hit a React #310 hook
+ * order mismatch via the same surface (msg `d53852ac`). Matching
+ * `KeyboardHelpModal`'s conditional-mount pattern eliminates the
+ * "hooks before early return" class of bug entirely — there's no
+ * way for a future hook addition to drift past a stale return
+ * statement.
  *
  * Gate per kenji `7c320898`:
  *   - role="dialog" / aria-modal="true" / explicit title.
@@ -729,12 +742,10 @@ const STUB_VIEWS: Record<
  *     the query, does NOT write history.
  */
 export function SearchModal(props: {
-  open: boolean;
   onClose(): void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalA11y(dialogRef, props.onClose);
-  if (!props.open) return null;
   return (
     <div
       className="maka-modal-backdrop maka-search-modal-backdrop"

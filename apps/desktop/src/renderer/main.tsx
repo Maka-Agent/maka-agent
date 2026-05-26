@@ -1612,7 +1612,15 @@ function AppShell(props: {
         />
       )}
       {helpOpen && <KeyboardHelpModal onClose={closeHelp} />}
-      <SearchModal open={searchModalOpen} onClose={() => setSearchModalOpen(false)} />
+      {/*
+        PR-SIDEBAR-IA-0 Phase 3 P0 fixup (WAWQAQ msg `d53852ac`):
+        SearchModal must be conditionally mounted, not always
+        mounted with an internal `if (!open) return null`. Matches
+        `KeyboardHelpModal` lifecycle pattern above and removes the
+        hooks-before-early-return shape that React #310 punished
+        in WAWQAQ's run.
+      */}
+      {searchModalOpen && <SearchModal onClose={() => setSearchModalOpen(false)} />}
       {paletteOpen && (
         <CommandPalette
           onClose={closePalette}
