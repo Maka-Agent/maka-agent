@@ -20,6 +20,7 @@
     "./health": "./dist/health.js",
     "./search": "./dist/search.js",
     "./memory": "./dist/memory.js",
+    "./voice": "./dist/voice.js",
     "./backend-types": "./dist/backend-types.js",
     "./llm-connections": "./dist/llm-connections.js",
     "./connection-readiness": "./dist/connection-readiness.js",
