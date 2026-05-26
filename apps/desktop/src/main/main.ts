@@ -331,6 +331,14 @@ async function createWindow(): Promise<void> {
     title: 'Maka',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 24, y: 24 },
+    // PR-SIDEBAR-IA-0 Phase 3 P0 fixup v5 (WAWQAQ msg `5b85fdb1`,
+    // xuan `eea556cd`): explicit `resizable: true` so a future
+    // patch can't silently disable window edge resize. Default is
+    // already `true`, but pinning it here removes the ambiguity
+    // and makes the intent obvious to reviewers; CSS-level fixes
+    // (see `app-region-hygiene-contract.test.ts`) cover the
+    // renderer side of the same gate.
+    resizable: true,
     backgroundColor: initialBg,
     webPreferences: {
       preload: join(import.meta.dirname, '..', 'preload', 'preload.cjs'),
