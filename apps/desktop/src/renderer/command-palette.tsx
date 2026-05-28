@@ -21,6 +21,7 @@ import {
   Plug,
   Plus,
   Settings as SettingsIcon,
+  ShieldCheck,
   Sparkles,
   Sun,
   SunMoon,
@@ -99,6 +100,14 @@ export function buildCommandList(args: {
    * this to `window.maka.memory.openFile()`.
    */
   onOpenLocalMemoryFile?(): Promise<void> | void;
+  /**
+   * PR-CMD-PALETTE-PERMISSION-MODE-0: switch the active session's
+   * permission mode from anywhere via ⌘K. Only registers when both
+   * a callback and an active session id are wired. Mirrors the
+   * PermissionModeSwitcher in the chat header.
+   */
+  onSetPermissionMode?(mode: 'explore' | 'ask' | 'execute'): Promise<void> | void;
+  activePermissionMode?: 'explore' | 'ask' | 'execute';
   /**
    * PR-CMD-PALETTE-ENRICH-0: jump to a sidebar module (会话 / 计划 /
    * 技能 / 每日回顾) directly from the palette. Search itself is
@@ -292,6 +301,27 @@ export function buildCommandList(args: {
       keywords: ['memory', 'md', 'open', '记忆', '本地', '编辑', 'edit'],
       run: () => void args.onOpenLocalMemoryFile!(),
     });
+  }
+  if (args.onSetPermissionMode && args.activeSessionId) {
+    const setMode = args.onSetPermissionMode;
+    const current = args.activePermissionMode;
+    const modes: Array<{ id: 'explore' | 'ask' | 'execute'; label: string; hintCopy: string }> = [
+      { id: 'explore', label: '权限 · 探索', hintCopy: 'explore · 只读 / 安全 shell' },
+      { id: 'ask', label: '权限 · 问我', hintCopy: 'ask · 每条工具确认（默认）' },
+      { id: 'execute', label: '权限 · 自动', hintCopy: 'execute · 不可逆仍提示' },
+    ];
+    for (const entry of modes) {
+      cmds.push({
+        id: `perm:set-${entry.id}`,
+        kind: 'action',
+        label: entry.label,
+        hint: current === entry.id ? '当前' : entry.hintCopy,
+        group: '权限',
+        Icon: ShieldCheck,
+        keywords: [entry.id, 'permission', 'mode', '权限', '模式'],
+        run: () => void setMode(entry.id),
+      });
+    }
   }
   if (args.onTestConnection && args.defaultSlug) {
     const defaultConnection = args.connections.find((c) => c.slug === args.defaultSlug);

@@ -1994,6 +1994,8 @@ function AppShell(props: {
                 toastApi.error('打开失败', err instanceof Error ? err.message : '路径无效');
               }
             },
+            onSetPermissionMode: (mode) => void setPermissionMode(mode),
+            activePermissionMode: activeSessionForView?.permissionMode,
             onCopyTodayDailyReview: async () => {
               try {
                 const summary = await dailyReviewBridge.fetchDay(0, 1);
