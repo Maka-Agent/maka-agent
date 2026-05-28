@@ -109,6 +109,13 @@ export function buildCommandList(args: {
   onSetPermissionMode?(mode: 'explore' | 'ask' | 'execute'): Promise<void> | void;
   activePermissionMode?: 'explore' | 'ask' | 'execute';
   /**
+   * PR-CMD-PALETTE-PASTE-DAILY-REVIEW-0: fetch today's review and
+   * paste the Markdown into the composer instead of the clipboard.
+   * Useful when the user wants to ask the model "summarize my day"
+   * without leaving the chat.
+   */
+  onPasteTodayDailyReviewIntoComposer?(): Promise<void> | void;
+  /**
    * PR-CMD-PALETTE-ENRICH-0: jump to a sidebar module (会话 / 计划 /
    * 技能 / 每日回顾) directly from the palette. Search itself is
    * already covered by the existing thread-search hookup, so the
@@ -288,6 +295,18 @@ export function buildCommandList(args: {
       Icon: CalendarDays,
       keywords: ['daily', 'review', 'today', 'copy', 'markdown', '今日', '回顾', '复制', '剪贴板'],
       run: () => void args.onCopyTodayDailyReview!(),
+    });
+  }
+  if (args.onPasteTodayDailyReviewIntoComposer && args.activeSessionId) {
+    cmds.push({
+      id: 'diag:paste-today-daily-review',
+      kind: 'action',
+      label: '把今日回顾粘到 composer',
+      hint: '不进剪贴板',
+      group: '诊断',
+      Icon: CalendarDays,
+      keywords: ['daily', 'review', 'paste', 'composer', '今日', '回顾', '粘贴', '输入框'],
+      run: () => void args.onPasteTodayDailyReviewIntoComposer!(),
     });
   }
   if (args.onOpenLocalMemoryFile) {

@@ -2012,6 +2012,18 @@ function AppShell(props: {
                 );
               }
             },
+            onPasteTodayDailyReviewIntoComposer: async () => {
+              try {
+                const summary = await dailyReviewBridge.fetchDay(0, 1);
+                const markdown = formatDailyReviewMarkdown(summary, '今天');
+                composerRef.current?.setText(markdown);
+              } catch (err) {
+                toastApi.error(
+                  '粘贴失败',
+                  err instanceof Error ? err.message : '加载今日回顾失败',
+                );
+              }
+            },
           })}
         />
       )}
