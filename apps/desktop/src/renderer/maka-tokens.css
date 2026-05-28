@@ -746,6 +746,27 @@
     font-weight: 600;
   }
 
+  /* PR-CHAT-NON-DEFAULT-MODEL-CHIP-0: emphasize a per-turn model
+     switch. The chip itself gets a warning border + the "切换"
+     pill renders inside the chip in warning tone so the user
+     notices that this turn departed from the sticky session model
+     (kenji 3-way decision lock). */
+  .maka-turn-summary-chip[data-kind="model"][data-switched="true"] {
+    border-color: oklch(from var(--warning, var(--accent)) l c h / 0.45);
+    background: oklch(from var(--warning, var(--accent)) l c h / 0.08);
+  }
+
+  .maka-turn-summary-chip-switched {
+    margin-left: 5px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: oklch(from var(--warning, var(--accent)) l c h / 0.20);
+    color: var(--warning-text, var(--accent));
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
   /* Optional reasoning block — collapsed by default, expandable to inspect
    * the model's chain of thought without cluttering the answer. */
   .maka-turn-thinking {

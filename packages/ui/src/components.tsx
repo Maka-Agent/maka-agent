@@ -2176,18 +2176,33 @@ export function ChatView(props: {
           {chat.length === 0 && !props.streamingText && (
             props.emptyOverride ?? <EmptyChatHero onPromptSuggestion={props.onPromptSuggestion} userLabel={props.userLabel} />
           )}
-          {turns.map((turn) => (
-            <TurnView
-              key={turn.turnId}
-              turn={turn}
-              userLabel={props.userLabel}
-              footerActions={props.turnFooterActionsByTurn?.[turn.turnId]}
-              onFooterAction={(actionId) => props.onTurnFooterAction?.(turn.turnId, actionId)}
-              failedReasonLabel={props.turnFailedReasonLabels?.[turn.turnId]}
-              lineageBadges={props.turnLineageBadgesByTurn?.[turn.turnId]}
-              onLineageBadgeClick={props.onLineageBadgeClick}
-            />
-          ))}
+          {turns.map((turn, idx) => {
+            // PR-CHAT-NON-DEFAULT-MODEL-CHIP-0: previous turn's
+            // assistant modelId so TurnSummary can render a "切换"
+            // pill when this turn used a different model.
+            // Supports kenji's "per-turn override allowed but
+            // must be visible" requirement on PR-SESSION-STICKY-MODEL-0.
+            const previousModelId = (() => {
+              for (let i = idx - 1; i >= 0; i--) {
+                const earlier = turns[i];
+                if (earlier && earlier.modelId) return earlier.modelId;
+              }
+              return undefined;
+            })();
+            return (
+              <TurnView
+                key={turn.turnId}
+                turn={turn}
+                userLabel={props.userLabel}
+                footerActions={props.turnFooterActionsByTurn?.[turn.turnId]}
+                onFooterAction={(actionId) => props.onTurnFooterAction?.(turn.turnId, actionId)}
+                failedReasonLabel={props.turnFailedReasonLabels?.[turn.turnId]}
+                lineageBadges={props.turnLineageBadgesByTurn?.[turn.turnId]}
+                onLineageBadgeClick={props.onLineageBadgeClick}
+                previousModelId={previousModelId}
+              />
+            );
+          })}
           {(props.streamingText || props.thinkingText) && (
             <article className="maka-message-row maka-turn-streaming message assistant streaming">
               <MessageMeta role="assistant" userLabel={props.userLabel} />
@@ -2809,9 +2824,18 @@ function avatarInitial(label: string): string {
  * least one signal is present so an in-flight first-render doesn't show
  * an empty chip strip.
  */
-function TurnSummary(props: { turn: TurnViewModel }) {
+function TurnSummary(props: { turn: TurnViewModel; previousModelId?: string }) {
   const { turn } = props;
   const hasModel = Boolean(turn.modelId);
+  // PR-CHAT-NON-DEFAULT-MODEL-CHIP-0: per-turn override is allowed
+  // but must be visible (kenji 3-way decision lock 7749c411).
+  // When the prior turn used a different model, mark this turn's
+  // model chip with a "切换" pill so the user notices.
+  const modelSwitched =
+    hasModel
+    && typeof props.previousModelId === 'string'
+    && props.previousModelId.length > 0
+    && props.previousModelId !== turn.modelId;
   const hasTools = turn.tools.length > 0;
   // Show duration only when the assistant has actually landed (durationMs
   // is computed from assistant.ts). For in-progress turns we render an
@@ -2827,8 +2851,22 @@ function TurnSummary(props: { turn: TurnViewModel }) {
   return (
     <div className="maka-turn-summary" aria-label="本轮对话摘要">
       {hasModel && (
-        <span className="maka-turn-summary-chip" data-kind="model" title={turn.modelId}>
+        <span
+          className="maka-turn-summary-chip"
+          data-kind="model"
+          data-switched={modelSwitched ? 'true' : undefined}
+          title={
+            modelSwitched
+              ? `本轮使用 ${turn.modelId}（上一轮是 ${props.previousModelId}）`
+              : turn.modelId
+          }
+        >
           <code>{turn.modelId}</code>
+          {modelSwitched && (
+            <span className="maka-turn-summary-chip-switched" aria-label="本轮切换了模型">
+              切换
+            </span>
+          )}
         </span>
       )}
       {hasTools && (
@@ -2900,6 +2938,13 @@ function TurnView(props: {
   /** PR109e-e: invoked when the user clicks a lineage badge. The
    *  renderer scrolls the target turn into view. */
   onLineageBadgeClick?: (targetTurnId: string) => void;
+  /**
+   * PR-CHAT-NON-DEFAULT-MODEL-CHIP-0: the most-recent prior turn's
+   * assistant modelId, used by TurnSummary to flag a per-turn
+   * model switch (kenji `7749c411` lock decision: per-turn override
+   * is allowed but MUST be visible).
+   */
+  previousModelId?: string;
 }) {
   const { turn } = props;
   const forwardBadges = props.lineageBadges?.filter((b) => b.direction === 'forward') ?? [];
@@ -2932,7 +2977,7 @@ function TurnView(props: {
           <MessageBody role="user" text={turn.user.text} />
         </article>
       )}
-      <TurnSummary turn={turn} />
+      <TurnSummary turn={turn} previousModelId={props.previousModelId} />
 
       {turn.notes.map((note) => (
         <article
