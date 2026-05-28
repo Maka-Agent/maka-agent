@@ -307,7 +307,7 @@ export function SessionListPanel(props: {
    * real backend behind the same callback.
    */
   onOpenSearchModal?(): void;
-  onCreatePlanReminder?(input: { title: string; note?: string; runAt: number; recurrence?: PlanReminderRecurrence; delivery?: PlanReminderDeliveryTarget }): void;
+  onCreatePlanReminder?(input: { title: string; note?: string; runAt: number; recurrence?: PlanReminderRecurrence; cronExpression?: string; delivery?: PlanReminderDeliveryTarget }): void;
   onTogglePlanReminder?(id: string, enabled: boolean): void;
   onDeletePlanReminder?(id: string): void;
   /**
@@ -1017,7 +1017,7 @@ function DailyReviewTopList(props: { title: string; entries: ReadonlyArray<Daily
 
 function PlanReminderPanel(props: {
   reminders: PlanReminder[];
-  onCreate?(input: { title: string; note?: string; runAt: number; recurrence?: PlanReminderRecurrence; delivery?: PlanReminderDeliveryTarget }): void;
+  onCreate?(input: { title: string; note?: string; runAt: number; recurrence?: PlanReminderRecurrence; cronExpression?: string; delivery?: PlanReminderDeliveryTarget }): void;
   onToggle?(id: string, enabled: boolean): void;
   onDelete?(id: string): void;
 }) {
@@ -1025,6 +1025,7 @@ function PlanReminderPanel(props: {
   const [note, setNote] = useState('');
   const [runAtLocal, setRunAtLocal] = useState(() => toDatetimeLocalValue(Date.now() + 60 * 60 * 1000));
   const [recurrence, setRecurrence] = useState<PlanReminderRecurrence>('none');
+  const [cronExpression, setCronExpression] = useState('0 9 * * 1-5');
   const [deliveryChannel, setDeliveryChannel] = useState<PlanReminderDeliveryTarget['channel']>('local');
   const [deliveryPlatform, setDeliveryPlatform] = useState<BotProvider>('telegram');
   const [deliveryChatId, setDeliveryChatId] = useState('');
@@ -1036,15 +1037,18 @@ function PlanReminderPanel(props: {
     Number.isFinite(parsedRunAt) &&
     parsedRunAt >= Date.now() &&
     (delivery.channel === 'local' || delivery.chatId.length > 0);
+  const canSubmitCron = recurrence !== 'cron' || cronExpression.trim().split(/\s+/).length === 5;
+  const canCreate = canSubmit && canSubmitCron;
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canSubmit) return;
+    if (!canCreate) return;
     props.onCreate?.({
       title: title.trim(),
       ...(note.trim() ? { note: note.trim() } : {}),
       runAt: parsedRunAt,
       recurrence,
+      ...(recurrence === 'cron' ? { cronExpression: cronExpression.trim() } : {}),
       delivery,
     });
     setTitle('');
@@ -1083,8 +1087,20 @@ function PlanReminderPanel(props: {
             <option value="daily">每天</option>
             <option value="weekly">每周</option>
             <option value="monthly">每月</option>
+            <option value="cron">Cron</option>
           </select>
         </label>
+        {recurrence === 'cron' && (
+          <label className="maka-plan-field">
+            <span>Cron</span>
+            <input
+              value={cronExpression}
+              onChange={(event) => setCronExpression(event.currentTarget.value)}
+              maxLength={80}
+              placeholder="例如 0 9 * * 1-5"
+            />
+          </label>
+        )}
         <div className="maka-plan-delivery-grid">
           <label className="maka-plan-field">
             <span>投递</span>
@@ -1128,7 +1144,7 @@ function PlanReminderPanel(props: {
             placeholder="可选：补充需要提醒的上下文"
           />
         </label>
-        <button className="maka-button maka-plan-submit" type="submit" disabled={!canSubmit}>
+        <button className="maka-button maka-plan-submit" type="submit" disabled={!canCreate}>
           <Plus size={14} strokeWidth={1.75} />
           <span>创建提醒</span>
         </button>
@@ -1249,6 +1265,7 @@ function formatReminderCountdown(ts: number, now: number = Date.now()): string {
 
 function formatPlanRecurrence(reminder: PlanReminder): string {
   if (reminder.schedule.kind === 'once') return '一次性提醒';
+  if (reminder.schedule.kind === 'cron') return `Cron：${reminder.schedule.expression}`;
   if (reminder.schedule.recurrence === 'daily') return '重复：每天';
   if (reminder.schedule.recurrence === 'weekly') return '重复：每周';
   return '重复：每月';

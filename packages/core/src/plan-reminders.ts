@@ -3,6 +3,7 @@ import { BOT_PROVIDERS, type BotProvider } from './settings.js';
 export const PLAN_REMINDER_TITLE_MAX_CHARS = 120;
 export const PLAN_REMINDER_NOTE_MAX_CHARS = 1000;
 export const PLAN_REMINDER_DELIVERY_CHAT_ID_MAX_CHARS = 160;
+export const PLAN_REMINDER_CRON_EXPRESSION_MAX_CHARS = 80;
 export const PLAN_REMINDER_MAX_DELAY_MS = 366 * 24 * 60 * 60 * 1000;
 export const PLAN_REMINDER_RUN_HISTORY_LIMIT = 10;
 
@@ -14,11 +15,11 @@ export type PlanReminderRunStatus = typeof PLAN_REMINDER_RUN_STATUSES[number];
 
 export type PlanReminderBlockReason = 'incognito_active' | 'bot_delivery_unavailable';
 
-export const PLAN_REMINDER_RECURRENCES = ['none', 'daily', 'weekly', 'monthly'] as const;
+export const PLAN_REMINDER_RECURRENCES = ['none', 'daily', 'weekly', 'monthly', 'cron'] as const;
 export type PlanReminderRecurrence = typeof PLAN_REMINDER_RECURRENCES[number];
-export type PlanReminderRecurringFrequency = Exclude<PlanReminderRecurrence, 'none'>;
+export type PlanReminderRecurringFrequency = Exclude<PlanReminderRecurrence, 'none' | 'cron'>;
 
-export type PlanReminderSchedule = PlanReminderOnceSchedule | PlanReminderRecurringSchedule;
+export type PlanReminderSchedule = PlanReminderOnceSchedule | PlanReminderRecurringSchedule | PlanReminderCronSchedule;
 export type PlanReminderDeliveryTarget = PlanReminderLocalDeliveryTarget | PlanReminderBotDeliveryTarget;
 
 export interface PlanReminderLocalDeliveryTarget {
@@ -40,6 +41,12 @@ export interface PlanReminderRecurringSchedule {
   kind: 'recurring';
   startAt: number;
   recurrence: PlanReminderRecurringFrequency;
+}
+
+export interface PlanReminderCronSchedule {
+  kind: 'cron';
+  startAt: number;
+  expression: string;
 }
 
 export interface PlanReminderRunRecord {
@@ -71,6 +78,7 @@ export interface CreatePlanReminderInput {
   note?: unknown;
   runAt: unknown;
   recurrence?: unknown;
+  cronExpression?: unknown;
   delivery?: unknown;
 }
 
@@ -79,6 +87,7 @@ export interface UpdatePlanReminderInput {
   note?: unknown;
   runAt?: unknown;
   recurrence?: unknown;
+  cronExpression?: unknown;
   delivery?: unknown;
   enabled?: unknown;
 }
@@ -87,7 +96,7 @@ export type PlanReminderNormalizeResult<T> =
   | { ok: true; value: T }
   | {
     ok: false;
-    reason: 'invalid_title' | 'invalid_note' | 'invalid_run_at' | 'invalid_recurrence' | 'invalid_delivery' | 'invalid_enabled';
+    reason: 'invalid_title' | 'invalid_note' | 'invalid_run_at' | 'invalid_recurrence' | 'invalid_cron' | 'invalid_delivery' | 'invalid_enabled';
     message: string;
   };
 
@@ -119,10 +128,16 @@ export function normalizeCreatePlanReminderInput(
   if (!runAt.ok) return runAt;
   const recurrence = normalizePlanReminderRecurrence(record.recurrence);
   if (!recurrence.ok) return recurrence;
+  const cronExpression = normalizePlanReminderCronExpressionForRecurrence(recurrence.value, record.cronExpression);
+  if (!cronExpression.ok) return cronExpression;
   const delivery = normalizePlanReminderDeliveryTarget(record.delivery);
   if (!delivery.ok) return delivery;
-  const schedule = createPlanReminderSchedule(runAt.value, recurrence.value);
-  return { ok: true, value: { title: title.value, note: note.value, schedule, delivery: delivery.value, nextRunAt: runAt.value } };
+  const schedule = createPlanReminderSchedule(runAt.value, recurrence.value, cronExpression.value);
+  const nextRunAt = nextPlanReminderRunAtAfter(schedule, now);
+  if (typeof nextRunAt !== 'number') {
+    return invalid('invalid_cron', 'Plan reminder cron expression has no run within one year');
+  }
+  return { ok: true, value: { title: title.value, note: note.value, schedule, delivery: delivery.value, nextRunAt } };
 }
 
 export function normalizeUpdatePlanReminderInput(
@@ -133,6 +148,7 @@ export function normalizeUpdatePlanReminderInput(
   note?: string;
   runAt?: number;
   recurrence?: PlanReminderRecurrence;
+  cronExpression?: string;
   delivery?: PlanReminderDeliveryTarget;
   enabled?: boolean;
 }> {
@@ -145,6 +161,7 @@ export function normalizeUpdatePlanReminderInput(
     note?: string;
     runAt?: number;
     recurrence?: PlanReminderRecurrence;
+    cronExpression?: string;
     delivery?: PlanReminderDeliveryTarget;
     enabled?: boolean;
   } = {};
@@ -167,6 +184,11 @@ export function normalizeUpdatePlanReminderInput(
     const recurrence = normalizePlanReminderRecurrence(record.recurrence);
     if (!recurrence.ok) return recurrence;
     patch.recurrence = recurrence.value;
+  }
+  if (record.cronExpression !== undefined) {
+    const cronExpression = normalizePlanReminderCronExpression(record.cronExpression);
+    if (!cronExpression.ok) return cronExpression;
+    patch.cronExpression = cronExpression.value;
   }
   if (Object.prototype.hasOwnProperty.call(record, 'delivery')) {
     const delivery = normalizePlanReminderDeliveryTarget(record.delivery);
@@ -238,9 +260,35 @@ export function normalizePlanReminderRecurrence(input: unknown): PlanReminderNor
     return invalid('invalid_recurrence', 'Plan reminder recurrence must be a string');
   }
   if (!PLAN_REMINDER_RECURRENCES.includes(input as PlanReminderRecurrence)) {
-    return invalid('invalid_recurrence', 'Plan reminder recurrence must be none, daily, weekly, or monthly');
+    return invalid('invalid_recurrence', 'Plan reminder recurrence must be none, daily, weekly, monthly, or cron');
   }
   return { ok: true, value: input as PlanReminderRecurrence };
+}
+
+export function normalizePlanReminderCronExpression(input: unknown): PlanReminderNormalizeResult<string> {
+  if (typeof input !== 'string') {
+    return invalid('invalid_cron', 'Plan reminder cron expression must be a string');
+  }
+  const expression = input.normalize('NFC').replace(/\s+/g, ' ').trim();
+  if (expression.length === 0) {
+    return invalid('invalid_cron', 'Plan reminder cron expression cannot be empty');
+  }
+  if (Array.from(expression).length > PLAN_REMINDER_CRON_EXPRESSION_MAX_CHARS) {
+    return invalid('invalid_cron', `Plan reminder cron expression must be ${PLAN_REMINDER_CRON_EXPRESSION_MAX_CHARS} characters or fewer`);
+  }
+  const parsed = parsePlanReminderCronExpression(expression);
+  if (!parsed.ok) return invalid('invalid_cron', parsed.message);
+  return { ok: true, value: expression };
+}
+
+function normalizePlanReminderCronExpressionForRecurrence(
+  recurrence: PlanReminderRecurrence,
+  input: unknown,
+): PlanReminderNormalizeResult<string | undefined> {
+  if (recurrence !== 'cron') return { ok: true, value: undefined };
+  const cronExpression = normalizePlanReminderCronExpression(input);
+  if (!cronExpression.ok) return cronExpression;
+  return cronExpression;
 }
 
 export function normalizePlanReminderDeliveryTarget(input: unknown): PlanReminderNormalizeResult<PlanReminderDeliveryTarget> {
@@ -299,8 +347,12 @@ export function formatPlanReminderDeliveryMessage(reminder: Pick<PlanReminder, '
   return lines.join('\n');
 }
 
-export function createPlanReminderSchedule(runAt: number, recurrence: PlanReminderRecurrence): PlanReminderSchedule {
+export function createPlanReminderSchedule(runAt: number, recurrence: PlanReminderRecurrence, cronExpression?: string): PlanReminderSchedule {
   if (recurrence === 'none') return { kind: 'once', runAt };
+  if (recurrence === 'cron') {
+    if (!cronExpression) throw new Error('Plan reminder cron expression is required');
+    return { kind: 'cron', startAt: runAt, expression: cronExpression };
+  }
   return { kind: 'recurring', startAt: runAt, recurrence };
 }
 
@@ -310,6 +362,7 @@ export function planReminderScheduleStartAt(schedule: PlanReminderSchedule): num
 
 export function nextPlanReminderRunAtAfter(schedule: PlanReminderSchedule, after: number): number | undefined {
   if (schedule.kind === 'once') return schedule.runAt > after ? schedule.runAt : undefined;
+  if (schedule.kind === 'cron') return nextCronRunAtAfter(schedule, after);
   if (schedule.startAt > after) return schedule.startAt;
   return nextRecurringRunAt(schedule, after);
 }
@@ -391,6 +444,116 @@ function addMonthsClamped(anchor: number, monthOffset: number): number {
     date.getSeconds(),
     date.getMilliseconds(),
   ).getTime();
+}
+
+interface ParsedCronField {
+  wildcard: boolean;
+  values: Set<number>;
+}
+
+interface ParsedCronExpression {
+  minute: ParsedCronField;
+  hour: ParsedCronField;
+  dayOfMonth: ParsedCronField;
+  month: ParsedCronField;
+  dayOfWeek: ParsedCronField;
+}
+
+function nextCronRunAtAfter(schedule: PlanReminderCronSchedule, after: number): number | undefined {
+  const parsed = parsePlanReminderCronExpression(schedule.expression);
+  if (!parsed.ok) return undefined;
+  const searchStart = Math.max(after + 1, schedule.startAt);
+  let candidate = Math.ceil(searchStart / 60_000) * 60_000;
+  const searchEnd = after + PLAN_REMINDER_MAX_DELAY_MS;
+  while (candidate <= searchEnd) {
+    if (cronExpressionMatches(parsed.value, new Date(candidate))) return candidate;
+    candidate += 60_000;
+  }
+  return undefined;
+}
+
+function parsePlanReminderCronExpression(input: string): PlanReminderNormalizeResult<ParsedCronExpression> {
+  const parts = input.split(' ');
+  if (parts.length !== 5) {
+    return invalid('invalid_cron', 'Plan reminder cron expression must have exactly 5 fields');
+  }
+  const minute = parseCronField(parts[0] ?? '', 0, 59, false);
+  if (!minute.ok) return minute;
+  const hour = parseCronField(parts[1] ?? '', 0, 23, false);
+  if (!hour.ok) return hour;
+  const dayOfMonth = parseCronField(parts[2] ?? '', 1, 31, false);
+  if (!dayOfMonth.ok) return dayOfMonth;
+  const month = parseCronField(parts[3] ?? '', 1, 12, false);
+  if (!month.ok) return month;
+  const dayOfWeek = parseCronField(parts[4] ?? '', 0, 7, true);
+  if (!dayOfWeek.ok) return dayOfWeek;
+  return { ok: true, value: { minute: minute.value, hour: hour.value, dayOfMonth: dayOfMonth.value, month: month.value, dayOfWeek: dayOfWeek.value } };
+}
+
+function parseCronField(input: string, min: number, max: number, normalizeSevenToZero: boolean): PlanReminderNormalizeResult<ParsedCronField> {
+  if (!/^[\d*,/\-]+$/.test(input)) {
+    return invalid('invalid_cron', 'Plan reminder cron fields support only numbers, *, ranges, lists, and steps');
+  }
+  const values = new Set<number>();
+  let wildcard = false;
+  for (const rawPart of input.split(',')) {
+    if (!rawPart) return invalid('invalid_cron', 'Plan reminder cron field contains an empty list item');
+    const stepSplit = rawPart.split('/');
+    if (stepSplit.length > 2) return invalid('invalid_cron', 'Plan reminder cron field has an invalid step');
+    const base = stepSplit[0] ?? '';
+    const step = stepSplit[1] === undefined ? { ok: true as const, value: 1 } : parseCronInteger(stepSplit[1], 1, max - min + 1);
+    if (!step.ok) return step;
+    let start: number;
+    let end: number;
+    if (base === '*') {
+      wildcard = true;
+      start = min;
+      end = max;
+    } else if (base.includes('-')) {
+      const range = base.split('-');
+      if (range.length !== 2) return invalid('invalid_cron', 'Plan reminder cron field has an invalid range');
+      const parsedStart = parseCronInteger(range[0] ?? '', min, max);
+      if (!parsedStart.ok) return parsedStart;
+      const parsedEnd = parseCronInteger(range[1] ?? '', min, max);
+      if (!parsedEnd.ok) return parsedEnd;
+      start = parsedStart.value;
+      end = parsedEnd.value;
+      if (start > end) return invalid('invalid_cron', 'Plan reminder cron range start must be before its end');
+    } else {
+      const parsed = parseCronInteger(base, min, max);
+      if (!parsed.ok) return parsed;
+      start = parsed.value;
+      end = parsed.value;
+    }
+    for (let value = start; value <= end; value += step.value) {
+      values.add(normalizeSevenToZero && value === 7 ? 0 : value);
+    }
+  }
+  if (values.size === 0) return invalid('invalid_cron', 'Plan reminder cron field cannot be empty');
+  return { ok: true, value: { wildcard, values } };
+}
+
+function parseCronInteger(input: string, min: number, max: number): PlanReminderNormalizeResult<number> {
+  if (!/^\d+$/.test(input)) {
+    return invalid('invalid_cron', 'Plan reminder cron field values must be integers');
+  }
+  const value = Number(input);
+  if (!Number.isSafeInteger(value) || value < min || value > max) {
+    return invalid('invalid_cron', `Plan reminder cron field value must be between ${min} and ${max}`);
+  }
+  return { ok: true, value };
+}
+
+function cronExpressionMatches(expression: ParsedCronExpression, date: Date): boolean {
+  if (!expression.minute.values.has(date.getMinutes())) return false;
+  if (!expression.hour.values.has(date.getHours())) return false;
+  if (!expression.month.values.has(date.getMonth() + 1)) return false;
+  const dayOfMonthMatches = expression.dayOfMonth.values.has(date.getDate());
+  const dayOfWeekMatches = expression.dayOfWeek.values.has(date.getDay());
+  if (!expression.dayOfMonth.wildcard && !expression.dayOfWeek.wildcard) {
+    return dayOfMonthMatches || dayOfWeekMatches;
+  }
+  return dayOfMonthMatches && dayOfWeekMatches;
 }
 
 function isBotProvider(value: unknown): value is BotProvider {

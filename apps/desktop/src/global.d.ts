@@ -186,10 +186,10 @@ declare global {
       };
       plans: {
         list(): Promise<PlanReminder[]>;
-        create(input: { title: string; note?: string; runAt: number | string; recurrence?: PlanReminderRecurrence; delivery?: PlanReminderDeliveryTarget }): Promise<PlanReminder>;
+        create(input: { title: string; note?: string; runAt: number | string; recurrence?: PlanReminderRecurrence; cronExpression?: string; delivery?: PlanReminderDeliveryTarget }): Promise<PlanReminder>;
         update(
           id: string,
-          patch: { title?: string; note?: string; runAt?: number | string; recurrence?: PlanReminderRecurrence; delivery?: PlanReminderDeliveryTarget; enabled?: boolean },
+          patch: { title?: string; note?: string; runAt?: number | string; recurrence?: PlanReminderRecurrence; cronExpression?: string; delivery?: PlanReminderDeliveryTarget; enabled?: boolean },
         ): Promise<PlanReminder>;
         setEnabled(id: string, enabled: boolean): Promise<PlanReminder>;
         delete(id: string): Promise<void>;

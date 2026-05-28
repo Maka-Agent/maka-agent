@@ -7,6 +7,7 @@ import {
   nextPlanReminderStateAfterTrigger,
   nextPlanReminderRunAtAfter,
   normalizeCreatePlanReminderInput,
+  normalizePlanReminderCronExpression,
   normalizePlanReminderDeliveryTarget,
   normalizeUpdatePlanReminderInput,
   planReminderScheduleStartAt,
@@ -77,9 +78,11 @@ class FilePlanReminderStore implements PlanReminderStore {
       const nextEnabled = normalized.value.enabled ?? reminder.enabled;
       const nextRunAt = normalized.value.runAt ?? planReminderScheduleStartAt(reminder.schedule);
       const nextRecurrence = normalized.value.recurrence ??
-        (reminder.schedule.kind === 'recurring' ? reminder.schedule.recurrence : 'none');
-      const nextSchedule = createPlanReminderSchedule(nextRunAt, nextRecurrence);
-      const scheduledRunAt = nextEnabled ? (nextPlanReminderRunAtAfter(nextSchedule, now) ?? nextRunAt) : undefined;
+        (reminder.schedule.kind === 'recurring' ? reminder.schedule.recurrence : reminder.schedule.kind === 'cron' ? 'cron' : 'none');
+      const nextCronExpression = normalized.value.cronExpression ?? (reminder.schedule.kind === 'cron' ? reminder.schedule.expression : undefined);
+      const nextSchedule = createPlanReminderSchedule(nextRunAt, nextRecurrence, nextCronExpression);
+      const nextScheduledRunAt = nextPlanReminderRunAtAfter(nextSchedule, now);
+      if (nextEnabled && typeof nextScheduledRunAt !== 'number') throw new Error('Plan reminder cron expression has no run within one year');
       updated = {
         ...reminder,
         ...(normalized.value.title !== undefined ? { title: normalized.value.title } : {}),
@@ -88,7 +91,7 @@ class FilePlanReminderStore implements PlanReminderStore {
         schedule: nextSchedule,
         enabled: nextEnabled,
         status: nextEnabled ? 'scheduled' : 'paused',
-        nextRunAt: scheduledRunAt,
+        nextRunAt: nextEnabled ? nextScheduledRunAt : undefined,
         updatedAt: now,
       };
       return updated;
@@ -270,6 +273,11 @@ function isPersistedPlanReminderSchedule(value: unknown): value is PlanReminder[
     const recurrence = (record as { recurrence?: unknown }).recurrence;
     return typeof (record as { startAt?: unknown }).startAt === 'number' &&
       (recurrence === 'daily' || recurrence === 'weekly' || recurrence === 'monthly');
+  }
+  if (record.kind === 'cron') {
+    const expression = (record as { expression?: unknown }).expression;
+    return typeof (record as { startAt?: unknown }).startAt === 'number' &&
+      normalizePlanReminderCronExpression(expression).ok;
   }
   return false;
 }

@@ -302,6 +302,7 @@ export type {
   PlanReminder,
   PlanReminderBlockReason,
   PlanReminderBotDeliveryTarget,
+  PlanReminderCronSchedule,
   PlanReminderDeliveryTarget,
   PlanReminderLocalDeliveryTarget,
   PlanReminderNormalizeResult,
@@ -316,6 +317,7 @@ export type {
   UpdatePlanReminderInput,
 } from './plan-reminders.js';
 export {
+  PLAN_REMINDER_CRON_EXPRESSION_MAX_CHARS,
   PLAN_REMINDER_DELIVERY_CHAT_ID_MAX_CHARS,
   PLAN_REMINDER_MAX_DELAY_MS,
   PLAN_REMINDER_NOTE_MAX_CHARS,
@@ -331,6 +333,7 @@ export {
   nextPlanReminderRunAtAfter,
   nextPlanReminderStateAfterTrigger,
   normalizeCreatePlanReminderInput,
+  normalizePlanReminderCronExpression,
   normalizePlanReminderDeliveryChatId,
   normalizePlanReminderDeliveryTarget,
   normalizePlanReminderNote,

@@ -1047,7 +1047,7 @@ function AppShell(props: {
     }
   }
 
-  async function createPlanReminder(input: { title: string; note?: string; runAt: number; recurrence?: PlanReminderRecurrence; delivery?: PlanReminderDeliveryTarget }) {
+  async function createPlanReminder(input: { title: string; note?: string; runAt: number; recurrence?: PlanReminderRecurrence; cronExpression?: string; delivery?: PlanReminderDeliveryTarget }) {
     try {
       await window.maka.plans.create(input);
       await refreshPlanReminders();

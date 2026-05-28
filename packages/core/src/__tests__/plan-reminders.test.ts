@@ -5,6 +5,7 @@ import {
   nextPlanReminderStateAfterTrigger,
   nextPlanReminderRunAtAfter,
   normalizeCreatePlanReminderInput,
+  normalizePlanReminderCronExpression,
   normalizePlanReminderDeliveryTarget,
   normalizeUpdatePlanReminderInput,
   PLAN_REMINDER_RUN_HISTORY_LIMIT,
@@ -46,6 +47,49 @@ describe('plan reminder contract', () => {
       recurrence: 'daily',
     });
     assert.equal(normalizeCreatePlanReminderInput({ title: 'x', runAt: now + 1, recurrence: 'hourly' }, now).ok, false);
+  });
+
+  it('normalizes 5-field cron reminders and computes the next matching minute', () => {
+    const start = new Date(2026, 0, 5, 8, 0, 0, 0).getTime();
+    const result = normalizeCreatePlanReminderInput({
+      title: '工作日早报',
+      runAt: start,
+      recurrence: 'cron',
+      cronExpression: '30 9 * * 1-5',
+    }, start - 60_000);
+
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.deepEqual(result.value.schedule, {
+      kind: 'cron',
+      startAt: start,
+      expression: '30 9 * * 1-5',
+    });
+    assert.equal(result.value.nextRunAt, new Date(2026, 0, 5, 9, 30, 0, 0).getTime());
+    assert.equal(
+      nextPlanReminderRunAtAfter(result.value.schedule, new Date(2026, 0, 5, 9, 30, 0, 0).getTime()),
+      new Date(2026, 0, 6, 9, 30, 0, 0).getTime(),
+    );
+  });
+
+  it('supports cron ranges, lists, steps, and Sunday 7 alias', () => {
+    const schedule = {
+      kind: 'cron' as const,
+      startAt: new Date(2026, 0, 4, 0, 0, 0, 0).getTime(),
+      expression: '*/20 8-9 * 1,2 0,7',
+    };
+    assert.equal(
+      nextPlanReminderRunAtAfter(schedule, new Date(2026, 0, 4, 8, 0, 0, 0).getTime()),
+      new Date(2026, 0, 4, 8, 20, 0, 0).getTime(),
+    );
+  });
+
+  it('rejects malformed cron expressions instead of accepting ambiguous schedules', () => {
+    assert.equal(normalizePlanReminderCronExpression('* * * *').ok, false);
+    assert.equal(normalizePlanReminderCronExpression('* * * * * *').ok, false);
+    assert.equal(normalizePlanReminderCronExpression('60 * * * *').ok, false);
+    assert.equal(normalizePlanReminderCronExpression('@daily').ok, false);
+    assert.equal(normalizeCreatePlanReminderInput({ title: 'x', runAt: now + 1, recurrence: 'cron' }, now).ok, false);
   });
 
   it('normalizes bot delivery with a closed platform and sanitized chat id', () => {
@@ -135,6 +179,37 @@ describe('plan reminder contract', () => {
     assert.equal(next.nextRunAt, now + 24 * 60 * 60 * 1000);
     assert.equal(next.runCount, 1);
     assert.deepEqual(next.runs.map((run) => run.id), ['run1']);
+  });
+
+  it('keeps cron reminders scheduled after each trigger', () => {
+    const start = new Date(2026, 0, 5, 8, 0, 0, 0).getTime();
+    const firstRun = new Date(2026, 0, 5, 9, 30, 0, 0).getTime();
+    const secondRun = new Date(2026, 0, 6, 9, 30, 0, 0).getTime();
+    const reminder: PlanReminder = {
+      id: 'r-cron',
+      title: '工作日早报',
+      note: '',
+      schedule: { kind: 'cron', startAt: start, expression: '30 9 * * 1-5' },
+      delivery: { channel: 'local' },
+      status: 'scheduled',
+      enabled: true,
+      createdAt: start - 1000,
+      updatedAt: start - 1000,
+      nextRunAt: firstRun,
+      runs: [],
+      runCount: 0,
+    };
+
+    const next = nextPlanReminderStateAfterTrigger(reminder, {
+      id: 'run1',
+      at: firstRun,
+      status: 'triggered',
+      message: '提醒已触发',
+    });
+
+    assert.equal(next.status, 'scheduled');
+    assert.equal(next.enabled, true);
+    assert.equal(next.nextRunAt, secondRun);
   });
 
   it('keeps newest run history capped for recurring reminders', () => {

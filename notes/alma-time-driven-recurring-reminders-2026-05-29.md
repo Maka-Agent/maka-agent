@@ -55,9 +55,8 @@ This PR copies the lowest-risk part of Alma first: recurring schedule semantics 
 
 These are useful Alma ideas, but should be separate PRs:
 
-- `PR-PLAN-DELIVERY-0`: deliver reminders to Telegram/Discord after BotPlatformAdapter normalization lands.
+- `PR-PLAN-DELIVERY-0`: delivered in `9b53744`; reminders can target local toast or explicit bot platform/chatId through `botRegistry.sendMessage`, with unavailable bot delivery recorded as blocked.
 - `PR-AUTOMATION-EXECUTOR-0`: AI auto-execution / cron agent turns. Needs permission gate, audit log, incognito block, model readiness, retry policy, and "nothing to report" delivery filters.
-- `PR-CRON-SYNTAX-0`: full cron expression and timezone support.
-- `PR-RUN-HISTORY-0`: separate run history list capped per reminder instead of only `lastRun`.
+- `PR-CRON-SYNTAX-0`: delivered after delivery; supports a bounded 5-field cron expression contract, next-run calculation, storage persistence, and UI entry. Timezone-specific cron remains deferred.
+- `PR-RUN-HISTORY-0`: delivered in `a859641`; plan reminder cards show recent capped run history.
 - `PR-STUCK-AUTOMATION-WATCHDOG-0`: overlap protection and stuck run cleanup once execution becomes long-running.
-

@@ -82,6 +82,32 @@ describe('PlanReminderStore', () => {
     assert.equal((await store.listDue(runAt + 24 * 60 * 60 * 1000)).length, 1);
   });
 
+  it('keeps cron reminders active and persists their expression', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'maka-plan-reminders-'));
+    const store = createPlanReminderStore(root);
+    const runAt = Date.now() + 60_000;
+
+    const reminder = await store.create({
+      title: '工作日早报',
+      runAt,
+      recurrence: 'cron',
+      cronExpression: '30 9 * * 1-5',
+    });
+    assert.deepEqual(reminder.schedule, { kind: 'cron', startAt: runAt, expression: '30 9 * * 1-5' });
+    assert.equal(typeof reminder.nextRunAt, 'number');
+
+    const triggered = await store.markTriggered(reminder.id, {
+      at: reminder.nextRunAt!,
+      status: 'triggered',
+      message: '提醒已触发',
+    });
+    assert.equal(triggered.status, 'scheduled');
+    assert.equal(triggered.enabled, true);
+    assert.equal(triggered.schedule.kind, 'cron');
+    assert.equal(typeof triggered.nextRunAt, 'number');
+    assert.ok(triggered.nextRunAt! > reminder.nextRunAt!);
+  });
+
   it('supports pause, resume, delete, and triggered run records', async () => {
     const root = await mkdtemp(join(tmpdir(), 'maka-plan-reminders-'));
     const store = createPlanReminderStore(root);
