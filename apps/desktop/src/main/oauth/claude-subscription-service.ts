@@ -99,6 +99,14 @@ interface PendingAuthorization {
   verifier: string;
   state: string;
   createdAt: number;
+  /**
+   * The authorization URL we generated. Cached here so
+   * `openAuthorizationUrl(authRequestId)` opens the URL we built
+   * — the renderer never gets to pick which URL to open
+   * externally. kenji `1da909d5` non-blocking hardening: don't let
+   * a malicious renderer hand `shell.openExternal` an arbitrary URL.
+   */
+  url: string;
 }
 
 // =============================================================
@@ -166,11 +174,6 @@ export class ClaudeSubscriptionService {
     const verifier = base64urlEncode(randomBytes(PKCE_VERIFIER_LENGTH_BYTES));
     const state = base64urlEncode(randomBytes(16));
     const authRequestId = randomUUID();
-    this.pending.set(authRequestId, {
-      verifier,
-      state,
-      createdAt: this.now(),
-    });
     const url = buildClaudeAuthorizationUrl(
       {
         clientId: CLAUDE_CLIENT_ID,
@@ -182,6 +185,12 @@ export class ClaudeSubscriptionService {
       state,
       nodeSha256,
     );
+    this.pending.set(authRequestId, {
+      verifier,
+      state,
+      createdAt: this.now(),
+      url,
+    });
     return {
       url,
       stateHint: state.slice(0, 8),
@@ -190,12 +199,24 @@ export class ClaudeSubscriptionService {
   }
 
   /**
-   * Open the authorization URL in the user's default browser.
-   * Called by the renderer right after `getAuthorizationUrl`.
+   * Open the authorization URL we generated for a pending request.
+   *
+   * kenji `1da909d5` non-blocking hardening: renderer hands us
+   * an opaque `authRequestId`, NOT a URL. We look up the URL
+   * from our own pending map. The renderer never gets to call
+   * `shell.openExternal` with a renderer-controlled URL.
    */
-  async openAuthorizationUrl(url: string): Promise<SubscriptionActionResult> {
+  async openAuthorizationUrl(authRequestId: string): Promise<SubscriptionActionResult> {
+    const pending = this.pending.get(authRequestId);
+    if (!pending) {
+      return { ok: false, reason: 'authorization_pending', message: '授权会话不存在，请重新点击“登录订阅”。' };
+    }
+    if (this.now() - pending.createdAt > PENDING_AUTHORIZATION_TTL_MS) {
+      this.pending.delete(authRequestId);
+      return { ok: false, reason: 'authorization_expired', message: '授权请求已过期，请重新点击“登录订阅”。' };
+    }
     try {
-      await shell.openExternal(url);
+      await shell.openExternal(pending.url);
       this.authorizing = true;
       return { ok: true };
     } catch (err) {
@@ -628,4 +649,31 @@ export class ClaudeSubscriptionService {
  */
 export function isCloakEnabled(): boolean {
   return process.env.MAKA_CLAUDE_SUBSCRIPTION_CLOAK === '1';
+}
+
+/**
+ * Whether Claude subscription is enabled at all in this build.
+ *
+ * kenji `1da909d5` blocking concern: Anthropic's legal docs
+ * (https://code.claude.com/docs/en/legal-and-compliance) say
+ * third-party developers should use API key auth and do NOT
+ * permit third-party developers to offer Claude.ai login or
+ * route Free/Pro/Max credentials on behalf of users.
+ *
+ * Until WAWQAQ / product / legal explicitly accepts the ToS risk
+ * (or Anthropic loosens this), Claude subscription is gated
+ * behind `MAKA_CLAUDE_SUBSCRIPTION_EXPERIMENTAL=1`. When the env
+ * var is NOT set:
+ *   - Settings UI does NOT render the Claude subscription card.
+ *   - IPC handlers return `provider_rejected` immediately so a
+ *     manual `window.maka.claudeSubscription.*` call from
+ *     DevTools also fails closed.
+ *
+ * This is the kill-switch for the entire feature; the cloak flag
+ * (`isCloakEnabled`) is a finer-grained switch inside the
+ * subscription send path that the future PR-OAUTH-SUBSCRIPTION-1
+ * will respect. Both are off by default.
+ */
+export function isSubscriptionExperimentalEnabled(): boolean {
+  return process.env.MAKA_CLAUDE_SUBSCRIPTION_EXPERIMENTAL === '1';
 }

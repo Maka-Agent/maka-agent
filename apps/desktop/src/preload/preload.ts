@@ -231,12 +231,26 @@ contextBridge.exposeInMainWorld('maka', {
   // NEVER returns raw OAuth credentials; renderer only sees account
   // state + quota + action results (xuan G-X3 + the
   // claude-subscription-ipc-boundary contract test enforces this).
+  //
+  // kenji `1da909d5`/`45b31e16` hardening: `openAuthUrl` takes
+  // ONLY an `authRequestId`; the URL is held by main from the
+  // earlier `getAuthUrl` call. Renderer can never hand
+  // `shell.openExternal` an arbitrary URL.
+  //
+  // Whole feature is gated behind `MAKA_CLAUDE_SUBSCRIPTION_EXPERIMENTAL=1`
+  // until product/legal sign-off. `isExperimentalEnabled()` lets the
+  // Settings UI hide the card; even without that hide, all auth-flow
+  // handlers re-check the flag main-side (fail-closed via the
+  // `experimental_disabled` reason).
   claudeSubscription: {
+    isExperimentalEnabled(): Promise<boolean> {
+      return ipcRenderer.invoke('claude-subscription:is-experimental-enabled');
+    },
     getAuthUrl(): Promise<AuthorizationUrlPayload> {
       return ipcRenderer.invoke('claude-subscription:get-auth-url');
     },
-    openAuthUrl(url: string): Promise<SubscriptionActionResult> {
-      return ipcRenderer.invoke('claude-subscription:open-auth-url', url);
+    openAuthUrl(authRequestId: string): Promise<SubscriptionActionResult> {
+      return ipcRenderer.invoke('claude-subscription:open-auth-url', authRequestId);
     },
     completeAuthorization(authRequestId: string, pasted: string): Promise<SubscriptionActionResult> {
       return ipcRenderer.invoke('claude-subscription:complete-authorization', authRequestId, pasted);

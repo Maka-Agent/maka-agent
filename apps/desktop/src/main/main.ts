@@ -36,7 +36,10 @@ import type {
   UsageRange,
 } from '@maka/core';
 import { runThreadSearch } from './search/thread-search.js';
-import { ClaudeSubscriptionService } from './oauth/claude-subscription-service.js';
+import {
+  ClaudeSubscriptionService,
+  isSubscriptionExperimentalEnabled,
+} from './oauth/claude-subscription-service.js';
 import { defaultWorkspacePrivacyContext } from '@maka/core/incognito';
 import type {
   PricingConfig,
@@ -772,24 +775,45 @@ function registerIpc(): void {
   // PR-OAUTH-SUBSCRIPTION-0: Claude subscription OAuth IPC.
   // All handlers return either `SubscriptionAccountState` or
   // `SubscriptionActionResult` — never raw tokens (xuan G-X3).
+  //
+  // kenji `1da909d5` blocking concern: Anthropic does not permit
+  // third-party developers to offer Claude.ai login on behalf of
+  // users. Until product/legal sign-off, the entire feature is
+  // gated behind `MAKA_CLAUDE_SUBSCRIPTION_EXPERIMENTAL=1`. The
+  // Settings UI also hides the card; this guard is the second line
+  // of defense (a DevTools-triggered call to `window.maka` still
+  // hits the experimental gate).
   // ===========================================================
-  ipcMain.handle('claude-subscription:get-auth-url', async () =>
-    claudeSubscription.getAuthorizationUrl(),
-  );
+  // kenji `45b31e16`: use the dedicated `experimental_disabled`
+  // reason so the user-visible state is clearly "this feature is
+  // not enabled by Maka" — NOT "Anthropic rejected my account".
+  const experimentalDisabledResponse = {
+    ok: false as const,
+    reason: 'experimental_disabled' as const,
+    message: 'Claude 订阅功能尚未在此版本启用。',
+  };
+  ipcMain.handle('claude-subscription:get-auth-url', async () => {
+    if (!isSubscriptionExperimentalEnabled()) {
+      throw new Error('claude-subscription is disabled in this build');
+    }
+    return claudeSubscription.getAuthorizationUrl();
+  });
   ipcMain.handle(
     'claude-subscription:open-auth-url',
-    async (_event, url: unknown) => {
-      if (typeof url !== 'string' || !/^https:\/\/claude\.ai\//.test(url)) {
-        return { ok: false, reason: 'unknown', message: '授权链接无效。' };
+    async (_event, authRequestId: unknown) => {
+      if (!isSubscriptionExperimentalEnabled()) return experimentalDisabledResponse;
+      if (typeof authRequestId !== 'string') {
+        return { ok: false as const, reason: 'authorization_pending' as const, message: '授权会话不存在。' };
       }
-      return claudeSubscription.openAuthorizationUrl(url);
+      return claudeSubscription.openAuthorizationUrl(authRequestId);
     },
   );
   ipcMain.handle(
     'claude-subscription:complete-authorization',
     async (_event, authRequestId: unknown, pasted: unknown) => {
+      if (!isSubscriptionExperimentalEnabled()) return experimentalDisabledResponse;
       if (typeof authRequestId !== 'string') {
-        return { ok: false, reason: 'authorization_pending', message: '授权会话不存在。' };
+        return { ok: false as const, reason: 'authorization_pending' as const, message: '授权会话不存在。' };
       }
       return claudeSubscription.completeAuthorization(authRequestId, pasted);
     },
@@ -797,23 +821,47 @@ function registerIpc(): void {
   ipcMain.handle(
     'claude-subscription:cancel-authorization',
     async (_event, authRequestId: unknown) => {
+      if (!isSubscriptionExperimentalEnabled()) return { ok: true as const };
       claudeSubscription.cancelAuthorization(
         typeof authRequestId === 'string' ? authRequestId : undefined,
       );
-      return { ok: true } as const;
+      return { ok: true as const };
     },
   );
-  ipcMain.handle('claude-subscription:get-account-state', async () =>
-    claudeSubscription.getAccountState(),
-  );
-  ipcMain.handle('claude-subscription:refresh-quota', async () =>
-    claudeSubscription.refreshQuota(),
-  );
-  ipcMain.handle('claude-subscription:refresh-tokens', async () =>
-    claudeSubscription.refreshTokens(),
-  );
-  ipcMain.handle('claude-subscription:logout', async () =>
-    claudeSubscription.logout(),
+  ipcMain.handle('claude-subscription:get-account-state', async () => {
+    if (!isSubscriptionExperimentalEnabled()) {
+      // Returning the disabled state lets the UI fail-closed: the
+      // card is not rendered in the first place, but a manual call
+      // surfaces a coherent state instead of an opaque throw.
+      return {
+        provider: 'claude-subscription' as const,
+        runtimeState: 'not_logged_in' as const,
+      };
+    }
+    return claudeSubscription.getAccountState();
+  });
+  ipcMain.handle('claude-subscription:refresh-quota', async () => {
+    if (!isSubscriptionExperimentalEnabled()) return experimentalDisabledResponse;
+    return claudeSubscription.refreshQuota();
+  });
+  ipcMain.handle('claude-subscription:refresh-tokens', async () => {
+    if (!isSubscriptionExperimentalEnabled()) return experimentalDisabledResponse;
+    return claudeSubscription.refreshTokens();
+  });
+  ipcMain.handle('claude-subscription:logout', async () => {
+    // Logout is always allowed — even if experimental is off,
+    // a user might want to clear a stale token file from a
+    // previous opt-in. local-clear is harmless.
+    return claudeSubscription.logout();
+  });
+  /**
+   * Read-only signal so the renderer's Settings card can decide
+   * whether to render the Claude subscription UI at all. Returns
+   * `false` when `MAKA_CLAUDE_SUBSCRIPTION_EXPERIMENTAL` is not
+   * set to `'1'`.
+   */
+  ipcMain.handle('claude-subscription:is-experimental-enabled', async () =>
+    isSubscriptionExperimentalEnabled(),
   );
 
   ipcMain.handle('search:thread', async (_event, request: unknown) => {

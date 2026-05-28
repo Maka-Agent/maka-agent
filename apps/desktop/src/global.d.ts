@@ -150,8 +150,9 @@ declare global {
         >;
       };
       claudeSubscription: {
+        isExperimentalEnabled(): Promise<boolean>;
         getAuthUrl(): Promise<AuthorizationUrlPayload>;
-        openAuthUrl(url: string): Promise<SubscriptionActionResult>;
+        openAuthUrl(authRequestId: string): Promise<SubscriptionActionResult>;
         completeAuthorization(
           authRequestId: string,
           pasted: string,

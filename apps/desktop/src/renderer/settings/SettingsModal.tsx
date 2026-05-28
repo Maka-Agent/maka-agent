@@ -933,8 +933,11 @@ function AccountSettingsPage(props: {
         PR-OAUTH-SUBSCRIPTION-0: Claude subscription card lives in
         Settings · 账号 (kenji `cf41871b` decision #3 — auth state
         belongs with the account, not the model catalog).
+        The card itself self-gates on `isExperimentalEnabled` and
+        returns null when the flag is off — no `订阅` heading, no
+        teasing UI. We render the card unconditionally; the gate is
+        inside.
       */}
-      <h3 className="settingsSubheading">订阅</h3>
       <ClaudeSubscriptionCard />
     </div>
   );
@@ -948,6 +951,7 @@ function AccountSettingsPage(props: {
  * consumes only `SubscriptionAccountState`.
  */
 function ClaudeSubscriptionCard() {
+  const [experimentalEnabled, setExperimentalEnabled] = useState<boolean | null>(null);
   const [state, setState] = useState<SubscriptionAccountState | null>(null);
   const [pendingAction, setPendingAction] = useState(false);
   const [authRequestId, setAuthRequestId] = useState<string | null>(null);
@@ -966,8 +970,30 @@ function ClaudeSubscriptionCard() {
   };
 
   useEffect(() => {
-    void refresh();
+    // kenji `1da909d5` blocking concern: Anthropic does not permit
+    // third-party developers to offer Claude.ai login on behalf of
+    // users. Until product/legal sign-off, gate the whole UI behind
+    // `MAKA_CLAUDE_SUBSCRIPTION_EXPERIMENTAL=1`. Loading state also
+    // renders nothing — no teasing UI.
+    let cancelled = false;
+    void window.maka.claudeSubscription
+      .isExperimentalEnabled()
+      .then((flag) => {
+        if (cancelled) return;
+        setExperimentalEnabled(flag);
+        if (flag) void refresh();
+      })
+      .catch(() => {
+        if (!cancelled) setExperimentalEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  if (experimentalEnabled !== true) {
+    return null;
+  }
 
   async function startLogin() {
     setPendingAction(true);
@@ -977,7 +1003,9 @@ function ClaudeSubscriptionCard() {
       setStateHint(payload.stateHint);
       setPasteValue('');
       setPasteError(null);
-      const opened = await window.maka.claudeSubscription.openAuthUrl(payload.url);
+      // kenji `1da909d5` hardening: pass the opaque authRequestId,
+      // NOT the URL. Main looks up the URL it generated.
+      const opened = await window.maka.claudeSubscription.openAuthUrl(payload.authRequestId);
       if (!opened.ok) {
         toast.error('无法打开浏览器', opened.message);
         setAuthRequestId(null);
@@ -1052,6 +1080,8 @@ function ClaudeSubscriptionCard() {
   const presentation = state ? presentSubscriptionState(state) : { label: '加载中…', tone: 'muted', detail: '' };
 
   return (
+    <>
+    <h3 className="settingsSubheading">订阅</h3>
     <div className="settingsConnectionRow" data-status={state?.runtimeState ?? 'loading'}>
       <div className="settingsConnectionRowHead">
         <div className="settingsConnectionRowText">
@@ -1165,6 +1195,7 @@ function ClaudeSubscriptionCard() {
         </div>
       )}
     </div>
+    </>
   );
 }
 
