@@ -28,4 +28,11 @@ describe('sidebar version info contract', () => {
     assert.match(buttonBranch, /<span>版本信息<\/span>/);
     assert.doesNotMatch(buttonBranch, /即将推出|版本更新/, 'wired footer action must be version info, not update roadmap copy');
   });
+
+  it('daily review fallback copy is a bridge-missing state, not a coming-soon product claim', async () => {
+    const ui = await readRepo('packages/ui/src/components.tsx');
+    const dailyReviewStub = ui.match(/'daily-review':\s*\{[\s\S]*?\n\s*\},/)?.[0] ?? '';
+    assert.match(dailyReviewStub, /每日回顾未连接/);
+    assert.doesNotMatch(dailyReviewStub, /即将推出|入口占位|未接真实数据/);
+  });
 });

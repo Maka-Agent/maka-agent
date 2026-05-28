@@ -155,11 +155,10 @@ const navGroupSummary = deriveNavGroupSummary;
 export type { NavGroupSummary };
 
 /**
- * V0.2 product-stance copy for Coming Soon Settings pages. The shape is
- * derived from @kenji's contract notes (`notes/maka-*-contract.md`) and is
+ * Product-stance copy for roadmap-only Settings pages. The shape is
  * surfaced as four explicit sections — `当前状态 / 会包含什么 / 不会做什么 /
- * 下一步需要配置什么` — so the UI reads as a deliberate disabled-by-default
- * stance rather than empty placeholder.
+ * 下一步需要配置什么` — so disabled-by-default pages are explicit instead
+ * of empty placeholders.
  */
 type ComingSoonCopy = {
   Icon: ComponentType<LucideProps>;
@@ -177,33 +176,7 @@ type ComingSoonCopy = {
   nextConfig: string[];
 };
 
-const COMING_SOON_PAGES: Partial<Record<SettingsSection, ComingSoonCopy>> = {
-  'voice-models': {
-    Icon: Volume2,
-    headline: '语音模型',
-    badge: 'V0.2 · per-session opt-in · 麦克风需 OS 权限',
-    description:
-      '为 Maka 提供本地或云端的 TTS / STT，让对话可以语音输入和回放。语音是单独的能力，未来由用户显式选择，与文本通道分开管理。',
-    status: '当前尚未实现。麦克风权限尚未申请，应用不会主动调用任何音频设备。',
-    willInclude: [
-      '本地 TTS：piper / coqui，零网络延迟',
-      '云端 STT：Whisper / GPT-4o Realtime / Gemini Live',
-      '按 connection 独立配置语音模型，文本通道不受影响',
-      '语音转写结果走与文本同等的权限审计与本地 JSONL',
-    ],
-    willNotDo: [
-      '没有用户在 macOS 中明确同意时不会访问麦克风；上线后首次需要经过系统级权限对话框',
-      '在 UI 未明确披露上传范围前不会向云端 STT 传输音频',
-      '客户端中不预打包大体积本地 STT 模型，所有模型文件需要用户明确同意后才会下载',
-      '语音转写结果不会发送给与文本对话不同的 provider，除非用户明确选择',
-    ],
-    nextConfig: [
-      '未来在「语音模型」内由用户显式选择语音通道，并经由 macOS 系统获取麦克风权限',
-      '选择 TTS / STT 的具体引擎与 connection',
-      '可选：单独为语音通道指定代理、缓存目录或本地模型路径',
-    ],
-  },
-};
+const COMING_SOON_PAGES: Partial<Record<SettingsSection, ComingSoonCopy>> = {};
 
 const BOT_LABELS: Record<BotProvider, { label: string; help: string; support: 'runtime' | 'credentials' | 'planned' }> = {
   telegram: {

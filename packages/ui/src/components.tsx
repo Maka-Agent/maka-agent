@@ -664,10 +664,10 @@ export function SessionListPanel(props: {
 }
 
 /**
- * PR-SIDEBAR-IA-0 Phase 2: stub copy + icon for each module that has
- * no real implementation yet. Daily Review remains a stub until its
- * product lane opens. Automations/计划 is now backed by the local
- * plan-reminder runtime.
+ * PR-SIDEBAR-IA-0 Phase 2: fallback copy + icon for modules whose host
+ * bridge is absent. Automations/计划 is backed by the local plan-reminder
+ * runtime; Daily Review renders the real panel when `dailyReviewBridge`
+ * is provided by the desktop shell.
  *
  * Per xuan `47e204f2` #1, the stub framework is intentionally minimal
  * — empty-state shape, fixed Chinese copy, no router / settings /
@@ -679,8 +679,8 @@ const STUB_VIEWS: Record<
 > = {
   'daily-review': {
     Icon: CalendarDays,
-    title: '每日回顾即将推出',
-    body: '未来用于每日小结、工作记录回顾；当前是入口占位，未接真实数据。',
+    title: '每日回顾未连接',
+    body: '当前宿主没有注入本地回顾数据桥；请从桌面版正式入口打开，或稍后刷新重试。',
   },
 };
 

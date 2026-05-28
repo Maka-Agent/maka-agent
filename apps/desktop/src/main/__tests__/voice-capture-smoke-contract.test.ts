@@ -14,6 +14,7 @@ describe('voice capture smoke Settings contract', () => {
     assert.ok(voiceNav, 'voice-models nav item must exist');
     assert.doesNotMatch(voiceNav![0], /comingSoon:\s*true/, 'voice-models nav must not be tagged as coming soon');
     assert.match(src, /case\s+'voice-models':\s*\n\s*return\s+<VoiceModelsSettingsPage\s*\/>/);
+    assert.doesNotMatch(src, /'voice-models':\s*\{[\s\S]*当前尚未实现/, 'voice-models must not keep stale roadmap copy');
   });
 
   it('runs only a local renderer capture smoke and validates it through the core voice contract', async () => {
