@@ -8283,6 +8283,124 @@ button:active {
 }
 
 /* ────────────────────────────────────────────────────────────────
+   PR-FIRST-RUN-CHECKLIST-0: "接下来可以探索" card.
+   Rendered below OnboardingHero ready_empty hero. Each row is a
+   real jumpable affordance; done rows mute.
+   ──────────────────────────────────────────────────────────────── */
+.maka-onboarding-stack {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.maka-first-run-checklist {
+  border: 1px solid var(--foreground-10);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: var(--foreground-3);
+  display: grid;
+  gap: 10px;
+}
+
+.maka-first-run-checklist-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--foreground);
+}
+
+.maka-first-run-checklist-header strong {
+  font-size: 14px;
+}
+
+.maka-first-run-checklist-count {
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--foreground-50);
+  font-variant-numeric: tabular-nums;
+}
+
+.maka-first-run-checklist-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.maka-first-run-checklist-row > button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  color: var(--foreground);
+}
+
+.maka-first-run-checklist-row > button:hover {
+  background: var(--foreground-5);
+  border-color: var(--foreground-10);
+}
+
+.maka-first-run-checklist-row[data-done="true"] > button {
+  color: var(--foreground-50);
+  cursor: default;
+}
+
+.maka-first-run-checklist-row[data-done="true"] > button:hover {
+  background: var(--foreground-3);
+  border-color: transparent;
+}
+
+.maka-first-run-checklist-status {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--foreground-5);
+  color: var(--foreground-70);
+}
+
+.maka-first-run-checklist-row[data-done="true"] .maka-first-run-checklist-status {
+  background: oklch(from var(--success, var(--info)) l c h / 0.12);
+  color: var(--success-text, var(--info-text));
+}
+
+.maka-first-run-checklist-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.maka-first-run-checklist-copy strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.maka-first-run-checklist-copy small {
+  font-size: 12px;
+  color: var(--foreground-50);
+  line-height: 1.45;
+}
+
+.maka-first-run-checklist-arrow {
+  color: var(--foreground-40);
+}
+
+.maka-first-run-checklist-row[data-done="true"] .maka-first-run-checklist-arrow {
+  display: none;
+}
+
+/* ────────────────────────────────────────────────────────────────
    PR-DAILY-REVIEW-MVP-0: 每日回顾 sidebar panel.
    ──────────────────────────────────────────────────────────────── */
 .maka-daily-review-panel {

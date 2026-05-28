@@ -47,6 +47,7 @@ import { ErrorBoundary } from './error-boundary';
 import { KeyboardHelpModal, useKeyboardHelp } from './keyboard-help';
 import { CommandPalette, buildCommandList, useCommandPalette } from './command-palette';
 import { OnboardingHero } from './OnboardingHero';
+import { FirstRunChecklist } from './FirstRunChecklist';
 import { useOnboardingSnapshot } from './use-onboarding-snapshot';
 import { ProviderLogo } from './settings/ProvidersPanel';
 import { ArtifactPane } from './artifact-pane';
@@ -1668,17 +1669,27 @@ function AppShell(props: {
                 onBranchBannerClick={handleBranchBannerClick}
                 emptyOverride={
                   showOnboardingHero && onboardingState ? (
-                    <OnboardingHero
-                      state={onboardingState}
-                      onOpenSettings={(section) => {
-                        if (section) openSettingsSection(section);
-                        else openSettings();
-                      }}
-                      onQuickChatSubmit={(prompt) => {
-                        void handleQuickChatSubmit(prompt);
-                      }}
-                      quickChatPending={quickChatPending}
-                    />
+                    <div className="maka-onboarding-stack">
+                      <OnboardingHero
+                        state={onboardingState}
+                        onOpenSettings={(section) => {
+                          if (section) openSettingsSection(section);
+                          else openSettings();
+                        }}
+                        onQuickChatSubmit={(prompt) => {
+                          void handleQuickChatSubmit(prompt);
+                        }}
+                        quickChatPending={quickChatPending}
+                      />
+                      {onboardingState.kind === 'ready_empty' && (
+                        <FirstRunChecklist
+                          onOpenSettingsSection={(section) => openSettingsSection(section)}
+                          onOpenSidebarModule={(target) => {
+                            setNavSelection({ section: target });
+                          }}
+                        />
+                      )}
+                    </div>
                   ) : isOnboardingLoading ? (
                     // @kenji review: render a no-op skeleton while the
                     // first snapshot resolves so EmptyChatHero doesn't
