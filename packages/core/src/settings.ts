@@ -168,11 +168,38 @@ export interface AppearanceSettings {
   toastPosition?: ToastPosition;
 }
 
+/**
+ * PR-LANG-PREF-0 (WAWQAQ msg `edc9cb41` + xuan `b4f4f2a8`/`54b56858`
+ * + kenji `7e532892`): closed UI-locale preference.
+ *
+ * `'auto'` — use `navigator.language` detection (today's behavior).
+ * `'zh'` / `'en'` — user explicit override; takes precedence over
+ *   navigator detection but is itself overridden by the visual-smoke
+ *   fixture locale (fixtures stay deterministic regardless of the
+ *   persisted user preference).
+ *
+ * Closed union so adding a third locale is a deliberate
+ * contract-level decision.
+ */
+export type UiLocalePreference = 'auto' | 'zh' | 'en';
+
+export const UI_LOCALE_PREFERENCES: readonly UiLocalePreference[] = ['auto', 'zh', 'en'];
+
+export function isUiLocalePreference(value: unknown): value is UiLocalePreference {
+  return value === 'auto' || value === 'zh' || value === 'en';
+}
+
 export interface PersonalizationSettings {
   /** How the assistant addresses the user. Empty falls back to "你". */
   displayName: string;
   /** Inline tone preference shown to the model in its system prompt. */
   assistantTone: string;
+  /**
+   * PR-LANG-PREF-0: UI locale preference (kenji `7e532892` acceptance):
+   * user explicit choice > navigator.language; visual-smoke override
+   * stays for fixture tests. Defaults to `'auto'`.
+   */
+  uiLocale: UiLocalePreference;
 }
 
 /**
@@ -330,6 +357,7 @@ export function createDefaultSettings(): AppSettings {
     personalization: {
       displayName: '',
       assistantTone: '',
+      uiLocale: 'auto',
     },
     onboarding: {
       milestones: [],
@@ -439,6 +467,17 @@ export function normalizeSettings(input: unknown): AppSettings {
       toastPosition: isToastPosition(base.appearance.toastPosition)
         ? base.appearance.toastPosition
         : 'bottom-right',
+    },
+    // PR-LANG-PREF-0: closed-enum fail-closed for the new
+    // `personalization.uiLocale` preference. mergeSettings spreads
+    // raw user values, so an unknown value would otherwise reach the
+    // renderer and produce a `data-maka-locale="xx"` attribute with
+    // no detector mapping. Fall back to 'auto' on any miss.
+    personalization: {
+      ...base.personalization,
+      uiLocale: isUiLocalePreference(base.personalization.uiLocale)
+        ? base.personalization.uiLocale
+        : 'auto',
     },
     botChat: {
       channels: Object.fromEntries(

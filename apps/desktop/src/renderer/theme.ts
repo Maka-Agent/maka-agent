@@ -96,3 +96,36 @@ export function applyThemePalette(palette: ThemePalette): void {
     /* localStorage unavailable; pre-React paint will fall back to default */
   }
 }
+
+/**
+ * PR-LANG-PREF-0: apply persisted UI locale preference to `<html>`.
+ *
+ * - `'auto'`  → remove `data-maka-locale` so `detectUiLocale()` falls
+ *               through to `navigator.language`.
+ * - `'zh'` / `'en'` → set `data-maka-locale=<value>` so
+ *               `detectUiLocale()` returns the user choice synchronously
+ *               on every read.
+ *
+ * Also updates `<html lang>` so screen readers and CSS `:lang()` rules
+ * see the right language code. The visual-smoke override
+ * (`data-maka-visual-smoke-locale`) still wins over this attribute
+ * in `detectUiLocale()` so fixture screenshots stay deterministic.
+ */
+export type UiLocalePreference = 'auto' | 'zh' | 'en';
+
+export function applyUiLocale(preference: UiLocalePreference): void {
+  const root = document.documentElement;
+  if (preference === 'auto') {
+    root.removeAttribute('data-maka-locale');
+    // Restore the lang attribute to a best-effort fallback from
+    // navigator. Don't blank it out — empty `<html lang>` is worse
+    // for assistive tech than a slightly stale value.
+    const fallback = typeof navigator !== 'undefined' && navigator.language
+      ? (navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en')
+      : 'zh';
+    root.setAttribute('lang', fallback);
+  } else {
+    root.setAttribute('data-maka-locale', preference);
+    root.setAttribute('lang', preference);
+  }
+}

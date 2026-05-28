@@ -60,6 +60,7 @@ import { BOT_PROVIDERS, createDefaultSettings } from '@maka/core/settings';
 import { useModalA11y, useToast } from '@maka/ui';
 import { ProvidersPanel } from './ProvidersPanel';
 import { openPathFailureCopy, openPathActionLabel } from '../open-path';
+import { applyUiLocale, type UiLocalePreference } from '../theme';
 import {
   deriveAccountAuthActions,
   presentAccountAuthState,
@@ -1439,6 +1440,7 @@ function PersonalizationSettingsPage(props: {
   const value = props.settings.personalization;
   const [displayName, setDisplayName] = useState(value.displayName);
   const [assistantTone, setAssistantTone] = useState(value.assistantTone);
+  const [uiLocale, setUiLocale] = useState<UiLocalePreference>(value.uiLocale);
   const toast = useToast();
   const [saving, setSaving] = useState(false);
 
@@ -1449,8 +1451,14 @@ function PersonalizationSettingsPage(props: {
         personalization: {
           displayName: displayName.trim().slice(0, 60),
           assistantTone: assistantTone.trim().slice(0, 500),
+          uiLocale,
         },
       });
+      // PR-LANG-PREF-0: apply the chosen locale to <html> right
+      // after save so the change takes effect immediately in the
+      // current window. The persisted value also drives next-boot
+      // detection (main.tsx applies it on settings load).
+      applyUiLocale(uiLocale);
       // Single toast either way. With warnings, surface generic policy
       // statements (no raw user text echoed back, no specific keyword
       // disclosed) per kenji's personalization-prompt-contract.
@@ -1482,6 +1490,26 @@ function PersonalizationSettingsPage(props: {
           spellCheck={false}
         />
         <small>Maka 在聊天里会以这个名字称呼你。留空就用默认的「你」。</small>
+      </label>
+
+      {/*
+        PR-LANG-PREF-0 (WAWQAQ msg `edc9cb41` + kenji `7e532892`
+        acceptance criteria): 自动 / 中文 / English. User explicit
+        choice wins over navigator.language; visual-smoke override
+        wins over both (deterministic baselines).
+      */}
+      <label className="settingsField">
+        <span>界面语言</span>
+        <select
+          value={uiLocale}
+          onChange={(event) => setUiLocale(event.currentTarget.value as UiLocalePreference)}
+          aria-label="界面语言"
+        >
+          <option value="auto">跟随系统</option>
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+        </select>
+        <small>选择 Maka 界面的显示语言。保存后立即生效，重启后保持。</small>
       </label>
 
       <label className="settingsField">
