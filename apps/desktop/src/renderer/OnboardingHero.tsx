@@ -20,10 +20,11 @@
 //     wired in a later PR.
 
 import { ArrowRight, Sparkles, KeyRound, Settings as SettingsIcon, Cpu, AlertCircle } from 'lucide-react';
-import { useCallback, useState, type KeyboardEvent } from 'react';
+import { useCallback, useRef, useState, type KeyboardEvent } from 'react';
 import type { LlmConnection, OnboardingState, ProviderType, SettingsSection } from '@maka/core';
 import { detectUiLocale, type UiLocale } from '@maka/ui';
 import { ProviderLogo, providerDisplay } from './settings/ProvidersPanel';
+import { FIRST_RUN_TASK_SUGGESTIONS } from './first-run-task-suggestions';
 
 /**
  * PR-UI-15 (@yuejing 2026-05-22): unify OnboardingHero quickChat
@@ -383,6 +384,7 @@ function ReadyEmptyHero(props: {
   quickChatPending: boolean;
 }) {
   const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const copy = READY_HERO_COPY_BY_LOCALE[detectUiLocale()];
 
   const submit = useCallback(() => {
@@ -405,6 +407,16 @@ function ReadyEmptyHero(props: {
     [submit],
   );
 
+  const prefillSuggestion = useCallback((prompt: string) => {
+    setDraft(prompt);
+    window.requestAnimationFrame(() => {
+      const input = inputRef.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(prompt.length, prompt.length);
+    });
+  }, []);
+
   return (
     <section className="maka-onboarding maka-onboarding-ready" aria-label={copy.ariaLabel}>
       <header>
@@ -418,6 +430,7 @@ function ReadyEmptyHero(props: {
 
       <div className="maka-onboarding-quickchat">
         <textarea
+          ref={inputRef}
           className="maka-onboarding-quickchat-input"
           placeholder={copy.quickChatPlaceholder}
           rows={3}
@@ -439,6 +452,23 @@ function ReadyEmptyHero(props: {
         >
           {props.quickChatPending ? copy.submitPendingLabel : copy.submitIdleLabel}
         </button>
+      </div>
+
+      <div className="maka-first-run-task-suggestions" aria-label="试试这些任务">
+        <strong>试试这些任务</strong>
+        <div className="maka-first-run-task-suggestion-list">
+          {FIRST_RUN_TASK_SUGGESTIONS.map((suggestion) => (
+            <button
+              key={suggestion.id}
+              type="button"
+              className="maka-first-run-task-suggestion"
+              onClick={() => prefillSuggestion(suggestion.prompt)}
+              disabled={props.quickChatPending}
+            >
+              {suggestion.label}
+            </button>
+          ))}
+        </div>
       </div>
     </section>
   );
