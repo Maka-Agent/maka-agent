@@ -607,6 +607,7 @@ export {
   botConversationKey,
   botDisplayLabel,
   formatBotMessageForSession,
+  humanizeBotStatusReason,
   isPlaintextHelpCommand,
   isPlaintextResetCommand,
   plaintextHelpReply,
