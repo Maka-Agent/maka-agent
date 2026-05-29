@@ -1123,6 +1123,10 @@ function PlanReminderPanel(props: {
     }
   }
 
+  function applyRunAtPreset(preset: 'ten-minutes' | 'one-hour' | 'tomorrow-morning' | 'next-monday') {
+    setRunAtLocal(toDatetimeLocalValue(planReminderPresetRunAt(preset)));
+  }
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canCreate) return;
@@ -1166,6 +1170,23 @@ function PlanReminderPanel(props: {
             type="datetime-local"
           />
         </label>
+        <div className="maka-plan-presets" aria-label="快速设置提醒时间">
+          {[
+            ['ten-minutes', '10 分钟后'],
+            ['one-hour', '1 小时后'],
+            ['tomorrow-morning', '明天 9 点'],
+            ['next-monday', '下周一 9 点'],
+          ].map(([preset, label]) => (
+            <button
+              key={preset}
+              type="button"
+              className="maka-plan-preset"
+              onClick={() => applyRunAtPreset(preset as 'ten-minutes' | 'one-hour' | 'tomorrow-morning' | 'next-monday')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <label className="maka-plan-field">
           <span>重复</span>
           <select value={recurrence} onChange={(event) => setRecurrence(event.currentTarget.value as PlanReminderRecurrence)}>
@@ -1391,6 +1412,22 @@ function toDatetimeLocalValue(ts: number): string {
   const date = new Date(ts);
   const pad = (value: number) => String(value).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function planReminderPresetRunAt(preset: 'ten-minutes' | 'one-hour' | 'tomorrow-morning' | 'next-monday', now: number = Date.now()): number {
+  if (preset === 'ten-minutes') return now + 10 * 60 * 1000;
+  if (preset === 'one-hour') return now + 60 * 60 * 1000;
+  const date = new Date(now);
+  if (preset === 'tomorrow-morning') {
+    date.setDate(date.getDate() + 1);
+    date.setHours(9, 0, 0, 0);
+    return date.getTime();
+  }
+  const day = date.getDay();
+  const daysUntilNextMonday = ((8 - day) % 7) || 7;
+  date.setDate(date.getDate() + daysUntilNextMonday);
+  date.setHours(9, 0, 0, 0);
+  return date.getTime();
 }
 
 function planReminderEditableRunAt(reminder: PlanReminder, now: number = Date.now()): number {

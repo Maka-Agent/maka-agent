@@ -58,6 +58,10 @@ describe('Plan reminder MVP contract', () => {
     assert.match(ui, /activePlanReminderCount/, 'sidebar Plan nav must derive an active reminder count');
     assert.match(ui, /maka-nav-count/, 'sidebar Plan nav must surface the active reminder count');
     assert.match(ui, /status !== 'completed'/, 'sidebar Plan nav count must exclude completed history rows');
+    assert.match(ui, /快速设置提醒时间/, 'create/edit form must expose quick time presets');
+    assert.match(ui, /10 分钟后/, 'quick presets must include near-term reminder creation');
+    assert.match(ui, /下周一 9 点/, 'quick presets must include weekly planning');
+    assert.match(ui, /planReminderPresetRunAt/, 'quick presets must centralize time calculation');
   });
 
   it('scheduler records trigger outcomes and emits due events', async () => {
