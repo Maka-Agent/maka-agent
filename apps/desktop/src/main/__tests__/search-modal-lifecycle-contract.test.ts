@@ -180,6 +180,9 @@ describe('SearchModal lifecycle contract (PR-SIDEBAR-IA-0 Phase 3 P0 fixup)', ()
     assert.match(searchModal, /role="option"[\s\S]*aria-selected=\{activeResultIndex === index\}/, 'Search result rows must expose selected option state');
     assert.match(searchModal, /event\.key === 'ArrowDown'[\s\S]*moveActiveResult\(1\)/, 'ArrowDown must move to the next result');
     assert.match(searchModal, /event\.key === 'ArrowUp'[\s\S]*moveActiveResult\(-1\)/, 'ArrowUp must move to the previous result');
+    assert.match(searchModal, /function jumpActiveResult\(index: number\)/, 'SearchModal must support direct active-result jumps');
+    assert.match(searchModal, /event\.key === 'Home'[\s\S]*jumpActiveResult\(0\)/, 'Home must jump to the first result');
+    assert.match(searchModal, /event\.key === 'End'[\s\S]*jumpActiveResult\(results\.length - 1\)/, 'End must jump to the last result');
     assert.match(searchModal, /event\.key === 'Enter'[\s\S]*selectResult\(results\[activeResultIndex\]!\)/, 'Enter must open the active result');
     assert.match(searchModal, /data-active=\{activeResultIndex === index \? 'true' : undefined\}/, 'Active result must get a visible state hook');
     assert.match(styles, /\.maka-search-modal-result\[data-active="true"\]:not\(\[disabled\]\)/, 'Active search result must have dedicated styling');

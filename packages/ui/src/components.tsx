@@ -1850,6 +1850,11 @@ export function SearchModal(props: {
     });
   }
 
+  function jumpActiveResult(index: number) {
+    if (results.length === 0) return;
+    setActiveResultIndex(Math.max(0, Math.min(results.length - 1, index)));
+  }
+
   const incognitoBlocked = error?.reason === 'incognito_active';
   const trimmed = query.trim();
   const showResults = !error && trimmed.length > 0 && !pending && results.length > 0;
@@ -1908,6 +1913,16 @@ export function SearchModal(props: {
               if (event.key === 'ArrowUp' && showResults) {
                 event.preventDefault();
                 moveActiveResult(-1);
+                return;
+              }
+              if (event.key === 'Home' && showResults) {
+                event.preventDefault();
+                jumpActiveResult(0);
+                return;
+              }
+              if (event.key === 'End' && showResults) {
+                event.preventDefault();
+                jumpActiveResult(results.length - 1);
                 return;
               }
               if (event.key === 'Enter' && showResults && activeResultIndex >= 0) {
