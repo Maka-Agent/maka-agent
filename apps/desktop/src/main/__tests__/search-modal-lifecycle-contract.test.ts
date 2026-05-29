@@ -266,4 +266,12 @@ describe('SearchModal lifecycle contract (PR-SIDEBAR-IA-0 Phase 3 P0 fixup)', ()
     assert.match(searchModal, /结果只包含会话标题和内容文本，不进入网络。/, 'Search empty-state copy must describe the actual local title/content scope');
     assert.match(searchModal, /没有匹配的会话标题或内容。换个关键词试试。/, 'Search no-match copy must not imply title hits are unsupported');
   });
+
+  it('session time buckets use product labels without unfinished-state wording', async () => {
+    const components = await readFile(COMPONENTS_PATH, 'utf8');
+    const groupingBlock = components.slice(components.indexOf('function groupSessionsByTime'), components.indexOf('function formatSessionMeta'));
+
+    assert.match(groupingBlock, /label:\s*'待发送'/, 'Sessions with no messages should live in the concise pending-send bucket');
+    assert.doesNotMatch(groupingBlock, /尚未发送/, 'Session group labels should not read like unfinished implementation copy');
+  });
 });

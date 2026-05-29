@@ -5880,7 +5880,7 @@ function groupSessionsByTime(sessions: SessionSummary[]): SessionGroup[] {
     { label: '过去 7 天', sessions: [] },
     { label: '过去 30 天', sessions: [] },
     { label: '更早', sessions: [] },
-    { label: '尚未发送', sessions: [] },
+    { label: '待发送', sessions: [] },
   ];
 
   for (const session of sessions) {
