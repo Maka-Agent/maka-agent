@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative } from 'node:path';
 import { z } from 'zod';
@@ -49,6 +50,12 @@ const BUNDLED_OFFICE_SKILLS: Array<{ id: string; body: string }> = [
   { id: 'officecli-pptx', body: officeCliPptxSkillTemplate() },
 ];
 
+const LEGACY_BUNDLED_OFFICE_SKILL_SHA256: Record<string, string> = {
+  'officecli-docx': '63f1690d1e9dea0a4e574bc3644222279fcfee336371d842c9669fbc91e89821',
+  'officecli-xlsx': 'dca3471c36da0628b6764711bde714958fcced13008cd8dfd4d548a5f02eda82',
+  'officecli-pptx': '21a933a459c921c3d7b14c7fc1cad59c7f72b7752903cd7d4e9083a1c835d302',
+};
+
 /**
  * Scan `{workspaceRoot}/skills/` for directories that contain a SKILL.md.
  * Parse the YAML front-matter for `name`, `description`, and `allowed-tools`.
@@ -63,8 +70,9 @@ export async function listInstalledSkills(root: string): Promise<InstalledSkill[
   return definitions.map(({ content: _content, ...skill }) => skill);
 }
 
-export async function ensureBundledOfficeSkills(root: string): Promise<{ created: string[]; skipped: string[]; failed: string[] }> {
+export async function ensureBundledOfficeSkills(root: string): Promise<{ created: string[]; updated: string[]; skipped: string[]; failed: string[] }> {
   const created: string[] = [];
+  const updated: string[] = [];
   const skipped: string[] = [];
   const failed: string[] = [];
   const skillsDir = join(root, 'skills');
@@ -75,14 +83,14 @@ export async function ensureBundledOfficeSkills(root: string): Promise<{ created
     await mkdir(skillsDir, { recursive: true, mode: 0o700 });
     const skillsStat = await lstat(skillsDir);
     if (!skillsStat.isDirectory() || skillsStat.isSymbolicLink()) {
-      return { created, skipped, failed: BUNDLED_OFFICE_SKILLS.map((skill) => skill.id) };
+      return { created, updated, skipped, failed: BUNDLED_OFFICE_SKILLS.map((skill) => skill.id) };
     }
     [rootReal, skillsReal] = await Promise.all([realpath(root), realpath(skillsDir)]);
     if (!isContainedPath(rootReal, skillsReal)) {
-      return { created, skipped, failed: BUNDLED_OFFICE_SKILLS.map((skill) => skill.id) };
+      return { created, updated, skipped, failed: BUNDLED_OFFICE_SKILLS.map((skill) => skill.id) };
     }
   } catch {
-    return { created, skipped, failed: BUNDLED_OFFICE_SKILLS.map((skill) => skill.id) };
+    return { created, updated, skipped, failed: BUNDLED_OFFICE_SKILLS.map((skill) => skill.id) };
   }
 
   for (const skill of BUNDLED_OFFICE_SKILLS) {
@@ -101,6 +109,15 @@ export async function ensureBundledOfficeSkills(root: string): Promise<{ created
       created.push(skill.id);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        const migration = await migrateLegacyBundledOfficeSkill(skill.id, skillFile, skill.body);
+        if (migration === 'updated') {
+          updated.push(skill.id);
+          continue;
+        }
+        if (migration === 'failed') {
+          failed.push(skill.id);
+          continue;
+        }
         skipped.push(skill.id);
         continue;
       }
@@ -108,7 +125,26 @@ export async function ensureBundledOfficeSkills(root: string): Promise<{ created
     }
   }
 
-  return { created, skipped, failed };
+  return { created, updated, skipped, failed };
+}
+
+async function migrateLegacyBundledOfficeSkill(id: string, skillFile: string, currentBody: string): Promise<'updated' | 'skipped' | 'failed'> {
+  const legacyHash = LEGACY_BUNDLED_OFFICE_SKILL_SHA256[id];
+  if (!legacyHash) return 'skipped';
+  try {
+    const existingStat = await lstat(skillFile);
+    if (!existingStat.isFile() || existingStat.isSymbolicLink()) return 'skipped';
+    const existing = await readFile(skillFile, 'utf8');
+    if (sha256(existing) !== legacyHash) return 'skipped';
+    await writeFile(skillFile, currentBody, { encoding: 'utf8', mode: 0o600 });
+    return 'updated';
+  } catch {
+    return 'failed';
+  }
+}
+
+function sha256(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
 }
 
 export async function createStarterSkill(root: string): Promise<CreateStarterSkillResult> {
