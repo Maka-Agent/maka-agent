@@ -1065,12 +1065,15 @@ function PlanReminderPanel(props: {
   const delivery: PlanReminderDeliveryTarget = deliveryChannel === 'bot'
     ? { channel: 'bot', platform: deliveryPlatform, chatId: deliveryChatId.trim() }
     : { channel: 'local' };
-  const canSubmit = title.trim().length > 0 &&
-    Number.isFinite(parsedRunAt) &&
-    parsedRunAt >= Date.now() &&
-    (delivery.channel === 'local' || delivery.chatId.length > 0);
-  const canSubmitCron = recurrence !== 'cron' || cronExpression.trim().split(/\s+/).length === 5;
-  const canCreate = canSubmit && canSubmitCron;
+  const validationMessage = planReminderFormValidationMessage({
+    title,
+    parsedRunAt,
+    recurrence,
+    cronExpression,
+    delivery,
+    now: Date.now(),
+  });
+  const canCreate = validationMessage === null;
   const isEditing = editingId !== null;
 
   useEffect(() => {
@@ -1251,6 +1254,11 @@ function PlanReminderPanel(props: {
             placeholder="可选：补充需要提醒的上下文"
           />
         </label>
+        {validationMessage && (
+          <p className="maka-plan-validation" role="status" aria-live="polite">
+            {validationMessage}
+          </p>
+        )}
         <button className="maka-button maka-plan-submit" type="submit" disabled={!canCreate}>
           {isEditing ? <Check size={14} strokeWidth={1.75} /> : <Plus size={14} strokeWidth={1.75} />}
           <span>{isEditing ? '保存提醒' : '创建提醒'}</span>
@@ -1428,6 +1436,26 @@ function planReminderPresetRunAt(preset: 'ten-minutes' | 'one-hour' | 'tomorrow-
   date.setDate(date.getDate() + daysUntilNextMonday);
   date.setHours(9, 0, 0, 0);
   return date.getTime();
+}
+
+function planReminderFormValidationMessage(input: {
+  title: string;
+  parsedRunAt: number;
+  recurrence: PlanReminderRecurrence;
+  cronExpression: string;
+  delivery: PlanReminderDeliveryTarget;
+  now: number;
+}): string | null {
+  if (input.title.trim().length === 0) return '填写标题后才能保存提醒。';
+  if (!Number.isFinite(input.parsedRunAt)) return '选择有效的提醒时间。';
+  if (input.parsedRunAt < input.now) return '提醒时间必须晚于当前时间。';
+  if (input.recurrence === 'cron' && input.cronExpression.trim().split(/\s+/).length !== 5) {
+    return 'Cron 需要 5 段表达式，例如 0 9 * * 1-5。';
+  }
+  if (input.delivery.channel === 'bot' && input.delivery.chatId.length === 0) {
+    return '选择机器人聊天时需要填写 Chat ID。';
+  }
+  return null;
 }
 
 function planReminderEditableRunAt(reminder: PlanReminder, now: number = Date.now()): number {
