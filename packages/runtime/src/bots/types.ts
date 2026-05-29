@@ -32,8 +32,25 @@ export interface BotBridge {
   getStatus(): BotStatus;
 }
 
+/**
+ * PR-BOT-REPLY-TO-MESSAGE-0 (Hermes deep-dive): bot replies should
+ * thread under the originating user message so a Telegram group with
+ * concurrent conversations does not visually scramble. `replyToMessageId`
+ * is the platform-native message id of the message being replied to.
+ * Implementations must tolerate a missing/deleted parent (e.g. Telegram
+ * uses `allow_sending_without_reply: true`).
+ *
+ * Only the first chunk of a multi-chunk send is threaded; continuation
+ * chunks render as ordinary sequential messages so the receiver sees a
+ * single threaded head followed by the continuation, not N forks under
+ * the same parent.
+ */
+export interface BotSendOptions {
+  readonly replyToMessageId?: string;
+}
+
 export interface SendCapable {
-  sendMessage(chatId: string, text: string): Promise<string | null>;
+  sendMessage(chatId: string, text: string, options?: BotSendOptions): Promise<string | null>;
 }
 
 export interface BotTestResult {

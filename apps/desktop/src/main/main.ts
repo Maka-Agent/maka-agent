@@ -1872,15 +1872,37 @@ async function processBotIncomingMessage(
       text: formatBotMessageForSession({ ...message, text }),
     });
     const reply = await collectBotReply(sessionId, iterator, turnId);
+    // PR-BOT-REPLY-TO-MESSAGE-0 (Hermes deep-dive): thread the bot reply
+    // under the originating user message. Group chats with concurrent
+    // conversations otherwise visually scramble; even in DMs the threading
+    // keeps a long reply attached to the question that produced it. Bot
+    // bridge layer drops the field for non-Telegram platforms / multi-chunk
+    // continuation pieces.
+    const replyOptions = message.sourceMessageId
+      ? { replyToMessageId: message.sourceMessageId }
+      : undefined;
     if (reply.trim()) {
-      const sent = await botRegistry.sendMessage(message.platform, message.chatId, reply.trim());
+      const sent = await botRegistry.sendMessage(message.platform, message.chatId, reply.trim(), replyOptions);
       if (!sent) {
-        await botRegistry.sendMessage(message.platform, message.chatId, 'Maka 已生成回复，但当前机器人通道暂时无法发送。').catch(() => null);
+        await botRegistry.sendMessage(
+          message.platform,
+          message.chatId,
+          'Maka 已生成回复，但当前机器人通道暂时无法发送。',
+          replyOptions,
+        ).catch(() => null);
       }
     }
   } catch (error) {
     const detail = generalizedErrorMessage(error, '机器人对话处理失败');
-    await botRegistry.sendMessage(message.platform, message.chatId, `Maka 暂时无法处理这条消息：${detail}`).catch(() => null);
+    const replyOptions = message.sourceMessageId
+      ? { replyToMessageId: message.sourceMessageId }
+      : undefined;
+    await botRegistry.sendMessage(
+      message.platform,
+      message.chatId,
+      `Maka 暂时无法处理这条消息：${detail}`,
+      replyOptions,
+    ).catch(() => null);
   }
 }
 

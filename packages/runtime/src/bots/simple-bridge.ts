@@ -1,7 +1,7 @@
 import type { BotChannelSettings } from '@maka/core';
 import { generalizedErrorMessage } from '@maka/core/redaction';
 import { BaseBotAdapter, botReadinessFromSettings } from './base-adapter.js';
-import type { BotPlatform, BotStatus, SendCapable } from './types.js';
+import type { BotPlatform, BotSendOptions, BotStatus, SendCapable } from './types.js';
 import { proxiedFetch } from './proxied-fetch.js';
 
 const TELEGRAM_POLL_TIMEOUT_S = 15;
@@ -75,7 +75,34 @@ function splitForTelegram(text: string): string[] {
   return pieces.map((piece, idx) => `[${idx + 1}/${total}]\n${piece}`);
 }
 
-export const __TEST__ = { utf16Len, prefixWithinUtf16, splitForTelegram };
+/**
+ * PR-BOT-REPLY-TO-MESSAGE-0: build the Telegram `sendMessage` body for
+ * one chunk. `chunkIndex === 0` is the first chunk of a split send and
+ * is the only piece that threads under the originating user message.
+ * Continuation chunks render as ordinary sequential messages.
+ *
+ * `allow_sending_without_reply: true` lets Telegram still deliver if
+ * the parent message was deleted — preserving Maka's response rather
+ * than rejecting it with 400.
+ */
+function buildTelegramSendBody(
+  chatId: string,
+  chunk: string,
+  options: BotSendOptions | undefined,
+  chunkIndex: number,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    chat_id: chatId,
+    text: chunk,
+  };
+  if (chunkIndex === 0 && options?.replyToMessageId) {
+    body.reply_to_message_id = Number(options.replyToMessageId);
+    body.allow_sending_without_reply = true;
+  }
+  return body;
+}
+
+export const __TEST__ = { utf16Len, prefixWithinUtf16, splitForTelegram, buildTelegramSendBody };
 
 export class SimpleBotBridge extends BaseBotAdapter implements SendCapable {
   private abortController: AbortController | null = null;
@@ -133,7 +160,7 @@ export class SimpleBotBridge extends BaseBotAdapter implements SendCapable {
     this.emitStatusChange();
   }
 
-  async sendMessage(chatId: string, text: string): Promise<string | null> {
+  async sendMessage(chatId: string, text: string, options?: BotSendOptions): Promise<string | null> {
     if (this.platform !== 'telegram' || !this.running) return null;
     // PR-TELEGRAM-UTF16-LIMIT-0: split first if the message would
     // exceed Telegram's 4096 UTF-16 code unit cap. The split helper
@@ -141,11 +168,13 @@ export class SimpleBotBridge extends BaseBotAdapter implements SendCapable {
     // the common short-message path stays a single API call.
     const chunks = splitForTelegram(text);
     let lastMessageId: string | null = null;
-    for (const chunk of chunks) {
-      const response = await telegramApi(this.settings.token, 'sendMessage', {
-        chat_id: chatId,
-        text: chunk,
-      });
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const response = await telegramApi(
+        this.settings.token,
+        'sendMessage',
+        buildTelegramSendBody(chatId, chunk, options, i),
+      );
       if (!response.ok) {
         this.readiness = this.readiness === 'operational' ? 'degraded' : 'credentials_valid';
         this.reason = response.description ?? 'send-failed';
