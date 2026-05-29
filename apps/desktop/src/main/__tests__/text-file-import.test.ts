@@ -217,7 +217,7 @@ describe('text file context import', () => {
     });
   });
 
-  it('routes unsupported Office files toward the Office Documents workflow', async () => {
+  it('routes unsupported Office files toward the Office document workflow', async () => {
     const repoRoot = process.cwd().endsWith('apps/desktop')
       ? join(process.cwd(), '..', '..')
       : process.cwd();
@@ -226,8 +226,8 @@ describe('text file context import', () => {
       readFile(join(repoRoot, 'apps/desktop/src/renderer/main.tsx'), 'utf8'),
     ]);
 
-    assert.match(main, /Office Documents 能力或对应技能/);
-    assert.match(renderer, /Office Documents 能力或对应技能/);
+    assert.match(main, /Office 文档工具或对应技能/);
+    assert.match(renderer, /Office 文档工具或对应技能/);
     assert.doesNotMatch(main, /Office 文件请先转成文本/);
     assert.doesNotMatch(renderer, /Office 文件请先转成文本/);
   });

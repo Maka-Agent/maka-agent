@@ -151,8 +151,8 @@ function officeDocumentsCapability(probe: OfficeCliProbe | undefined, now: numbe
     state: available ? 'enabled' : 'partial',
     source: 'runtime',
     reason: available
-      ? 'Office 文档可通过本地 officecli 读取、校验与生成。'
-      : '已识别 Office 文档工作流；本机尚未检测到 officecli，因此只能给出转换/安装指引。',
+      ? 'Office 文档可通过本地 officecli 读取与校验。'
+      : 'Office 文档工作流已接入；安装 officecli 并确认版本探测通过后即可读取与校验。',
   };
   const runtimeProbe: CapabilityRuntimeProbeSignal = available
     ? {
@@ -170,7 +170,7 @@ function officeDocumentsCapability(probe: OfficeCliProbe | undefined, now: numbe
 
   return staticCapability({
     id: 'office_documents',
-    label: 'Office Documents',
+    label: 'Office 文档',
     now,
     feature,
     requiredPermissions: [],

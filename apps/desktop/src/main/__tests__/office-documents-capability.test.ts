@@ -9,7 +9,7 @@ const MAIN = join(REPO_ROOT, 'apps', 'desktop', 'src', 'main', 'main.ts');
 const PERMISSION = join(REPO_ROOT, 'packages', 'core', 'src', 'permission.ts');
 
 describe('Office document capability contract', () => {
-  it('surfaces Office Documents as a capability backed by officecli probe', async () => {
+  it('surfaces Office 文档 as a capability backed by officecli probe', async () => {
     const [snapshot, main] = await Promise.all([
       readFile(CAPABILITY_SNAPSHOT, 'utf8'),
       readFile(MAIN, 'utf8'),
@@ -17,9 +17,10 @@ describe('Office document capability contract', () => {
 
     assert.match(snapshot, /officeDocumentsCapability\(input\.officeCliProbe, now\)/);
     assert.match(snapshot, /id:\s*'office_documents'/);
-    assert.match(snapshot, /label:\s*'Office Documents'/);
+    assert.match(snapshot, /label:\s*'Office 文档'/);
     assert.match(snapshot, /officecli/);
-    assert.match(snapshot, /读取、校验与生成/);
+    assert.match(snapshot, /读取与校验/);
+    assert.doesNotMatch(snapshot, /读取、校验与生成/);
     assert.match(main, /probeOfficeCli\(\{ now: permissions\.checkedAt \}\)/);
     assert.match(main, /probeOfficeCli\(\{ now \}\)/);
   });

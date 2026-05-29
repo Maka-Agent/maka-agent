@@ -167,7 +167,7 @@ export async function runOfficeDocumentOperation(input: {
         path: pathResult.rel,
         args: displayArgs(argsResult.args, pathResult.abs, pathResult.rel),
         reason: 'officecli_missing',
-        message: '本机未检测到 officecli，暂时无法读取 Office 文档。',
+        message: '本机未检测到 officecli。请先安装 officecli，并确认 `officecli --version` 可运行后重试。',
       };
     }
     if (code === 'ETIMEDOUT' || killed) {
