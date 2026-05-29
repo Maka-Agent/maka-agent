@@ -9,6 +9,7 @@ import {
   TOOL_ERROR_RESULT_MAX_CHARS,
   formatSyntheticToolErrorText,
   repairMakaToolCall,
+  type MakaTool,
 } from '../ai-sdk-backend.js';
 import { PermissionEngine } from '../permission-engine.js';
 
@@ -154,6 +155,53 @@ describe('AiSdkBackend stop', () => {
   });
 });
 
+describe('AiSdkBackend tool permission category hints', () => {
+  test('passes categoryHint through PermissionEngine before tool execution', async () => {
+    const messages: unknown[] = [];
+    const events: SessionEvent[] = [];
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header('explore'),
+      appendMessage: async (message) => {
+        messages.push(message);
+      },
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'claude-sonnet-4-5-20250929',
+      permissionEngine: new PermissionEngine({ newId: () => 'permission-id', now: () => 1 }),
+      modelFactory: () => ({}),
+      tools: [],
+      newId: idGenerator(),
+      now: () => 1,
+    });
+    const tool: MakaTool = {
+      name: 'ExploreAgent',
+      description: 'read-only worker',
+      parameters: {},
+      permissionRequired: true,
+      categoryHint: 'subagent',
+      impl: async () => ({ ok: true }),
+    };
+
+    const execute = (backend as unknown as {
+      wrapToolExecute(
+        tool: MakaTool,
+        turnId: string,
+        queue: { push(event: SessionEvent): void },
+      ): (args: unknown, ctx: { toolCallId: string; abortSignal: AbortSignal }) => Promise<unknown>;
+    }).wrapToolExecute(tool, 'turn-1', { push: (event) => events.push(event) });
+
+    const result = await execute({}, {
+      toolCallId: 'tool-1',
+      abortSignal: new AbortController().signal,
+    });
+
+    assert.deepEqual(result, { ok: true });
+    assert.equal(events.some((event) => event.type === 'permission_request'), false);
+    assert.equal(messages.some((message) => (message as { type?: string }).type === 'tool_result'), true);
+  });
+});
+
 describe('AiSdkBackend tool-call repair', () => {
   test('repairs provider tool-name case drift to the canonical Maka tool name', () => {
     const repaired = repairMakaToolCall({
@@ -203,7 +251,7 @@ describe('AiSdkBackend tool-call repair', () => {
   });
 });
 
-function header(): SessionHeader {
+function header(permissionMode: SessionHeader['permissionMode'] = 'ask'): SessionHeader {
   return {
     id: 'session-1',
     workspaceRoot: '/tmp/maka',
@@ -221,7 +269,7 @@ function header(): SessionHeader {
     llmConnectionSlug: 'anthropic-main',
     connectionLocked: true,
     model: 'claude-sonnet-4-5-20250929',
-    permissionMode: 'ask',
+    permissionMode,
     schemaVersion: 1,
   };
 }

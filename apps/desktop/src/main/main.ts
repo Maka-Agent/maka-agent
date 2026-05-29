@@ -176,6 +176,7 @@ import {
   type FolderOutlineImportFailureReason,
   type TextFileImportFailureReason,
 } from './text-file-import.js';
+import { buildExploreAgentTool } from './explore-agent-tool.js';
 
 const buildInfo = resolveBuildInfo(app.isPackaged, app.getAppPath());
 
@@ -242,6 +243,11 @@ const builtinTools = [
   // PawWork lazy-skill pattern: the prompt lists available skills, and this
   // read-only tool loads the full SKILL.md only when the task matches.
   buildSkillAgentTool(workspaceRoot),
+  // PawWork plan-mode borrow: a bounded read-only local worker for
+  // self-contained code/repo investigations. The tool advertises the
+  // `subagent` category; explore mode allows it, but the implementation
+  // itself only reads filenames/text snippets under the session cwd.
+  buildExploreAgentTool(),
   // PR-AGENT-WEB-SEARCH-TOOL-0: Tavily-backed WebSearch tool. Closed
   // over settingsStore so the renderer never sees the API key; the
   // permission engine routes it through the `web_read` policy which

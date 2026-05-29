@@ -62,6 +62,7 @@ import type {
   BackendSendInput,
   PermissionDecision,
 } from '@maka/core/backend-types';
+import type { ToolCategory } from '@maka/core/permission';
 import { PROVIDER_DEFAULTS, type LlmConnection } from '@maka/core/llm-connections';
 import { generalizedErrorMessage, redactSecrets } from '@maka/core/redaction';
 import type { LlmCallRecord, ToolInvocationRecord } from '@maka/core/usage-stats/types';
@@ -113,8 +114,8 @@ export interface MakaTool<P = unknown, R = unknown> {
   permissionRequired?: boolean;
   /** Optional UI display name. */
   displayName?: string;
-  /** Optional category override (skips bash-line inspection). */
-  categoryHint?: string;
+  /** Optional trusted category override for custom tools. */
+  categoryHint?: ToolCategory;
   /** Real tool implementation. Called only after permission allows. */
   impl: (args: any, ctx: MakaToolContext) => Promise<R> | R;
 }
@@ -570,6 +571,7 @@ export class AiSdkBackend implements AgentBackend {
         toolUseId,
         toolName: tool.name,
         args,
+        ...(tool.categoryHint !== undefined ? { categoryHint: tool.categoryHint } : {}),
         mode: this.input.header.permissionMode,
       });
 

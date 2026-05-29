@@ -96,6 +96,7 @@ export type {
 } from './permission.js';
 export {
   PERMISSION_MODES,
+  TOOL_CATEGORIES,
   PERMISSION_POLICY,
   BUILTIN_TOOL_CATEGORY,
   SAFE_SHELL_PREFIXES,
@@ -104,6 +105,7 @@ export {
   DESTRUCTIVE_GIT_PATTERNS,
   categorizeBash,
   isPermissionMode,
+  isToolCategory,
   preToolUse,
 } from './permission.js';
 

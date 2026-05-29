@@ -35,12 +35,13 @@ describe('deep research session profile', () => {
     assert.equal(PERMISSION_POLICY.explore.fs_destructive, 'block');
     assert.equal(PERMISSION_POLICY.explore.shell_unsafe, 'block');
     assert.equal(PERMISSION_POLICY.explore.network_send, 'block');
-    assert.equal(PERMISSION_POLICY.explore.subagent, 'block');
+    assert.equal(PERMISSION_POLICY.explore.subagent, 'allow');
   });
 
   it('system prompt names source-grounded research and no-write boundaries', () => {
     const prompt = buildDeepResearchSystemPromptFragment();
     assert.match(prompt, /Read, Glob, Grep/);
+    assert.match(prompt, /ExploreAgent/);
     assert.match(prompt, /Do not write/);
     assert.match(prompt, /borrow \/ diverge \/ risk \/ gate/);
     for (const step of DEEP_RESEARCH_WORKFLOW_STEPS) {

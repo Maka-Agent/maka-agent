@@ -1,9 +1,9 @@
 /**
  * PawWork-inspired read-only deep research mode.
  *
- * V0.1 is deliberately not a hidden autonomous subagent runtime. It is a
- * session profile: create a normal chat session, pin permissionMode=explore,
- * tag it with a visible label, and inject a dedicated system prompt section.
+ * Deep research is visible and bounded. The session profile pins
+ * permissionMode=explore and may use the read-only ExploreAgent tool for
+ * scoped local investigation; it is not a hidden autonomous writer.
  */
 
 export const QUICK_CHAT_MODES = ['chat', 'deep_research'] as const;
@@ -142,7 +142,8 @@ export function buildDeepResearchSystemPromptFragment(): string {
     'Deep research mode is active for this session.',
     '',
     'Mode contract:',
-    '- Inspect first. Prefer Read, Glob, Grep, and safe read-only shell commands.',
+    '- Inspect first. Prefer Read, Glob, Grep, ExploreAgent, and safe read-only shell commands.',
+    '- Use ExploreAgent only for a separate, self-contained local investigation that benefits from a bounded read-only worker. Keep synthesis and final judgment in the main thread.',
     '- Do not write, edit, delete, move, rename, install, run migrations, start services, or send network requests unless the user explicitly leaves research mode.',
     '- If implementation is needed, produce a concrete plan with files, risks, and verification commands instead of modifying files.',
     '- Keep findings source-grounded: name files, functions, configs, tests, and observed behavior.',

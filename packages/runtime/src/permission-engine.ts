@@ -77,6 +77,7 @@ export interface EvaluateInput {
   toolUseId: string;
   toolName: string;
   args: unknown;
+  categoryHint?: ToolCategory;
   /** Session's current permission mode. */
   mode: PermissionMode;
   /** Optional hint shown to user in the dialog. */
@@ -129,6 +130,7 @@ export class PermissionEngine {
     const pre: PreToolUseResult = preToolUse({
       toolName: input.toolName,
       args: input.args,
+      ...(input.categoryHint !== undefined ? { categoryHint: input.categoryHint } : {}),
       mode: input.mode,
       turnRemembered: state.remembered,
     });

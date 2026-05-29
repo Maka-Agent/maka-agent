@@ -32,8 +32,26 @@ export type ToolCategory =
   | 'git_destructive' //   git reset --hard, push --force, branch -D, ...
   | 'network_send' //      POST / PUT / DELETE
   | 'privileged' //        sudo, chmod, chown, kill, systemctl
-  | 'custom_tool' //       our own session-scoped tools (none in V0.1)
-  | 'subagent'; //         reserved; blocked in V0.1
+  | 'custom_tool' //       our own session-scoped tools without a stricter category hint
+  | 'subagent'; //         read-only delegated exploration tools
+
+export const TOOL_CATEGORIES: readonly ToolCategory[] = [
+  'read',
+  'web_read',
+  'file_write',
+  'fs_destructive',
+  'shell_safe',
+  'shell_unsafe',
+  'git_destructive',
+  'network_send',
+  'privileged',
+  'custom_tool',
+  'subagent',
+];
+
+export function isToolCategory(value: unknown): value is ToolCategory {
+  return typeof value === 'string' && (TOOL_CATEGORIES as readonly string[]).includes(value);
+}
 
 // ============================================================================
 // Policy matrix
@@ -57,7 +75,7 @@ export const PERMISSION_POLICY: Record<PermissionMode, Record<ToolCategory, Poli
     network_send: 'block',
     privileged: 'block',
     custom_tool: 'prompt',
-    subagent: 'block',
+    subagent: 'allow',
   },
   ask: {
     read: 'allow',
@@ -220,6 +238,8 @@ export interface PreToolUseInput {
   args: unknown;
   mode: PermissionMode;
   turnRemembered: ReadonlySet<string>;
+  /** Optional trusted runtime hint for custom tools that map to a canonical category. */
+  categoryHint?: ToolCategory;
 }
 
 export interface PreToolUseResult {
@@ -234,7 +254,7 @@ export interface PreToolUseResult {
 
 export function preToolUse(input: PreToolUseInput): PreToolUseResult {
   // (1) Classify
-  let category: ToolCategory = BUILTIN_TOOL_CATEGORY[input.toolName] ?? 'custom_tool';
+  let category: ToolCategory = input.categoryHint ?? BUILTIN_TOOL_CATEGORY[input.toolName] ?? 'custom_tool';
   if (category === 'shell_unsafe') {
     const cmd = (input.args as { command?: unknown })?.command;
     if (typeof cmd === 'string') {

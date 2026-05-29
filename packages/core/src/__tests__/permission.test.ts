@@ -20,12 +20,14 @@ function evaluate(
   args: unknown,
   mode: PermissionMode,
   remembered: string[] = [],
+  categoryHint?: ToolCategory,
 ) {
   return preToolUse({
     toolName,
     args,
     mode,
     turnRemembered: new Set(remembered),
+    ...(categoryHint !== undefined ? { categoryHint } : {}),
   });
 }
 
@@ -161,6 +163,19 @@ describe('preToolUse — explore mode', () => {
     const r = evaluate('Bash', { command: 'rm foo.txt' }, 'explore');
     expect(r.proceed).toBe(false);
     expect(r.category).toBe('fs_destructive');
+  });
+
+  test('trusted read-only subagent tool → allow', () => {
+    const r = evaluate(
+      'ExploreAgent',
+      { objective: 'map the repo', queries: ['permission'] },
+      'explore',
+      [],
+      'subagent',
+    );
+    expect(r.proceed).toBe(true);
+    expect(r.needsPrompt).toBe(false);
+    expect(r.category).toBe('subagent');
   });
 });
 
@@ -307,7 +322,7 @@ describe('PERMISSION_POLICY matrix invariants', () => {
     expect(PERMISSION_POLICY.explore.git_destructive).toBe('block');
     expect(PERMISSION_POLICY.explore.network_send).toBe('block');
     expect(PERMISSION_POLICY.explore.privileged).toBe('block');
-    expect(PERMISSION_POLICY.explore.subagent).toBe('block');
+    expect(PERMISSION_POLICY.explore.subagent).toBe('allow');
   });
 
   test('web_read prompts in non-autonomous modes (PR-AGENT-WEB-SEARCH-TOOL-0)', () => {

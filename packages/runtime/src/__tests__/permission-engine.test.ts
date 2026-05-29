@@ -99,6 +99,24 @@ describe('PermissionEngine.evaluate — block path', () => {
       expect(r.reason).toContain('blocked');
     }
   });
+
+  test('uses categoryHint for custom read-only subagent tools', () => {
+    const { engine } = makeEngine();
+    engine.beginTurn('t1');
+    const r = engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu1',
+      toolName: 'ExploreAgent',
+      args: { objective: 'map permission code' },
+      categoryHint: 'subagent',
+      mode: 'explore',
+    });
+    expect(r.kind).toBe('allow');
+    if (r.kind === 'allow') {
+      expect(r.category).toBe('subagent');
+    }
+  });
 });
 
 describe('PermissionEngine.evaluate — prompt path', () => {
