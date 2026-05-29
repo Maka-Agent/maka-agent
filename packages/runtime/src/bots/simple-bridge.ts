@@ -118,6 +118,27 @@ function isAllowedUser(
 }
 
 /**
+ * PR-BOT-EPHEMERAL-REPLY-0 (Hermes deep-dive): decide whether the
+ * caller asked for ephemeral cleanup, and if so how long to wait.
+ * Returns `undefined` when no cleanup should be scheduled. Telegram
+ * silently refuses bot self-delete past 48 hours in DMs, so clamping
+ * here prevents scheduling a timer that has no chance of succeeding.
+ * The lower bound of 1s defends against an immediate-self-delete that
+ * would race the send completing on the receiver.
+ */
+const EPHEMERAL_REPLY_MIN_MS = 1_000;
+const EPHEMERAL_REPLY_MAX_MS = 48 * 60 * 60 * 1_000;
+
+function ephemeralDelayFromOptions(options: BotSendOptions | undefined): number | undefined {
+  if (!options || typeof options.ephemeralTtlMs !== 'number') return undefined;
+  if (!Number.isFinite(options.ephemeralTtlMs) || options.ephemeralTtlMs <= 0) return undefined;
+  return Math.min(
+    Math.max(options.ephemeralTtlMs, EPHEMERAL_REPLY_MIN_MS),
+    EPHEMERAL_REPLY_MAX_MS,
+  );
+}
+
+/**
  * PR-BOT-RATELIMIT-RETRY-0 (Hermes deep-dive): classify a Telegram
  * sendMessage response so the caller can decide between "done", "retry
  * after Telegram's stated backoff", and "give up". Pure on the
@@ -173,6 +194,9 @@ export const __TEST__ = {
   classifyTelegramSendResponse,
   TELEGRAM_RETRY_MIN_MS,
   TELEGRAM_RETRY_MAX_MS,
+  ephemeralDelayFromOptions,
+  EPHEMERAL_REPLY_MIN_MS,
+  EPHEMERAL_REPLY_MAX_MS,
 };
 
 export class SimpleBotBridge extends BaseBotAdapter implements SendCapable {
@@ -267,6 +291,24 @@ export class SimpleBotBridge extends BaseBotAdapter implements SendCapable {
     this.reason = undefined;
     this.lastEventAt = Date.now();
     this.emitStatusChange();
+    // PR-BOT-EPHEMERAL-REPLY-0: schedule a self-delete of the FIRST
+    // message we sent (system notice TTL). Multi-chunk sends keep
+    // their tail visible — only the head is treated as the "system
+    // notice" worth garbage-collecting. We attach this AFTER the
+    // status emit so a failure here cannot regress the successful-send
+    // contract observed by listeners.
+    const ephemeralDelay = ephemeralDelayFromOptions(options);
+    if (ephemeralDelay !== undefined && lastMessageId) {
+      const token = this.settings.token;
+      const targetMessageId = lastMessageId;
+      const targetChatId = chatId;
+      setTimeout(() => {
+        void telegramApi(token, 'deleteMessage', {
+          chat_id: targetChatId,
+          message_id: Number(targetMessageId),
+        }).catch(() => undefined);
+      }, ephemeralDelay).unref?.();
+    }
     return lastMessageId;
   }
 

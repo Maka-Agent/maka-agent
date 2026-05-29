@@ -1960,13 +1960,20 @@ async function processBotIncomingMessage(
   message: BotIncomingMessage,
   text: string,
 ): Promise<void> {
+  // PR-BOT-EPHEMERAL-REPLY-0: TTL for system notices (help / reset ack /
+  // fallback errors). Five minutes is long enough for the user to read
+  // and process the notice on mobile; short enough that bot DMs do not
+  // accumulate transient noise after a few weeks of use. The actual
+  // agent reply does NOT get this TTL — the answer must stay visible.
+  const SYSTEM_NOTICE_TTL_MS = 5 * 60 * 1_000;
   // PR-BOT-PLAINTEXT-HELP-COMMAND-0: DM-only quick "what can I do here?"
   // hint. Lands BEFORE the reset path so a user typing "help" gets a
   // capability list, not a (silent) reset.
   if (isPlaintextHelpCommand({ text, isGroup: message.isGroup })) {
-    const replyOptions = message.sourceMessageId
-      ? { replyToMessageId: message.sourceMessageId }
-      : undefined;
+    const replyOptions = {
+      ...(message.sourceMessageId ? { replyToMessageId: message.sourceMessageId } : {}),
+      ephemeralTtlMs: SYSTEM_NOTICE_TTL_MS,
+    };
     await botRegistry.sendMessage(
       message.platform,
       message.chatId,
@@ -1982,9 +1989,10 @@ async function processBotIncomingMessage(
   // member would otherwise be able to wipe everyone else's context.
   if (isPlaintextResetCommand({ text, isGroup: message.isGroup })) {
     const had = botConversationSessions.delete(conversationKey);
-    const replyOptions = message.sourceMessageId
-      ? { replyToMessageId: message.sourceMessageId }
-      : undefined;
+    const replyOptions = {
+      ...(message.sourceMessageId ? { replyToMessageId: message.sourceMessageId } : {}),
+      ephemeralTtlMs: SYSTEM_NOTICE_TTL_MS,
+    };
     const ack = had
       ? '会话已重置，下一条消息会开新对话。'
       : '当前没有进行中的对话；下一条消息会开新对话。';
@@ -2058,21 +2066,28 @@ async function processBotIncomingMessage(
       ? { replyToMessageId: message.sourceMessageId }
       : undefined;
     if (reply.trim()) {
+      // Actual agent reply: NO ephemeral TTL. The answer must stay
+      // visible — auto-deleting it would defeat the bot's purpose.
       const sent = await botRegistry.sendMessage(message.platform, message.chatId, reply.trim(), replyOptions);
       if (!sent) {
+        // Fallback transient notice: 5-minute TTL so the chat does
+        // not accumulate "delivery failed" markers.
         await botRegistry.sendMessage(
           message.platform,
           message.chatId,
           'Maka 已生成回复，但当前机器人通道暂时无法发送。',
-          replyOptions,
+          { ...(replyOptions ?? {}), ephemeralTtlMs: 5 * 60 * 1_000 },
         ).catch(() => null);
       }
     }
   } catch (error) {
     const detail = generalizedErrorMessage(error, '机器人对话处理失败');
-    const replyOptions = message.sourceMessageId
-      ? { replyToMessageId: message.sourceMessageId }
-      : undefined;
+    const replyOptions = {
+      ...(message.sourceMessageId ? { replyToMessageId: message.sourceMessageId } : {}),
+      // Error notice: same 5-minute TTL as the other transient system
+      // notices.
+      ephemeralTtlMs: 5 * 60 * 1_000,
+    };
     await botRegistry.sendMessage(
       message.platform,
       message.chatId,

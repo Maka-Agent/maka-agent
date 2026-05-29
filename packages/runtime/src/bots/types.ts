@@ -47,6 +47,20 @@ export interface BotBridge {
  */
 export interface BotSendOptions {
   readonly replyToMessageId?: string;
+  /**
+   * PR-BOT-EPHEMERAL-REPLY-0 (Hermes deep-dive): when set, the bridge
+   * schedules a delete-message call N milliseconds after the send
+   * completes. Use for transient system notices (reset ack / help
+   * reply / "无法处理" fallback) that should not accumulate in the chat.
+   *
+   * The actual agent reply must NOT use this — auto-deleting the
+   * useful answer would defeat the bot's purpose.
+   *
+   * Clamped to a 48-hour window in the bridge; Telegram does not let
+   * bots delete their own DMs past that, so a longer schedule would
+   * silently no-op.
+   */
+  readonly ephemeralTtlMs?: number;
 }
 
 export interface SendCapable {
