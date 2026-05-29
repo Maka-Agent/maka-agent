@@ -176,7 +176,11 @@ const BOT_LABELS: Record<BotProvider, { label: string; help: string; support: 'r
     help: '填入 Bot Token 后测试凭据；当前先验证凭据对应一个真实 Bot 应用，Discord Gateway 长连接接入是独立后续。',
     support: 'credentials',
   },
-  dingtalk: { label: '钉钉', help: '平台清单已保留；当前不会进入可用机器人列表或计划提醒投递目标。', support: 'planned' },
+  dingtalk: {
+    label: '钉钉',
+    help: '填入自建应用的 appkey 与 appsecret 后测试凭据；当前先验证凭据，事件接收需要 outgoing 机器人或 Stream 模式独立配置。',
+    support: 'credentials',
+  },
   qq: { label: 'QQ', help: '平台清单已保留；当前不会进入可用机器人列表或计划提醒投递目标。', support: 'planned' },
 };
 
@@ -3207,6 +3211,26 @@ function BotChatSettingsPage(props: {
             </label>
             <div className="settingsNotice">
               Discord 凭据测试会请求 `/users/@me` 验证 token 对应一个真实 Bot 应用。事件接入需要 Discord Gateway 长连接，是独立后续，凭据有效不代表运行可用。
+            </div>
+          </>
+        )}
+
+        {/* PR-BOT-DINGTALK-CREDENTIALS-TEST-0: 钉钉自建应用凭据级配置。
+            `appId` 复用为 appkey，`appSecret` 复用为 appsecret，跟 WeCom /
+            Feishu 同语义不另开字段。事件接入需要 outgoing 机器人或 Stream
+            模式，是独立后续。 */}
+        {selected === 'dingtalk' && (
+          <>
+            <label className="settingsField">
+              <span>自建应用 appkey</span>
+              <input value={channel.appId ?? ''} onChange={(event) => updateChannel({ appId: event.currentTarget.value })} placeholder="钉钉开放平台 - 应用 appkey" />
+            </label>
+            <label className="settingsField">
+              <span>自建应用 appsecret</span>
+              <input type="password" value={channel.appSecret ?? ''} onChange={(event) => updateChannel({ appSecret: event.currentTarget.value })} placeholder="钉钉开放平台 - 应用 appsecret" />
+            </label>
+            <div className="settingsNotice">
+              钉钉凭据测试会请求 `gettoken`，验证 appkey + appsecret 真实存在。事件接收需要在 outgoing 机器人或 Stream 模式里配置，凭据有效不代表运行可用。
             </div>
           </>
         )}

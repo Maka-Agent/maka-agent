@@ -5,10 +5,10 @@ import { testBotChannel } from '../bot-test.js';
 
 describe('testBotChannel copy', () => {
   test('planned providers return product-facing unavailable copy', async () => {
-    // PR-BOT-WECOM-CREDENTIALS-TEST-0: wecom now has a real credential
-    // test (corp_id + corp_secret → gettoken). The remaining
-    // platforms are still credentials-test gaps.
-    const providers: BotProvider[] = ['wechat', 'dingtalk', 'qq'];
+    // PR-BOT-WECOM-CREDENTIALS-TEST-0 + PR-BOT-DINGTALK-CREDENTIALS-TEST-0:
+    // both now have real credential tests. The remaining planned
+    // platforms are wechat (个人号 合规复杂) and qq.
+    const providers: BotProvider[] = ['wechat', 'qq'];
 
     for (const provider of providers) {
       const result = await testBotChannel(provider, {
@@ -28,5 +28,12 @@ describe('testBotChannel copy', () => {
     assert.equal(result.ok, false);
     assert.match(result.error ?? '', /corp_id/);
     assert.match(result.error ?? '', /corp_secret/);
+  });
+
+  test('dingtalk rejects empty credentials with product copy (not a generic "Bot token required")', async () => {
+    const result = await testBotChannel('dingtalk', createDefaultBotChannel('dingtalk'));
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /appkey/);
+    assert.match(result.error ?? '', /appsecret/);
   });
 });
