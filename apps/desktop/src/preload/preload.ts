@@ -451,6 +451,20 @@ contextBridge.exposeInMainWorld('maka', {
     day(offsetDays: number, daySpan?: number): Promise<Result<DailyReviewSummary>> {
       return ipcRenderer.invoke('daily-review:day', { offsetDays, daySpan });
     },
+    /**
+     * PR-DAILY-REVIEW-EXPORT-FILE-0: render the markdown in the renderer
+     * (where the human-readable title context lives) and ship the bytes
+     * to main for the save dialog + write. Main never sees the raw
+     * telemetry; only the formatted output.
+     */
+    saveMarkdownToFile(input: {
+      markdown: string;
+      defaultName: string;
+    }): Promise<
+      { ok: true; path: string } | { ok: false; reason: 'canceled' | 'write_failed' | 'invalid_input' }
+    > {
+      return ipcRenderer.invoke('daily-review:saveMarkdownToFile', input);
+    },
   },
   webSearch: {
     query(input: {

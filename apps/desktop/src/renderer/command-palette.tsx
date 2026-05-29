@@ -117,6 +117,12 @@ export function buildCommandList(args: {
    */
   onPasteTodayDailyReviewIntoComposer?(): Promise<void> | void;
   /**
+   * PR-DAILY-REVIEW-EXPORT-FILE-0: save today's review as a Markdown
+   * file via the native save dialog. Persistent archive without
+   * round-tripping the clipboard.
+   */
+  onSaveTodayDailyReviewToFile?(): Promise<void> | void;
+  /**
    * PR-CMD-PALETTE-COPY-ENV-SUMMARY-0: copy the Settings → 关于
    * environment summary (Maka version + Electron / Node / Chrome
    * versions + platform + arch + build mode/sha) as Markdown,
@@ -338,6 +344,18 @@ export function buildCommandList(args: {
       Icon: CalendarDays,
       keywords: ['daily', 'review', 'paste', 'composer', '今日', '回顾', '粘贴', '输入框'],
       run: () => void args.onPasteTodayDailyReviewIntoComposer!(),
+    });
+  }
+  if (args.onSaveTodayDailyReviewToFile) {
+    cmds.push({
+      id: 'diag:save-today-daily-review',
+      kind: 'action',
+      label: '保存今日回顾为 .md 文件',
+      hint: '用系统保存对话框',
+      group: '诊断',
+      Icon: CalendarDays,
+      keywords: ['daily', 'review', 'save', 'file', 'export', 'markdown', '今日', '回顾', '保存', '文件', '导出'],
+      run: () => void args.onSaveTodayDailyReviewToFile!(),
     });
   }
   if (args.onCopyEnvSummary) {

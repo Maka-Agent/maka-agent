@@ -2188,6 +2188,35 @@ function AppShell(props: {
                 );
               }
             },
+            onSaveTodayDailyReviewToFile: async () => {
+              try {
+                const summary = await dailyReviewBridge.fetchDay(0, 1);
+                const markdown = formatDailyReviewMarkdown(summary, '今天');
+                const localToday = new Date();
+                const yyyy = localToday.getFullYear();
+                const mm = String(localToday.getMonth() + 1).padStart(2, '0');
+                const dd = String(localToday.getDate()).padStart(2, '0');
+                const defaultName = `maka-daily-review-${yyyy}-${mm}-${dd}.md`;
+                const result = await window.maka.dailyReview.saveMarkdownToFile({ markdown, defaultName });
+                if (result.ok) {
+                  toastApi.success(
+                    '已保存今日回顾',
+                    `${summary.totals.sessionCount} 个对话 · ${summary.totals.requestCount} 个请求`,
+                  );
+                } else if (result.reason === 'canceled') {
+                  // User dismissed the dialog — no toast.
+                } else if (result.reason === 'invalid_input') {
+                  toastApi.error('保存失败', '导出内容无效');
+                } else {
+                  toastApi.error('保存失败', '无法写入选择的位置');
+                }
+              } catch (err) {
+                toastApi.error(
+                  '保存失败',
+                  err instanceof Error ? err.message : '加载今日回顾失败',
+                );
+              }
+            },
             onCopyEnvSummary: async () => {
               try {
                 const info = await window.maka.app.info();

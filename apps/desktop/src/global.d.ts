@@ -259,6 +259,12 @@ declare global {
       };
       dailyReview: {
         day(offsetDays: number, daySpan?: number): Promise<Result<DailyReviewSummary>>;
+        saveMarkdownToFile(input: {
+          markdown: string;
+          defaultName: string;
+        }): Promise<
+          { ok: true; path: string } | { ok: false; reason: 'canceled' | 'write_failed' | 'invalid_input' }
+        >;
       };
       appWindow: {
         subscribeOpenSettings(handler: () => void): () => void;
