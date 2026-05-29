@@ -368,7 +368,7 @@ export function getVisualSmokeState(fixture: VisualSmokeFixture | null): VisualS
       // PR-SIDEBAR-IA-0 Phase 1: active = the FIRST session in the seed
       // (newest by lastMessageAt). The 60-session list scrolls below
       // the active row; the screenshot captures the scroll affordance
-      // plus the visible footer (Settings + Update placeholder) at the
+      // plus the visible footer (Settings + Version info) at the
       // bottom of the sidebar. If the scroll fix regresses, the footer
       // gets pushed off-screen and the regression is obvious in
       // baseline diff.
@@ -465,7 +465,7 @@ export async function seedVisualSmokeFixture(input: {
   // scroll fix is verifiable end-to-end. Each row reuses the standard
   // text content; only the name + timestamp differ so screenshots are
   // deterministic. The hard gate: with 60 rows in a narrow window, the
-  // footer (Settings + Update placeholder) must remain visible without
+  // footer (Settings + Version info) must remain visible without
   // page-level scroll, and the inner list scroll container must work.
   //
   // Phase 2 fixup v3: `sidebar-search-modal-open` shares the same
@@ -1409,7 +1409,7 @@ function turnControlBranchMessages(now: number, kind: 'visible' | 'orphan'): Sto
  * scroll fix is verifiable end-to-end:
  *
  *   - In a narrow window, the list must scroll without pushing the
- *     footer (Settings + Update placeholder) off-screen.
+ *     footer (Settings + Version info) off-screen.
  *   - The inner `.maka-list-stack` scroll container must engage.
  *   - The fixture is deterministic: titles only differ by index;
  *     timestamps walk backwards from `now` so the FIRST session

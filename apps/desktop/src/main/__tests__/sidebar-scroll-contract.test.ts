@@ -7,7 +7,7 @@
  * gate: if a later phase changes `.maka-session-list` or
  * `.maka-list-stack` and drops the grid layout / `min-height: 0` /
  * `overflow: auto`, the list stops scrolling and the footer
- * (Settings + future Update placeholder) gets pushed off-screen
+ * (Settings + Version info) gets pushed off-screen
  * again — the exact P0 WAWQAQ flagged in msg `761141c5`.
  *
  * The fixture seed (`sidebar-long-sessions`, 60 sessions) and the

@@ -60,7 +60,7 @@ export type VisualSmokeScenario =
   // PR-SIDEBAR-IA-0 Phase 1 (xuan msg `dc790a54` + kenji `0f7bb872`):
   // sidebar-long-sessions seeds 60 active sessions so the sidebar
   // scroll container can be verified end-to-end: the list must scroll
-  // independently, and the footer (Settings + Update placeholder)
+  // independently, and the footer (Settings + Version info)
   // must stay visible at the bottom regardless of session count.
   // Auto-capture variant pairs (light + dark, narrow + wide) double
   // as the CI gate that scroll did not regress.

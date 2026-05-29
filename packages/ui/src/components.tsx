@@ -300,7 +300,7 @@ export function SessionListPanel(props: {
   onNew(): void;
   onOpenSkillFolder?(path: string): void;
   /** Opens the local version/build information surface. */
-  onOpenUpdate?(): void;
+  onOpenUpdate(): void;
   /**
    * PR-SIDEBAR-IA-0 Phase 2 fixup (xuan `91401163` + `94c7bf0f`):
    * Sidebar `搜索` nav row click handler. Opens a dedicated Search
@@ -642,27 +642,15 @@ export function SessionListPanel(props: {
       </section>
 
       <footer className="maka-session-panel-footer">
-        {props.onOpenUpdate ? (
-          <button
-            className="maka-nav-row"
-            type="button"
-            onClick={() => props.onOpenUpdate!()}
-            aria-label="版本信息"
-          >
-            <DownloadCloud className="maka-nav-icon" strokeWidth={1.5} />
-            <span>版本信息</span>
-          </button>
-        ) : (
-          <div
-            className="maka-nav-row"
-            data-state="coming_soon"
-            aria-label="版本信息不可用"
-          >
-            <DownloadCloud className="maka-nav-icon" strokeWidth={1.5} />
-            <span>版本信息</span>
-            <span className="maka-nav-row-state-badge">不可用</span>
-          </div>
-        )}
+        <button
+          className="maka-nav-row"
+          type="button"
+          onClick={props.onOpenUpdate}
+          aria-label="版本信息"
+        >
+          <DownloadCloud className="maka-nav-icon" strokeWidth={1.5} />
+          <span>版本信息</span>
+        </button>
         <button
           className="maka-nav-row"
           type="button"

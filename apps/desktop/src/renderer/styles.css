@@ -196,7 +196,7 @@ button:active {
    *   1. .maka-session-panel-header   — new chat button (auto)
    *   2. .maka-sidebar-modules        — top-level module nav (auto)
    *   3. .maka-session-list           — scroll container (1fr, Phase 1 fix)
-   *   4. .maka-session-panel-footer   — 版本更新 + 设置 (auto)
+   *   4. .maka-session-panel-footer   — 版本信息 + 设置 (auto)
    */
   min-width: 0;
   min-height: 0;
@@ -614,8 +614,7 @@ button:active {
 }
 
 /* PR-SIDEBAR-IA-0 Phase 2: aria-disabled nav rows render dimmed and
- * skip hover. Used by the 版本更新 (Update) placeholder until the
- * real auto-update wiring lands in PR-AUTOUPDATE-0. */
+ * skip hover for genuinely unavailable navigation rows. */
 .maka-nav-row[aria-disabled="true"],
 .maka-nav-row[data-disabled="true"] {
   cursor: not-allowed;
@@ -624,41 +623,6 @@ button:active {
 .maka-nav-row[aria-disabled="true"]:hover,
 .maka-nav-row[data-disabled="true"]:hover {
   background: transparent;
-}
-
-/* PR-UX-POLISH-1 (yuejing UX audit P1 #1 + kenji boundary 1):
- * `data-state="coming_soon"` renders the row as a passive
- * informational tag (no hover-pointer, no tappable affordance,
- * no aria-disabled fake-button mess). Pair with a small
- * `即将推出` badge so users see WHY it's inert.
- *
- * This is the presentation half of the closed-state enum
- * (`available / coming_soon / needs_config / blocked_by_permission /
- * disabled_by_policy / unsupported_platform`); runtime probes never
- * touch this — UI consumes the state via props. */
-.maka-nav-row[data-state="coming_soon"] {
-  cursor: default;
-  opacity: 0.7;
-}
-.maka-nav-row[data-state="coming_soon"]:hover {
-  background: transparent;
-}
-.maka-nav-row-state-badge {
-  /* PR-UX-POLISH-1 commit 2 (kenji `93ee9df0` #2): make the
-   * `即将推出` badge read as a passive informational tag, not a
-   * clickable pill. Drop bg alpha 0.06 → 0.04, lift cursor +
-   * pointer-events away from interactive, and use a 4px radius
-   * instead of fully rounded so it doesn't pattern-match a button. */
-  margin-left: auto;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: oklch(from var(--foreground) l c h / 0.04);
-  color: var(--foreground-50);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  cursor: default;
-  pointer-events: none;
 }
 
 .maka-nav-row span:nth-child(2) {

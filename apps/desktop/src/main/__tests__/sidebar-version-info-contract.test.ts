@@ -23,10 +23,33 @@ describe('sidebar version info contract', () => {
 
   it('does not show the update-coming-soon copy in the wired footer action', async () => {
     const ui = await readRepo('packages/ui/src/components.tsx');
-    const buttonBranch = ui.match(/\{props\.onOpenUpdate \? \([\s\S]*?\) : \(/)?.[0] ?? '';
-    assert.match(buttonBranch, /aria-label="版本信息"/);
-    assert.match(buttonBranch, /<span>版本信息<\/span>/);
-    assert.doesNotMatch(buttonBranch, /即将推出|版本更新/, 'wired footer action must be version info, not update roadmap copy');
+    assert.match(
+      ui,
+      /onOpenUpdate\(\): void;/,
+      'SessionListPanel must require the real version-info action instead of accepting a missing callback',
+    );
+    assert.doesNotMatch(
+      ui,
+      /onOpenUpdate\?\(\): void;/,
+      'SessionListPanel must not keep the version-info callback optional',
+    );
+    assert.match(ui, /onClick=\{props\.onOpenUpdate\}/);
+    assert.match(ui, /aria-label="版本信息"/);
+    assert.match(ui, /<span>版本信息<\/span>/);
+    assert.doesNotMatch(
+      ui,
+      /data-state="coming_soon"|版本信息不可用|maka-nav-row-state-badge|即将推出|版本更新/,
+      'footer version action must be a real button, not a coming-soon/unavailable fallback',
+    );
+  });
+
+  it('does not keep sidebar-only coming-soon CSS for version info', async () => {
+    const css = await readRepo('apps/desktop/src/renderer/styles.css');
+    assert.doesNotMatch(
+      css,
+      /\.maka-nav-row\[data-state="coming_soon"\]|\.maka-nav-row-state-badge|版本更新/,
+      'sidebar footer CSS must not preserve the removed update placeholder state',
+    );
   });
 
   it('daily review fallback copy is a bridge-missing state, not a coming-soon product claim', async () => {
