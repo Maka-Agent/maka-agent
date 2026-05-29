@@ -90,6 +90,13 @@ export function buildCommandList(args: {
   /** Copy the active conversation as Markdown to the clipboard. */
   onExportActiveConversation?(): Promise<void> | void;
   /**
+   * PR-CMD-PALETTE-SAVE-CONVERSATION-FILE-0: save the active conversation
+   * as a Markdown file via the native save dialog. Complements
+   * `onExportActiveConversation` (clipboard) for users who want a
+   * durable archive without the clipboard detour.
+   */
+  onSaveActiveConversationToFile?(): Promise<void> | void;
+  /**
    * PR-CMD-PALETTE-COPY-DAILY-REVIEW-0: copy today's Daily Review
    * as Markdown from anywhere via ⌘K. Same Markdown formatter
    * `<DailyReviewPanel>` uses; renderer wires the bridge.
@@ -327,6 +334,18 @@ export function buildCommandList(args: {
       Icon: Download,
       keywords: ['export', 'markdown', 'copy', 'conversation', '导出', '对话', '剪贴板', 'md'],
       run: () => void args.onExportActiveConversation!(),
+    });
+  }
+  if (args.onSaveActiveConversationToFile && args.activeSessionId) {
+    cmds.push({
+      id: 'diag:save-conversation-file',
+      kind: 'action',
+      label: '保存当前对话为 .md 文件',
+      hint: '用系统保存对话框',
+      group: '诊断',
+      Icon: Download,
+      keywords: ['save', 'file', 'markdown', 'conversation', 'export', '保存', '文件', '对话', '导出', 'md'],
+      run: () => void args.onSaveActiveConversationToFile!(),
     });
   }
   if (args.onCopyTodayDailyReview) {

@@ -290,6 +290,50 @@ const botRegistry = new BotRegistry({
 
 app.setName('Maka');
 
+/**
+ * PR-DAILY-REVIEW-EXPORT-FILE-0 + PR-CMD-PALETTE-SAVE-CONVERSATION-FILE-0:
+ * shared save-markdown-via-dialog helper. Shape-validates the renderer
+ * payload (1MB markdown cap / 200 char filename cap / sanitized path
+ * separators) so a misbehaving renderer cannot force a large write or
+ * pre-populate the dialog with traversal text.
+ */
+async function saveMarkdownViaDialog(
+  input: { markdown?: unknown; defaultName?: unknown } | undefined,
+  dialogTitle: string,
+): Promise<
+  | { ok: true; path: string }
+  | { ok: false; reason: 'canceled' | 'write_failed' | 'invalid_input' }
+> {
+  const markdown = typeof input?.markdown === 'string' ? input.markdown : null;
+  const defaultName = typeof input?.defaultName === 'string' ? input.defaultName : null;
+  if (!markdown || markdown.length === 0 || markdown.length > 1_000_000) {
+    return { ok: false, reason: 'invalid_input' };
+  }
+  if (!defaultName || defaultName.length === 0 || defaultName.length > 200) {
+    return { ok: false, reason: 'invalid_input' };
+  }
+  // Strip directory separators from the proposed filename so a
+  // malicious or buggy caller cannot bypass the save dialog's
+  // path picker.
+  const safeName = defaultName.replace(/[\\/]/g, '_');
+  const saveDialogOptions = {
+    title: dialogTitle,
+    defaultPath: safeName,
+    filters: [{ name: 'Markdown', extensions: ['md'] }],
+  };
+  const result = mainWindow
+    ? await dialog.showSaveDialog(mainWindow, saveDialogOptions)
+    : await dialog.showSaveDialog(saveDialogOptions);
+  if (result.canceled || !result.filePath) return { ok: false, reason: 'canceled' };
+  try {
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile(result.filePath, markdown, 'utf8');
+    return { ok: true, path: result.filePath };
+  } catch {
+    return { ok: false, reason: 'write_failed' };
+  }
+}
+
 async function persistToolArtifacts(cwd: string, event: ToolArtifactRecorderInput): Promise<void> {
   for (const candidate of event.candidates) {
     let content = candidate.content;
@@ -1739,42 +1783,19 @@ function registerIpc(): void {
    */
   ipcMain.handle(
     'daily-review:saveMarkdownToFile',
-    async (
-      _event,
-      input: { markdown?: unknown; defaultName?: unknown } | undefined,
-    ): Promise<
-      | { ok: true; path: string }
-      | { ok: false; reason: 'canceled' | 'write_failed' | 'invalid_input' }
-    > => {
-      const markdown = typeof input?.markdown === 'string' ? input.markdown : null;
-      const defaultName = typeof input?.defaultName === 'string' ? input.defaultName : null;
-      if (!markdown || markdown.length === 0 || markdown.length > 1_000_000) {
-        return { ok: false, reason: 'invalid_input' };
-      }
-      if (!defaultName || defaultName.length === 0 || defaultName.length > 200) {
-        return { ok: false, reason: 'invalid_input' };
-      }
-      // Strip directory separators from the proposed filename so a
-      // malicious or buggy caller cannot bypass the save dialog's
-      // path picker.
-      const safeName = defaultName.replace(/[\\/]/g, '_');
-      const saveDialogOptions = {
-        title: '保存今日回顾',
-        defaultPath: safeName,
-        filters: [{ name: 'Markdown', extensions: ['md'] }],
-      };
-      const result = mainWindow
-        ? await dialog.showSaveDialog(mainWindow, saveDialogOptions)
-        : await dialog.showSaveDialog(saveDialogOptions);
-      if (result.canceled || !result.filePath) return { ok: false, reason: 'canceled' };
-      try {
-        const { writeFile } = await import('node:fs/promises');
-        await writeFile(result.filePath, markdown, 'utf8');
-        return { ok: true, path: result.filePath };
-      } catch {
-        return { ok: false, reason: 'write_failed' };
-      }
-    },
+    (_event, input: { markdown?: unknown; defaultName?: unknown } | undefined) =>
+      saveMarkdownViaDialog(input, '保存今日回顾'),
+  );
+  // PR-CMD-PALETTE-SAVE-CONVERSATION-FILE-0: chat-side companion to the
+  // daily review export. Renderer formats the current session as
+  // Markdown (existing `renderConversationMarkdown`) and ships the bytes
+  // here; main owns the save dialog + write. Same input shape + cap as
+  // the daily-review handler so the renderer can treat both IPCs
+  // interchangeably.
+  ipcMain.handle(
+    'chat:saveConversationToFile',
+    (_event, input: { markdown?: unknown; defaultName?: unknown } | undefined) =>
+      saveMarkdownViaDialog(input, '保存当前对话'),
   );
   ipcMain.handle('usage:buckets', (_event, query: UsageQuery & { groupBy: UsageGroupBy }) =>
     tryResult(async () => telemetryRepo.buckets(query, query.groupBy), 'USAGE_BUCKETS_FAILED'),

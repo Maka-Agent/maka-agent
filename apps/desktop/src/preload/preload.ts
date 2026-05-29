@@ -148,6 +148,20 @@ contextBridge.exposeInMainWorld('maka', {
     respondToPermission(sessionId: string, response: PermissionResponse): Promise<void> {
       return ipcRenderer.invoke('sessions:respondToPermission', sessionId, response);
     },
+    /**
+     * PR-CMD-PALETTE-SAVE-CONVERSATION-FILE-0: write the renderer-formatted
+     * conversation markdown to a user-chosen file. Renderer owns the
+     * `renderConversationMarkdown` step (it knows the session name + raw
+     * message stream); main owns the save dialog + file write.
+     */
+    saveConversationToFile(input: {
+      markdown: string;
+      defaultName: string;
+    }): Promise<
+      { ok: true; path: string } | { ok: false; reason: 'canceled' | 'write_failed' | 'invalid_input' }
+    > {
+      return ipcRenderer.invoke('chat:saveConversationToFile', input);
+    },
     subscribeEvents(sessionId: string, handler: (event: SessionEvent) => void): () => void {
       const channel = `sessions:event:${sessionId}`;
       const listener = (_event: Electron.IpcRendererEvent, payload: SessionEvent) => handler(payload);
