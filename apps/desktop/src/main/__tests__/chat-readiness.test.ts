@@ -133,7 +133,7 @@ describe('chat readiness guard', () => {
           apiKey: 'legacy-oauth-secret',
         }),
       ),
-      '聊天发送通路尚未接入',
+      '当前不能作为聊天模型',
       'oauth_subscription_not_wired',
     );
   });

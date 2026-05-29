@@ -6111,7 +6111,6 @@ button:active {
 }
 
 .providerCatalogTitle em,
-.providerCatalogSoon,
 .providerCatalogCount {
   width: fit-content;
   border-radius: 999px;
@@ -6130,11 +6129,6 @@ button:active {
    * the user to lean in. */
   font-size: 12px;
   line-height: 1.4;
-}
-
-.providerCatalogSoon {
-  background: oklch(from var(--info) l c h / 0.14);
-  color: var(--info-text);
 }
 
 .catalogCustom {
@@ -6159,7 +6153,7 @@ button:active {
   gap: 12px;
 }
 
-.providerComingSoon {
+.providerUnavailableNotice {
   display: grid;
   gap: 4px;
   border: 1px solid oklch(from var(--info) l c h / 0.22);
@@ -6169,7 +6163,7 @@ button:active {
   padding: 12px;
 }
 
-.providerComingSoon span {
+.providerUnavailableNotice span {
   font-size: 12px;
   line-height: 1.4;
 }

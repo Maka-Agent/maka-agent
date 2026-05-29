@@ -71,7 +71,7 @@ function describeUnsupportedReason(
     case 'kind_disallowed':
       return {
         title: '当前预览暂不支持该类型',
-        description: '此类 artifact 还没在内联预览注册表中实现。请使用工具栏「在 Finder 中打开」查看。',
+        description: '此类 artifact 不能在面板内直接预览。请使用工具栏「在 Finder 中打开」查看。',
       };
     case 'mime_disallowed':
       return {

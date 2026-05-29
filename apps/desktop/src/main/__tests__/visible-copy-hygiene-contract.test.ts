@@ -33,6 +33,7 @@ import { join, resolve } from 'node:path';
 const FILES_TO_SCAN = [
   resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'components.tsx'),
   join(process.cwd(), 'src', 'renderer', 'OnboardingHero.tsx'),
+  join(process.cwd(), 'src', 'renderer', 'artifact-preview-registry-shell.tsx'),
   join(process.cwd(), 'src', 'renderer', 'onboarding-hero-copy.ts'),
   join(process.cwd(), 'src', 'renderer', 'chat-header-alert.ts'),
   join(process.cwd(), 'src', 'main', 'chat-readiness.ts'),
@@ -109,6 +110,12 @@ const FORBIDDEN_VISIBLE_COPY: ForbiddenCopy[] = [
     needle: /FakeBackend|开发演示|演示版/,
     reason:
       "readiness and chat-header copy must describe stale local simulation sessions in user terms, not leak development backend names or demo-stage language.",
+  },
+  {
+    label: 'renderer implementation terms leaked into visible preview copy',
+    needle: /注册表中实现/,
+    reason:
+      "artifact preview fallback copy must explain the product capability boundary, not expose renderer implementation details like a preview registry.",
   },
 ];
 

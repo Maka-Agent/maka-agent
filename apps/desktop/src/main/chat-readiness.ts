@@ -108,7 +108,7 @@ function messageForReason(
       return `模型 "${model}" 不在连接 "${connection.name}" 的启用模型列表中。请到 设置 · 模型 重新选择。`;
     }
     case 'oauth_subscription_not_wired':
-      return `订阅连接 "${connection.name}" 已登录但聊天发送通路尚未接入。请先选择 API key 模型连接。`;
+      return `订阅连接 "${connection.name}" 只用于账号状态查看，当前不能作为聊天模型。请先选择 API key 模型连接。`;
     case 'fake_backend':
       return '当前会话来自旧的本地模拟连接，不能直接发送。请到 设置 · 模型 添加真实模型后新建会话。';
     case 'missing_default_connection':

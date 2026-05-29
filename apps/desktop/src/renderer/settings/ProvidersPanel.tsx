@@ -341,14 +341,14 @@ function providerDisabledStatus(type: ProviderType): 'unavailable' | 'experiment
 
 function providerDisabledTitle(type: ProviderType): string {
   if (type === 'claude-subscription') {
-    return '内部实验：账号认证已隔离，默认关闭，聊天发送未开放。API key 形式仍可用。';
+    return '内部实验：账号认证已隔离，默认关闭；当前请使用 API key 连接聊天模型。';
   }
-  return '账号路径未开放配置。同一家厂商的 API key 形式仍可用。';
+  return '账号登录不作为模型连接；当前请使用同一家厂商的 API key。';
 }
 
 function providerDisabledAriaLabel(type: ProviderType, name: string): string {
   if (type === 'claude-subscription') return `${name}（内部实验，默认关闭）`;
-  return `${name}（账号路径未开放配置）`;
+  return `${name}（账号登录不作为模型连接）`;
 }
 
 export function ProviderLogo(props: { type: ProviderType; compact?: boolean }) {
@@ -457,8 +457,8 @@ function AddProviderForm(props: {
     if (requiresBaseUrl && !baseUrl.trim()) return setError('这个供应商需要填写 Base URL');
     if (isExperimental) {
       return setError(props.providerType === 'claude-subscription'
-        ? 'Claude 订阅账号路径是内部实验，默认关闭；聊天发送通路未开放。请先使用 API key 连接。'
-        : '该账号路径未开放配置；请先使用同一家厂商的 API key。');
+        ? 'Claude 订阅账号是内部实验，默认关闭；当前请使用 API key 连接聊天模型。'
+        : '该账号登录不作为模型连接；请先使用同一家厂商的 API key。');
     }
     setBusy(true);
     try {
@@ -483,17 +483,17 @@ function AddProviderForm(props: {
         <div>
           <h3>{isExperimental && props.providerType === 'claude-subscription'
             ? 'Claude 订阅账号为内部实验'
-            : isExperimental ? '账号路径未开放配置' : `添加 ${display.name}`}</h3>
+            : isExperimental ? '账号登录不作为模型连接' : `添加 ${display.name}`}</h3>
           <p>{display.description}</p>
         </div>
         <span className="settingsBadge">{categoryLabel(defaults.category)}</span>
       </header>
       {isExperimental && (
-        <div className="providerComingSoon">
-          <strong>{props.providerType === 'claude-subscription' ? '内部实验' : '未开放配置'}</strong>
+        <div className="providerUnavailableNotice">
+          <strong>{props.providerType === 'claude-subscription' ? '内部实验' : '账号登录'}</strong>
           <span>{props.providerType === 'claude-subscription'
-            ? '账号认证路径已隔离在实验开关后；默认隐藏，聊天发送通路未开放。当前请使用 Anthropic API key。'
-            : '这类账号路径未进入配置入口。当前请先使用同一家厂商的 API key。'}</span>
+            ? '账号认证路径已隔离在实验开关后；默认隐藏。当前请使用 Anthropic API key 连接聊天模型。'
+            : '这类账号登录不会出现在模型连接入口。当前请先使用同一家厂商的 API key。'}</span>
         </div>
       )}
       <label>
@@ -947,11 +947,11 @@ export function providerDisplay(type: ProviderType): { name: string; description
     case 'openai-compatible':
       return { name: 'OpenAI Compatible', description: '中转站、代理服务或自部署网关。', badge: 'Custom' };
     case 'claude-subscription':
-      return { name: 'Claude Subscription', description: 'Claude Pro / Max 订阅账号认证为内部实验；默认隐藏，聊天发送未开放。' };
+      return { name: 'Claude Subscription', description: 'Claude Pro / Max 订阅账号认证为内部实验；默认隐藏。' };
     case 'codex-subscription':
-      return { name: 'Codex Subscription', description: 'ChatGPT / Codex 订阅账号路径未进入配置入口。' };
+      return { name: 'Codex Subscription', description: 'ChatGPT / Codex 账号登录不作为模型连接。' };
     case 'gemini-cli':
-      return { name: 'Gemini CLI', description: 'Google 账号 OAuth 路径未进入配置入口。' };
+      return { name: 'Gemini CLI', description: 'Google 账号登录不作为模型连接。' };
   }
 }
 

@@ -245,7 +245,7 @@ export const PROVIDER_DEFAULTS: Record<ProviderType, ProviderDefaults> = {
   },
   'codex-subscription': {
     label: 'Codex Subscription (ChatGPT OAuth)',
-    description: 'ChatGPT/Codex subscription via official CLI in a future phase.',
+    description: 'ChatGPT/Codex account path is tracked separately from ready API-key providers.',
     baseUrl: '',
     authKind: 'oauth_token',
     backendKind: 'ai-sdk',
@@ -253,11 +253,11 @@ export const PROVIDER_DEFAULTS: Record<ProviderType, ProviderDefaults> = {
     status: 'phase3-experimental',
     protocol: 'openai',
     category: 'oauth',
-    catalogBadge: 'Soon',
+    catalogBadge: 'Account',
   },
   'gemini-cli': {
     label: 'Gemini CLI OAuth',
-    description: 'Google account access through gemini CLI in a future phase.',
+    description: 'Google account path is tracked separately from ready API-key providers.',
     baseUrl: '',
     authKind: 'oauth_token',
     backendKind: 'ai-sdk',
@@ -265,7 +265,7 @@ export const PROVIDER_DEFAULTS: Record<ProviderType, ProviderDefaults> = {
     status: 'phase3-experimental',
     protocol: 'google',
     category: 'oauth',
-    catalogBadge: 'Soon',
+    catalogBadge: 'Account',
   },
 };
 
