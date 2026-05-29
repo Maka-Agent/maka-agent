@@ -2948,6 +2948,7 @@ function OpenGatewaySettingsPage(props: {
   const gateway = props.settings.openGateway;
   const [status, setStatus] = useState<OpenGatewayRuntimeStatus | null>(null);
   const [tokenDraft, setTokenDraft] = useState(gateway.token);
+  const [eventSessionId, setEventSessionId] = useState('');
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
@@ -3006,6 +3007,26 @@ function OpenGatewaySettingsPage(props: {
     toast.success('已复制总览 curl', '可在终端验证开放网关状态。');
   }
 
+  async function copyOpenApiCurl() {
+    const command = `curl -sS ${shellSingleQuote(`${baseUrl}/v1/openapi.json`)} -H ${shellSingleQuote(`Authorization: Bearer ${gateway.token}`)}`;
+    await navigator.clipboard.writeText(command);
+    toast.success('已复制接口说明 curl', '可交给外部工具发现本机 API。');
+  }
+
+  async function copyEventStreamCurl() {
+    const sessionId = eventSessionId.trim() ? encodeURIComponent(eventSessionId.trim()) : '<SESSION_ID>';
+    const command = [
+      'curl -N -sS',
+      shellSingleQuote(`${baseUrl}/v1/sessions/${sessionId}/events`),
+      '-H',
+      shellSingleQuote(`Authorization: Bearer ${gateway.token}`),
+      '-H',
+      shellSingleQuote('Accept: text/event-stream'),
+    ].join(' ');
+    await navigator.clipboard.writeText(command);
+    toast.success('已复制事件流 curl', sessionId === '<SESSION_ID>' ? '把 <SESSION_ID> 替换成目标会话 ID 后运行。' : '可在终端观察当前会话事件。');
+  }
+
   const state = presentGatewayStatus(status, gateway);
 
   return (
@@ -3060,6 +3081,15 @@ function OpenGatewaySettingsPage(props: {
             ariaLabel="开放网关访问 token"
           />
         </label>
+        <label>
+          <span>事件 sessionId</span>
+          <input
+            value={eventSessionId}
+            disabled={saving}
+            placeholder="留空则复制 <SESSION_ID> 模板"
+            onChange={(event) => setEventSessionId(event.currentTarget.value)}
+          />
+        </label>
       </div>
 
       {gateway.enabled && !gateway.token && (
@@ -3085,6 +3115,12 @@ function OpenGatewaySettingsPage(props: {
         </button>
         <button className="maka-button secondary" type="button" disabled={!gateway.token} onClick={() => void copyOverviewCurl()}>
           复制总览 curl
+        </button>
+        <button className="maka-button secondary" type="button" disabled={!gateway.token} onClick={() => void copyOpenApiCurl()}>
+          复制接口说明 curl
+        </button>
+        <button className="maka-button secondary" type="button" disabled={!gateway.token} onClick={() => void copyEventStreamCurl()}>
+          复制事件流 curl
         </button>
       </div>
 
