@@ -86,4 +86,21 @@ describe('web-search renderer boundary (PR-WEB-SEARCH-TAVILY-0)', () => {
       'successful demo query status must carry the observed key version',
     );
   });
+
+  it('Settings live query button explains the actionable disabled reason', async () => {
+    const settings = await readFile(join(REPO_ROOT, 'apps/desktop/src/renderer/settings/SettingsModal.tsx'), 'utf8');
+    const helper = settings.match(/function webSearchQueryDisabledReason[\s\S]*?function presentWebSearchCredentialStatus/);
+
+    assert.ok(helper, 'Web search settings must have a dedicated disabled-reason helper');
+    assert.match(helper![0], /先保存 Tavily API key/);
+    assert.match(helper![0], /先启用联网搜索/);
+    assert.match(helper![0], /输入查询后再搜索/);
+    assert.match(settings, /disabled=\{demoRunning \|\| queryDisabledReason !== null\}/);
+    assert.match(settings, /\{queryDisabledReason\}/);
+    assert.doesNotMatch(
+      settings,
+      /先开关启用联网搜索/,
+      'Web search disabled copy must not tell users to enable a switch that may itself be blocked by a missing key',
+    );
+  });
 });
