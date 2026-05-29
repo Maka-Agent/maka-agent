@@ -2712,7 +2712,7 @@ export function ChatView(props: {
     );
   }
 
-  const isFakeBackend = props.activeSession.backend === 'fake';
+  const isLocalSimulationBackend = props.activeSession.backend === 'fake';
   const deepResearchActive = isDeepResearchSession(props.activeSession.labels);
 
   return (
@@ -2766,10 +2766,10 @@ export function ChatView(props: {
           onChange={props.onPermissionModeChange}
         />
       </header>
-      {isFakeBackend && (
+      {isLocalSimulationBackend && (
         <div className="maka-fake-backend-banner" role="status">
           <AlertTriangle size={14} strokeWidth={1.75} aria-hidden="true" />
-          <span>当前会话用的是 FakeBackend（echo 模拟）。要拿到真实 LLM 回复，请到 <strong>设置 · 模型</strong> 添加 Anthropic / OpenAI / GLM 等 API key。</span>
+          <span>当前会话来自旧的本地模拟连接。要拿到真实 LLM 回复，请到 <strong>设置 · 模型</strong> 添加 Anthropic / OpenAI / GLM 等 API key。</span>
         </div>
       )}
       <div className="maka-chat-shell">

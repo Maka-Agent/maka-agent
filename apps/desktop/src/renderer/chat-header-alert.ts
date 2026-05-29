@@ -27,9 +27,8 @@
 
 export interface ChatHeaderAlertInput {
   /**
-   * The session backend kind. `'fake'` is treated as stale because the
-   * FakeBackend is for dev/demo only — once the user configures a real
-   * provider, any pre-existing `fake` session is a relic.
+   * The session backend kind. `'fake'` is treated as stale because it
+   * represents old local simulation sessions, not a real provider.
    *
    * `string` (not `BackendKind`) so legacy on-disk values like `'claude'`
    * (a removed backend) are surfaced exactly as the JSONL stored them.
@@ -93,22 +92,21 @@ export function deriveChatHeaderAlert(input: ChatHeaderAlertInput): DerivedChatH
 
   // 1. Stale `fake` backend.
   //
-  // @kenji copy review: don't expose "演示版" to the user. Their mental
+  // @kenji copy review: don't expose dev backend labels to the user. Their mental
   // model is "this is an old session that doesn't apply to my new Z.ai
-  // setup" — surface it as "会话已过期", explain the technical detail
-  // in the tooltip for users who want to know.
+  // setup" — surface it as "会话已过期" everywhere, including tooltip copy.
   if (input.backend === 'fake') {
     return input.defaultConnectionReady
       ? {
           tone: 'warning',
           label: '会话已过期 · 发送时会切换到默认连接',
-          tooltip: '原会话使用演示 backend (FakeBackend)，发送时会自动切换到当前默认连接。',
+          tooltip: '原会话使用旧的本地模拟连接，发送时会自动切换到当前默认连接。',
           onClickTarget: 'models',
         }
       : {
           tone: 'destructive',
           label: '会话已过期 · 请先配置真实模型',
-          tooltip: '原会话使用演示 backend (FakeBackend)，需要先到 设置 · 模型 添加并启用一个真实模型才能发送。',
+          tooltip: '原会话使用旧的本地模拟连接，需要先到 设置 · 模型 添加并启用一个真实模型才能发送。',
           onClickTarget: 'models',
         };
   }

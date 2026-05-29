@@ -142,7 +142,7 @@ describe('chat readiness guard', () => {
     await assertRejectsReadiness(
       'explicit fake session',
       () => assertSessionCanSend(header({ backend: 'fake', llmConnectionSlug: 'fake', model: 'fake-model' }), deps()),
-      'FakeBackend',
+      '旧的本地模拟连接',
       'fake_backend',
     );
 
@@ -342,7 +342,7 @@ describe('chat readiness guard', () => {
           },
         },
       ),
-      'FakeBackend',
+      '旧的本地模拟连接',
       'fake_backend',
     );
 
@@ -391,8 +391,22 @@ describe('chat readiness guard', () => {
           },
         },
       ),
-      'FakeBackend',
+      '旧的本地模拟连接',
       'fake_backend',
+    );
+  });
+
+  test('fake backend send failures do not expose dev/demo terminology', async () => {
+    await assert.rejects(
+      () => assertSessionCanSend(header({ backend: 'fake', llmConnectionSlug: 'fake', model: 'fake-model' }), deps()),
+      (error) => {
+        const message = (error as Error).message;
+        const visibleMessage = message.replace(/^NO_REAL_CONNECTION:[a-z_]+:\s*/, '');
+        assert.match(visibleMessage, /旧的本地模拟连接/);
+        assert.doesNotMatch(visibleMessage, /FakeBackend|fake|开发演示|演示版/i);
+        assert.equal(errorReason(error), 'fake_backend');
+        return true;
+      },
     );
   });
 });

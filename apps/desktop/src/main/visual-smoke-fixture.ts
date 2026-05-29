@@ -1521,7 +1521,7 @@ function header(input: {
 function staleFakeSession(now: number): SessionHeader {
   return header({
     id: STALE_FAKE_SESSION_ID,
-    name: '旧的 FakeBackend 演示',
+    name: '旧的本地模拟会话',
     connection: 'fake',
     model: 'fake-model',
     now,
@@ -1564,14 +1564,14 @@ function staleFakeMessages(now: number): StoredMessage[] {
       id: 'stale-fake-msg-1',
       turnId,
       ts: now - 4 * 24 * 3_600_000,
-      text: '这是早期演示版会话，发送时应该会被 silent rebind。',
+      text: '这是旧的本地模拟会话，发送时应该会切换到当前默认连接。',
     },
     {
       type: 'assistant',
       id: 'stale-fake-msg-2',
       turnId,
       ts: now - 4 * 24 * 3_600_000 + 2_000,
-      text: '这是 FakeBackend 的回复占位文本。',
+      text: '这是旧的本地模拟会话留下的回复文本。',
       modelId: 'fake-model',
     },
   ];

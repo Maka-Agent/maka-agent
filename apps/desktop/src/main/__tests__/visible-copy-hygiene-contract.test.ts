@@ -34,6 +34,8 @@ const FILES_TO_SCAN = [
   resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'components.tsx'),
   join(process.cwd(), 'src', 'renderer', 'OnboardingHero.tsx'),
   join(process.cwd(), 'src', 'renderer', 'onboarding-hero-copy.ts'),
+  join(process.cwd(), 'src', 'renderer', 'chat-header-alert.ts'),
+  join(process.cwd(), 'src', 'main', 'chat-readiness.ts'),
   join(process.cwd(), 'src', 'main', 'visual-smoke-fixture.ts'),
 ];
 
@@ -101,6 +103,12 @@ const FORBIDDEN_VISIBLE_COPY: ForbiddenCopy[] = [
     needle: /incognito(?![_a-zA-Z])/i,
     reason:
       "user-visible text must not expose the literal English `incognito` as a standalone word (xuan `a4c98a2a`). Describe the user-facing privacy state in Chinese product terms (e.g. `隐私` / `隐身`) instead. Contract enum names like `incognito_active` and camelCase identifiers like `incognitoBlocked` are OK because they're code, not user-visible text.",
+  },
+  {
+    label: 'dev/demo backend terminology leaked into visible readiness copy',
+    needle: /FakeBackend|开发演示|演示版/,
+    reason:
+      "readiness and chat-header copy must describe stale local simulation sessions in user terms, not leak development backend names or demo-stage language.",
   },
 ];
 

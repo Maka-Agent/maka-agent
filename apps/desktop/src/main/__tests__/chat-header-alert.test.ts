@@ -53,9 +53,8 @@ describe('deriveChatHeaderAlert', () => {
       assert.equal(result?.tone, 'warning');
       assert.equal(result?.label, '会话已过期 · 发送时会切换到默认连接');
       assert.equal(result?.onClickTarget, 'models');
-      // @kenji review: user shouldn't see "演示版" in the badge — it lives
-      // in the tooltip so curious users can still find the technical reason.
-      assert.match(result?.tooltip ?? '', /FakeBackend/);
+      assert.match(result?.tooltip ?? '', /旧的本地模拟连接/);
+      assert.doesNotMatch(result?.tooltip ?? '', /FakeBackend|fake|演示/i);
     });
 
     it('destructive when no default ready — send will still fail', () => {
@@ -68,15 +67,17 @@ describe('deriveChatHeaderAlert', () => {
       assert.match(result?.tooltip ?? '', /设置.*模型/);
     });
 
-    it('user-centric label never exposes "演示版" / "fake" terminology', () => {
+    it('user-centric visible copy never exposes dev backend terminology', () => {
       const ready = deriveChatHeaderAlert(
         input({ backend: 'fake', defaultConnectionReady: true }),
       );
       const notReady = deriveChatHeaderAlert(
         input({ backend: 'fake', defaultConnectionReady: false }),
       );
-      assert.doesNotMatch(ready?.label ?? '', /演示版|fake|FakeBackend/i);
-      assert.doesNotMatch(notReady?.label ?? '', /演示版|fake|FakeBackend/i);
+      for (const result of [ready, notReady]) {
+        assert.doesNotMatch(result?.label ?? '', /演示版|fake|FakeBackend/i);
+        assert.doesNotMatch(result?.tooltip ?? '', /演示版|fake|FakeBackend/i);
+      }
     });
 
     it('takes priority over a missing-connection signal (a `fake` session also has no real connection)', () => {
