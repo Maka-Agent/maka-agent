@@ -1948,11 +1948,12 @@ function WebSearchSettingsPage(props: {
     await props.onUpdate({ webSearch: { enabled } });
   }
 
-  async function persistCredentialStatus(status: WebSearchCredentialStatus) {
+  async function persistCredentialStatus(status: WebSearchCredentialStatus, credentialVersion: number) {
     await props.onUpdate({
       webSearch: {
         providers: {
           tavily: {
+            credentialVersion,
             credentialStatus: status,
             credentialCheckedAt: new Date().toISOString(),
           },
@@ -1981,13 +1982,14 @@ function WebSearchSettingsPage(props: {
   async function runTest() {
     setTesting(true);
     const usesDraftKey = draftKey.trim().length > 0;
+    const testedCredentialVersion = tavily.credentialVersion;
     try {
       const result = await window.maka.webSearch.test({
         provider: 'tavily',
         apiKey: usesDraftKey ? draftKey : undefined,
       });
       if (!usesDraftKey && tavilyKey.length > 0) {
-        await persistCredentialStatus(webSearchCredentialStatusFromResponse(result));
+        await persistCredentialStatus(webSearchCredentialStatusFromResponse(result), testedCredentialVersion);
       }
       if (result.ok) {
         toast.success('Tavily 凭据可用', `返回 ${result.results.length} 条结果。`);
@@ -2007,6 +2009,7 @@ function WebSearchSettingsPage(props: {
     setDemoRunning(true);
     setDemoError(null);
     setDemoResults(null);
+    const queriedCredentialVersion = tavily.credentialVersion;
     try {
       const result = await window.maka.webSearch.query({
         provider: 'tavily',
@@ -2016,12 +2019,12 @@ function WebSearchSettingsPage(props: {
       if (result.ok) {
         setDemoResults(result.results);
         if (hasStoredKey) {
-          await persistCredentialStatus('valid');
+          await persistCredentialStatus('valid', queriedCredentialVersion);
         }
       } else {
         setDemoError(result.message);
         if (hasStoredKey) {
-          await persistCredentialStatus(webSearchCredentialStatusFromResponse(result));
+          await persistCredentialStatus(webSearchCredentialStatusFromResponse(result), queriedCredentialVersion);
         }
       }
     } catch (err) {

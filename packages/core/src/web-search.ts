@@ -117,6 +117,12 @@ export function isWebSearchProvider(value: unknown): value is WebSearchProvider 
  */
 export interface WebSearchProviderSettings {
   readonly apiKey: string;
+  /**
+   * Monotonic local version for saved credentials. Async test/query results
+   * carry the version they observed; stale results must not overwrite status
+   * for a newer key.
+   */
+  readonly credentialVersion: number;
   readonly credentialStatus: WebSearchCredentialStatus;
   readonly credentialCheckedAt?: string;
 }
@@ -131,7 +137,7 @@ export function defaultWebSearchSettings(): WebSearchSettings {
   return {
     enabled: false,
     defaultProvider: 'tavily',
-    providers: { tavily: { apiKey: '', credentialStatus: 'untested' } },
+    providers: { tavily: { apiKey: '', credentialVersion: 0, credentialStatus: 'untested' } },
   };
 }
 

@@ -501,8 +501,7 @@ function mergeWebSearchSettings(
     tavilyPatch && typeof tavilyPatch.apiKey === 'string'
       ? reconcileMaskedToken(current.providers.tavily.apiKey, tavilyPatch.apiKey)
       : current.providers.tavily.apiKey;
-  const hasExplicitCredentialStatus =
-    tavilyPatch && isWebSearchCredentialStatus(tavilyPatch.credentialStatus);
+  const currentCredentialVersion = normalizeCredentialVersion(current.providers.tavily.credentialVersion);
   const explicitCredentialCheckedAt =
     tavilyPatch &&
     typeof tavilyPatch.credentialCheckedAt === 'string' &&
@@ -514,6 +513,16 @@ function mergeWebSearchSettings(
     typeof tavilyPatch.apiKey === 'string' &&
     tavilyPatch.apiKey !== MASKED_TOKEN_SENTINEL &&
     nextApiKey !== current.providers.tavily.apiKey;
+  const nextCredentialVersion = apiKeyChanged
+    ? currentCredentialVersion + 1
+    : currentCredentialVersion;
+  const patchCredentialVersion = tavilyPatch
+    ? normalizeOptionalCredentialVersion(tavilyPatch.credentialVersion)
+    : undefined;
+  const hasExplicitCredentialStatus =
+    tavilyPatch &&
+    isWebSearchCredentialStatus(tavilyPatch.credentialStatus) &&
+    (patchCredentialVersion === undefined || patchCredentialVersion === currentCredentialVersion);
   const credentialStatus = hasExplicitCredentialStatus
     ? tavilyPatch.credentialStatus
     : apiKeyChanged
@@ -530,6 +539,7 @@ function mergeWebSearchSettings(
     providers: {
       tavily: {
         apiKey: nextApiKey,
+        credentialVersion: nextCredentialVersion,
         credentialStatus,
         ...(credentialCheckedAt ? { credentialCheckedAt } : {}),
       },
@@ -654,17 +664,29 @@ function normalizeWebSearchSettings(settings: WebSearchSettings): WebSearchSetti
     typeof rawCredentialCheckedAt === 'string' && rawCredentialCheckedAt.length <= 64
       ? rawCredentialCheckedAt
       : undefined;
+  const credentialVersion = normalizeCredentialVersion(settings.providers?.tavily?.credentialVersion);
   return {
     enabled,
     defaultProvider,
     providers: {
       tavily: {
         apiKey,
+        credentialVersion,
         credentialStatus,
         ...(credentialCheckedAt ? { credentialCheckedAt } : {}),
       },
     },
   };
+}
+
+function normalizeCredentialVersion(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) return 0;
+  return value;
+}
+
+function normalizeOptionalCredentialVersion(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  return normalizeCredentialVersion(value);
 }
 
 function normalizeOpenGatewaySettings(settings: OpenGatewaySettings): OpenGatewaySettings {

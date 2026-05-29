@@ -62,4 +62,28 @@ describe('web-search renderer boundary (PR-WEB-SEARCH-TAVILY-0)', () => {
       'WebSearchResponse must NOT carry apiKey in either variant',
     );
   });
+
+  it('Settings persists credential test results with the observed key version', async () => {
+    const settings = await readFile(join(REPO_ROOT, 'apps/desktop/src/renderer/settings/SettingsModal.tsx'), 'utf8');
+    assert.match(
+      settings,
+      /const testedCredentialVersion = tavily\.credentialVersion/,
+      'credential test must snapshot the saved key version before awaiting network',
+    );
+    assert.match(
+      settings,
+      /persistCredentialStatus\(webSearchCredentialStatusFromResponse\(result\), testedCredentialVersion\)/,
+      'credential test result must carry the observed key version back to settings',
+    );
+    assert.match(
+      settings,
+      /const queriedCredentialVersion = tavily\.credentialVersion/,
+      'demo query must snapshot the saved key version before awaiting network',
+    );
+    assert.match(
+      settings,
+      /persistCredentialStatus\('valid', queriedCredentialVersion\)/,
+      'successful demo query status must carry the observed key version',
+    );
+  });
 });

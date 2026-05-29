@@ -102,6 +102,7 @@ describe('defaultWebSearchSettings', () => {
     assert.equal(s.enabled, false);
     assert.equal(s.defaultProvider, 'tavily');
     assert.equal(s.providers.tavily.apiKey, '');
+    assert.equal(s.providers.tavily.credentialVersion, 0);
     assert.equal(s.providers.tavily.credentialStatus, 'untested');
   });
 });
