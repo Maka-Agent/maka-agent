@@ -164,7 +164,7 @@ class FileSettingsStore implements SettingsStore {
   async usageStats(range: UsageRange = '24h'): Promise<UsageStats> {
     const since = rangeToSince(range);
     const sessions = await readStoredSessions(join(this.workspaceRoot, 'sessions'));
-    const logs = sessions.flatMap(({ header, messages }) => {
+    const modelLogs = sessions.flatMap(({ header, messages }) => {
       const assistantByTurn = new Map(
         messages
           .filter((message) => message.type === 'assistant')
@@ -176,6 +176,7 @@ class FileSettingsStore implements SettingsStore {
         .map((message) => ({
           id: message.id,
           ts: message.ts,
+          kind: 'model' as const,
           provider: header.llmConnectionSlug,
           model: assistantByTurn.get(message.turnId) ?? header.model,
           inputTokens: message.input,
@@ -188,14 +189,16 @@ class FileSettingsStore implements SettingsStore {
     });
 
     const toolRows = sessions.flatMap(({ messages }) => toolStatsFromMessages(messages, since));
-    const totalInput = sum(logs.map((log) => log.inputTokens));
-    const totalOutput = sum(logs.map((log) => log.outputTokens));
-    const cacheRead = sum(logs.map((log) => log.cacheRead ?? 0));
-    const cacheCreation = sum(logs.map((log) => log.cacheCreation ?? 0));
+    const toolLogs = sessions.flatMap(({ header, messages }) => toolLogRowsFromMessages(header, messages, since));
+    const logs = [...modelLogs, ...toolLogs].sort((a, b) => b.ts - a.ts);
+    const totalInput = sum(modelLogs.map((log) => log.inputTokens));
+    const totalOutput = sum(modelLogs.map((log) => log.outputTokens));
+    const cacheRead = sum(modelLogs.map((log) => log.cacheRead ?? 0));
+    const cacheCreation = sum(modelLogs.map((log) => log.cacheCreation ?? 0));
     return {
       summary: {
-        totalRequests: logs.length,
-        totalCostUsd: sum(logs.map((log) => log.costUsd ?? 0)),
+        totalRequests: modelLogs.length,
+        totalCostUsd: sum(modelLogs.map((log) => log.costUsd ?? 0)),
         totalTokens: totalInput + totalOutput,
         inputTokens: totalInput,
         outputTokens: totalOutput,
@@ -203,9 +206,9 @@ class FileSettingsStore implements SettingsStore {
         cacheRead,
         cacheCreation,
       },
-      logs: logs.sort((a, b) => b.ts - a.ts),
-      byProvider: aggregateBy(logs, 'provider'),
-      byModel: aggregateBy(logs, 'model'),
+      logs,
+      byProvider: aggregateBy(modelLogs, 'provider'),
+      byModel: aggregateBy(modelLogs, 'model'),
       byTool: toolRows,
       pricing: [],
     };
@@ -303,6 +306,37 @@ function toolStatsFromMessages(messages: StoredMessage[], since: number | null):
     errors: row.errors,
     avgDurationMs: row.durationCount ? Math.round(row.totalDuration / row.durationCount) : 0,
   }));
+}
+
+function toolLogRowsFromMessages(
+  header: SessionHeader,
+  messages: StoredMessage[],
+  since: number | null,
+): UsageStats['logs'] {
+  const calls = messages.filter((message): message is ToolCallMessage => message.type === 'tool_call');
+  const results = new Map(
+    messages
+      .filter((message): message is ToolResultMessage => message.type === 'tool_result')
+      .map((message) => [message.toolUseId, message]),
+  );
+  return calls
+    .filter((call) => !since || call.ts >= since)
+    .map((call) => {
+      const result = results.get(call.id);
+      const ts = result?.ts ?? call.ts;
+      return {
+        id: `tool:${call.id}`,
+        ts,
+        kind: 'tool' as const,
+        provider: header.llmConnectionSlug,
+        model: header.model,
+        toolName: call.displayName ?? call.toolName,
+        inputTokens: 0,
+        outputTokens: 0,
+        latencyMs: result?.durationMs,
+        status: result?.isError ? 'error' as const : 'success' as const,
+      };
+    });
 }
 
 function sum(values: number[]): number {

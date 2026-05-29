@@ -254,8 +254,10 @@ export interface AppSettings {
 export interface UsageRequestLog {
   id: string;
   ts: number;
+  kind: 'model' | 'tool';
   provider: string;
   model: string;
+  toolName?: string;
   inputTokens: number;
   outputTokens: number;
   cacheRead?: number;

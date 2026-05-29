@@ -3671,7 +3671,11 @@ function UsageSettingsPage(props: {
     const logs = stats?.logs ?? [];
     return logs
       .filter((log) => usage.status === 'all' || log.status === usage.status)
-      .filter((log) => normalizedModelFilter.length === 0 || log.model.toLowerCase().includes(normalizedModelFilter));
+      .filter((log) =>
+        normalizedModelFilter.length === 0 ||
+        log.model.toLowerCase().includes(normalizedModelFilter) ||
+        (log.toolName ?? '').toLowerCase().includes(normalizedModelFilter)
+      );
   }, [stats, usage.status, normalizedModelFilter]);
 
   async function setRange(range: UsageRange) {
@@ -3731,7 +3735,7 @@ function UsageSettingsPage(props: {
         <div className="settingsUsageFilters">
           {usage.showDetails && (
             <>
-              <input value={usage.modelFilter} onChange={(event) => void props.onUpdate({ usage: { modelFilter: event.currentTarget.value } })} placeholder="按模型筛选…" />
+              <input value={usage.modelFilter} onChange={(event) => void props.onUpdate({ usage: { modelFilter: event.currentTarget.value } })} placeholder="按模型或工具筛选…" />
               <select value={usage.status} onChange={(event) => void props.onUpdate({ usage: { status: event.currentTarget.value as typeof usage.status } })}>
                 <option value="all">全部状态</option>
                 <option value="success">成功</option>
@@ -3754,7 +3758,7 @@ function UsageSettingsPage(props: {
 
       {usage.activeTab === 'requests' && !usage.showDetails ? (
         <div className="settingsNotice">
-          当前仅显示汇总指标。打开详情记录后，可以查看逐条请求、按模型或状态筛选，并用于排查费用与失败请求。
+          当前仅显示汇总指标。打开详情记录后，可以查看逐条模型请求和工具调用，按模型、工具或状态筛选，并用于排查费用与失败请求。
           <div className="settingsActionRow" style={{ marginTop: 8 }}>
             <button type="button" className="maka-button maka-button-ghost" data-size="sm" onClick={() => void props.onUpdate({ usage: { showDetails: true } })}>
               显示明细
@@ -3786,7 +3790,18 @@ function UsageTable(props: { activeTab: AppSettings['usage']['activeTab']; stats
   if (props.activeTab === 'pricing') {
     return <SimpleStatsTable headers={['供应商', '模型', '输入 / 1M', '输出 / 1M']} rows={(props.stats?.pricing ?? []).map((row) => [row.provider, row.model, `$${row.inputPerMTokUsd}`, `$${row.outputPerMTokUsd}`])} empty="暂无定价覆盖配置" />;
   }
-  return <SimpleStatsTable headers={['时间', '供应商', '模型', 'Token', '费用', '延迟', '状态']} rows={props.logs.map((row) => [new Date(row.ts).toLocaleString(), row.provider, row.model, row.inputTokens + row.outputTokens, `$${(row.costUsd ?? 0).toFixed(2)}`, row.latencyMs ? `${row.latencyMs}ms` : '-', usageRequestStatusLabel(row.status)])} empty={props.requestEmpty} />;
+  return <SimpleStatsTable headers={['时间', '类型', '对象', 'Token', '费用', '延迟', '状态']} rows={props.logs.map((row) => [new Date(row.ts).toLocaleString(), usageRequestKindLabel(row.kind), usageRequestTarget(row), row.inputTokens + row.outputTokens, row.kind === 'model' ? `$${(row.costUsd ?? 0).toFixed(2)}` : '-', row.latencyMs ? `${row.latencyMs}ms` : '-', usageRequestStatusLabel(row.status)])} empty={props.requestEmpty} />;
+}
+
+function usageRequestKindLabel(kind: UsageStats['logs'][number]['kind']) {
+  switch (kind) {
+    case 'model': return '模型';
+    case 'tool': return '工具';
+  }
+}
+
+function usageRequestTarget(row: UsageStats['logs'][number]) {
+  return row.kind === 'tool' ? row.toolName ?? row.model : row.model;
 }
 
 function usageRequestStatusLabel(status: UsageStats['logs'][number]['status']) {
