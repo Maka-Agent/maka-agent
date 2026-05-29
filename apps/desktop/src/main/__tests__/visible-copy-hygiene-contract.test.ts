@@ -113,9 +113,9 @@ const FORBIDDEN_VISIBLE_COPY: ForbiddenCopy[] = [
   },
   {
     label: 'renderer implementation terms leaked into visible preview copy',
-    needle: /注册表中实现/,
+    needle: /注册表中实现|(?:此类|已识别到|无法识别|超过 2 MB 的|无法读取)\s*artifact/,
     reason:
-      "artifact preview fallback copy must explain the product capability boundary, not expose renderer implementation details like a preview registry.",
+      "artifact preview fallback copy must explain the product capability boundary in user terms, not expose renderer implementation details like a preview registry or internal `artifact` naming.",
   },
   {
     label: 'English hidden-line markers in tool previews',

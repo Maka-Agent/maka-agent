@@ -71,22 +71,22 @@ function describeUnsupportedReason(
     case 'kind_disallowed':
       return {
         title: '当前预览暂不支持该类型',
-        description: '此类 artifact 不能在面板内直接预览。请使用工具栏「在 Finder 中打开」查看。',
+        description: '此类生成文件不能在面板内直接预览。请使用工具栏「在 Finder 中打开」查看。',
       };
     case 'mime_disallowed':
       return {
         title: '格式暂不支持预览',
-        description: '已识别到 artifact 的 MIME 类型，但当前注册表只支持 PNG / JPEG / GIF / WebP / AVIF。',
+        description: '已识别到文件的 MIME 类型，但当前预览只支持 PNG / JPEG / GIF / WebP / AVIF。',
       };
     case 'no_mime_no_ext':
       return {
-        title: '无法识别 artifact 类型',
+        title: '无法识别文件类型',
         description: '文件没有 MIME 元数据，扩展名也未匹配。请通过工具栏「在 Finder 中打开」查看。',
       };
     case 'oversize':
       return {
         title: '文件过大，暂不预览',
-        description: '为避免在内存中加载大体积图片，超过 2 MB 的 artifact 不在此处展开预览。',
+        description: '为避免在内存中加载大体积图片，超过 2 MB 的文件不在此处展开预览。',
       };
     case 'read_failed':
       // PR-UI-RENDER-3a fixup (@kenji review @msg 5fa6f6a5) — distinct
@@ -95,7 +95,7 @@ function describeUnsupportedReason(
       // when the real cause was a missing / unreadable file.
       return {
         title: '加载预览失败',
-        description: '无法读取 artifact 内容（可能已被删除、移动或权限不足）。请通过工具栏「在 Finder 中打开」检查文件。',
+        description: '无法读取文件内容（可能已被删除、移动或权限不足）。请通过工具栏「在 Finder 中打开」检查文件。',
       };
     default: {
       const _exhaustive: never = reason;
