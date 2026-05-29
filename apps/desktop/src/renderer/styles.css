@@ -1837,6 +1837,31 @@ button:active {
   box-shadow: 0 0 0 2px oklch(from var(--accent) l c h / 0.12);
 }
 
+.maka-plan-presets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.maka-plan-preset {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+  color: var(--foreground-70);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  overflow: hidden;
+  padding: 6px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.maka-plan-preset:hover {
+  background: var(--foreground-2);
+}
+
 .maka-plan-delivery-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
