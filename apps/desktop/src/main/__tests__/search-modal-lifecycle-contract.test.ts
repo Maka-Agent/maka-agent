@@ -267,6 +267,14 @@ describe('SearchModal lifecycle contract (PR-SIDEBAR-IA-0 Phase 3 P0 fixup)', ()
     assert.match(searchModal, /没有匹配的会话标题或内容。换个关键词试试。/, 'Search no-match copy must not imply title hits are unsupported');
   });
 
+  it('search modal generic error copy is a retryable local-search state', async () => {
+    const components = await readFile(COMPONENTS_PATH, 'utf8');
+    const searchModal = components.slice(components.indexOf('export function SearchModal'), components.indexOf('/**\n * Render an ordered list of session groups'));
+
+    assert.match(searchModal, /搜索服务需要刷新，请重试。/);
+    assert.doesNotMatch(searchModal, /搜索暂时不可用，请稍后重试。/, 'Search modal fallback error should not read like a generic unavailable feature');
+  });
+
   it('session time buckets use product labels without unfinished-state wording', async () => {
     const components = await readFile(COMPONENTS_PATH, 'utf8');
     const groupingBlock = components.slice(components.indexOf('function groupSessionsByTime'), components.indexOf('function formatSessionMeta'));
