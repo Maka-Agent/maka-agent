@@ -6,9 +6,12 @@ import { tmpdir } from 'node:os';
 import {
   MAX_IMPORTED_TEXT_FILE_BYTES,
   MAX_IMPORTED_TEXT_FILE_CHARS,
+  MAX_IMPORTED_TEXT_FILE_COUNT,
+  MAX_IMPORTED_TEXT_FILES_CHARS,
   formatImportedTextFilePrompt,
   readFolderOutlineForPromptImport,
   readTextFileForPromptImport,
+  readTextFilesForPromptImport,
 } from '../text-file-import.js';
 
 describe('text file context import', () => {
@@ -22,9 +25,56 @@ describe('text file context import', () => {
       assert.equal(result.ok, true);
       if (!result.ok) return;
       assert.equal(result.name, 'notes.md');
+      assert.equal(result.files, 1);
       assert.equal(result.truncated, false);
       assert.match(result.prompt, /<local-text-file name="notes\.md">/);
       assert.match(result.prompt, /Use the local context\./);
+    });
+  });
+
+  it('formats multiple selected text files into one bounded prompt fragment', async () => {
+    await withTempDir(async (root) => {
+      await writeFile(join(root, 'a.md'), '# A\nalpha\n', 'utf8');
+      await writeFile(join(root, 'b.json'), '{"beta":true}\n', 'utf8');
+
+      const result = await readTextFilesForPromptImport([join(root, 'a.md'), join(root, 'b.json')]);
+
+      assert.equal(result.ok, true);
+      if (!result.ok) return;
+      assert.equal(result.name, '2 个文本文件');
+      assert.equal(result.files, 2);
+      assert.equal(result.truncated, false);
+      assert.match(result.prompt, /请结合下面导入的 2 个本地文本文件回答。/);
+      assert.match(result.prompt, /<local-text-file name="a\.md">/);
+      assert.match(result.prompt, /<local-text-file name="b\.json">/);
+      assert.doesNotMatch(result.prompt, new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    });
+  });
+
+  it('caps multi-file imports by file count and aggregate characters', async () => {
+    await withTempDir(async (root) => {
+      const many = [];
+      for (let index = 0; index < MAX_IMPORTED_TEXT_FILE_COUNT + 1; index += 1) {
+        const filePath = join(root, `file-${index}.txt`);
+        many.push(filePath);
+        await writeFile(filePath, 'x\n', 'utf8');
+      }
+      assert.deepEqual(await readTextFilesForPromptImport(many), { ok: false, reason: 'too-many-files' });
+
+      const first = join(root, 'first.txt');
+      const second = join(root, 'second.txt');
+      const third = join(root, 'third.txt');
+      await writeFile(first, 'A'.repeat(18_000), 'utf8');
+      await writeFile(second, 'B'.repeat(18_000), 'utf8');
+      await writeFile(third, 'C'.repeat(MAX_IMPORTED_TEXT_FILES_CHARS), 'utf8');
+
+      const result = await readTextFilesForPromptImport([first, second, third]);
+
+      assert.equal(result.ok, true);
+      if (!result.ok) return;
+      assert.equal(result.truncated, true);
+      assert.match(result.prompt, /文件内容过长/);
+      assert.match(result.prompt, /<local-text-file name="third\.txt" truncated="true">/);
     });
   });
 
@@ -53,11 +103,13 @@ describe('text file context import', () => {
 
   it('wires the import action into both Composer and first-run Quick Chat', async () => {
     const mainSource = await readFile(join(process.cwd(), 'src/renderer/main.tsx'), 'utf8');
+    const mainProcessSource = await readFile(join(process.cwd(), 'src/main/main.ts'), 'utf8');
     const onboardingSource = await readFile(join(process.cwd(), 'src/renderer/OnboardingHero.tsx'), 'utf8');
     const uiSource = await readFile(join(process.cwd(), '../../packages/ui/src/components.tsx'), 'utf8');
 
     assert.match(mainSource, /onImportTextFile=\{importTextFilePrompt\}/);
     assert.match(mainSource, /onImportTextFile=\{importTextFileIntoComposer\}/);
+    assert.match(mainProcessSource, /properties: \['openFile', 'multiSelections'\]/);
     assert.match(mainSource, /onImportFolderOutline=\{importFolderOutlinePrompt\}/);
     assert.match(mainSource, /onImportFolderOutline=\{importFolderOutlineIntoComposer\}/);
     assert.match(onboardingSource, /导入文本文件/);

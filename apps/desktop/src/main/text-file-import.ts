@@ -3,6 +3,8 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 
 export const MAX_IMPORTED_TEXT_FILE_BYTES = 200_000;
 export const MAX_IMPORTED_TEXT_FILE_CHARS = 20_000;
+export const MAX_IMPORTED_TEXT_FILE_COUNT = 5;
+export const MAX_IMPORTED_TEXT_FILES_CHARS = 40_000;
 export const MAX_IMPORTED_FOLDER_ENTRIES = 200;
 export const MAX_IMPORTED_FOLDER_DEPTH = 4;
 
@@ -21,6 +23,7 @@ export type TextFileImportFailureReason =
   | 'missing'
   | 'too-large'
   | 'binary'
+  | 'too-many-files'
   | 'read-failed';
 
 export type TextFileImportResult =
@@ -28,6 +31,7 @@ export type TextFileImportResult =
       ok: true;
       name: string;
       bytes: number;
+      files: number;
       truncated: boolean;
       prompt: string;
     }
@@ -55,6 +59,71 @@ export type FolderOutlineImportResult =
     };
 
 export async function readTextFileForPromptImport(filePath: string): Promise<TextFileImportResult> {
+  const loaded = await loadTextFileForPromptImport(filePath);
+  if (!loaded.ok) return loaded;
+  return {
+    ok: true,
+    name: loaded.name,
+    bytes: loaded.bytes,
+    files: 1,
+    truncated: loaded.truncated,
+    prompt: formatImportedTextFilePrompt({ name: loaded.name, text: loaded.text, truncated: loaded.truncated }),
+  };
+}
+
+export async function readTextFilesForPromptImport(filePaths: string[]): Promise<TextFileImportResult> {
+  const selected = filePaths.filter(Boolean);
+  if (selected.length === 0) return { ok: false, reason: 'missing' };
+  if (selected.length === 1) return readTextFileForPromptImport(selected[0]);
+  if (selected.length > MAX_IMPORTED_TEXT_FILE_COUNT) return { ok: false, reason: 'too-many-files' };
+
+  const loadedFiles = [];
+  for (const filePath of selected) {
+    const loaded = await loadTextFileForPromptImport(filePath);
+    if (!loaded.ok) return loaded;
+    loadedFiles.push(loaded);
+  }
+
+  let remaining = MAX_IMPORTED_TEXT_FILES_CHARS;
+  let truncated = false;
+  const fragments: string[] = [];
+  for (const file of loadedFiles) {
+    const chars = Array.from(file.text);
+    const text = chars.length > remaining ? chars.slice(0, Math.max(0, remaining)).join('') : file.text;
+    remaining -= Array.from(text).length;
+    truncated = truncated || file.truncated || chars.length > Array.from(text).length || remaining <= 0;
+    fragments.push(formatImportedTextFileBlock({ name: file.name, text, truncated: file.truncated || chars.length > Array.from(text).length }));
+    if (remaining <= 0) break;
+  }
+
+  const totalBytes = loadedFiles.reduce((sum, file) => sum + file.bytes, 0);
+  return {
+    ok: true,
+    name: `${loadedFiles.length} 个文本文件`,
+    bytes: totalBytes,
+    files: loadedFiles.length,
+    truncated,
+    prompt: formatImportedTextFilesPrompt({
+      count: loadedFiles.length,
+      fragments: fragments.join('\n\n'),
+      truncated,
+    }),
+  };
+}
+
+async function loadTextFileForPromptImport(filePath: string): Promise<
+  | {
+      ok: true;
+      name: string;
+      bytes: number;
+      text: string;
+      truncated: boolean;
+    }
+  | {
+      ok: false;
+      reason: TextFileImportFailureReason;
+    }
+> {
   let fileStat;
   try {
     fileStat = await stat(filePath);
@@ -83,8 +152,8 @@ export async function readTextFileForPromptImport(filePath: string): Promise<Tex
     ok: true,
     name,
     bytes: fileStat.size,
+    text,
     truncated,
-    prompt: formatImportedTextFilePrompt({ name, text, truncated }),
   };
 }
 
@@ -93,10 +162,25 @@ export function formatImportedTextFilePrompt(input: { name: string; text: string
     `请结合下面导入的本地文本文件 "${input.name}" 回答。`,
     input.truncated ? '文件内容过长，下面只包含前一部分。' : '',
     '',
-    `<local-text-file name="${escapeXmlAttr(input.name)}">`,
+    formatImportedTextFileBlock(input),
+  ].filter(Boolean).join('\n');
+}
+
+export function formatImportedTextFilesPrompt(input: { count: number; fragments: string; truncated: boolean }): string {
+  return [
+    `请结合下面导入的 ${input.count} 个本地文本文件回答。`,
+    input.truncated ? '文件内容过长，下面只包含前一部分。' : '',
+    '',
+    input.fragments,
+  ].filter(Boolean).join('\n');
+}
+
+function formatImportedTextFileBlock(input: { name: string; text: string; truncated: boolean }): string {
+  return [
+    `<local-text-file name="${escapeXmlAttr(input.name)}"${input.truncated ? ' truncated="true"' : ''}>`,
     input.text,
     '</local-text-file>',
-  ].filter(Boolean).join('\n');
+  ].join('\n');
 }
 
 export async function readFolderOutlineForPromptImport(folderPath: string): Promise<FolderOutlineImportResult> {

@@ -106,8 +106,8 @@ export interface WorkspaceInstructionsState {
 }
 
 export type TextFileImportResult =
-  | { ok: true; name: string; bytes: number; truncated: boolean; prompt: string }
-  | { ok: false; reason: 'cancelled' | 'missing' | 'too-large' | 'binary' | 'read-failed'; message: string };
+  | { ok: true; name: string; bytes: number; files: number; truncated: boolean; prompt: string }
+  | { ok: false; reason: 'cancelled' | 'missing' | 'too-large' | 'binary' | 'too-many-files' | 'read-failed'; message: string };
 
 export type FolderOutlineImportResult =
   | { ok: true; name: string; entries: number; truncated: boolean; prompt: string }

@@ -147,7 +147,7 @@ import { OpenGatewayService } from './open-gateway.js';
 import { LocalMemoryService } from './local-memory-service.js';
 import {
   readFolderOutlineForPromptImport,
-  readTextFileForPromptImport,
+  readTextFilesForPromptImport,
   type FolderOutlineImportFailureReason,
   type TextFileImportFailureReason,
 } from './text-file-import.js';
@@ -718,6 +718,8 @@ function textFileImportFailureCopy(reason: TextFileImportFailureReason): string 
       return '文件过大；请先截取需要讨论的部分。';
     case 'binary':
       return '这个文件不像纯文本，已取消导入。';
+    case 'too-many-files':
+      return '一次最多导入 5 个文本文件。';
     case 'read-failed':
       return '读取文件失败。';
   }
@@ -793,31 +795,29 @@ function registerIpc(): void {
   ipcMain.handle(
     'context:importTextFile',
     async (): Promise<
-      | { ok: true; name: string; bytes: number; truncated: boolean; prompt: string }
+      | { ok: true; name: string; bytes: number; files: number; truncated: boolean; prompt: string }
       | { ok: false; reason: 'cancelled'; message: string }
       | { ok: false; reason: TextFileImportFailureReason; message: string }
     > => {
+      const textFileFilters = [
+        { name: 'Text', extensions: ['txt', 'text', 'md', 'markdown', 'mdx', 'json', 'jsonl', 'csv', 'tsv', 'log', 'yaml', 'yml', 'toml', 'xml', 'html', 'htm', 'css', 'scss', 'sass', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cc', 'cpp', 'h', 'hh', 'hpp', 'sh', 'zsh', 'sql', 'ini', 'conf', 'env'] },
+        { name: 'All Files', extensions: ['*'] },
+      ];
       const result = mainWindow
         ? await dialog.showOpenDialog(mainWindow, {
             title: '导入文本文件',
-            properties: ['openFile'],
-            filters: [
-              { name: 'Text', extensions: ['txt', 'md', 'markdown', 'json', 'jsonl', 'csv', 'tsv', 'log', 'yaml', 'yml', 'xml', 'html', 'css', 'js', 'ts', 'tsx', 'jsx', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'h', 'hpp'] },
-              { name: 'All Files', extensions: ['*'] },
-            ],
+            properties: ['openFile', 'multiSelections'],
+            filters: textFileFilters,
           })
         : await dialog.showOpenDialog({
             title: '导入文本文件',
-            properties: ['openFile'],
-            filters: [
-              { name: 'Text', extensions: ['txt', 'md', 'markdown', 'json', 'jsonl', 'csv', 'tsv', 'log', 'yaml', 'yml', 'xml', 'html', 'css', 'js', 'ts', 'tsx', 'jsx', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'h', 'hpp'] },
-              { name: 'All Files', extensions: ['*'] },
-            ],
+            properties: ['openFile', 'multiSelections'],
+            filters: textFileFilters,
           });
       if (result.canceled || !result.filePaths[0]) {
         return { ok: false, reason: 'cancelled', message: '已取消导入。' };
       }
-      const imported = await readTextFileForPromptImport(result.filePaths[0]);
+      const imported = await readTextFilesForPromptImport(result.filePaths);
       if (!imported.ok) {
         return { ...imported, message: textFileImportFailureCopy(imported.reason) };
       }
