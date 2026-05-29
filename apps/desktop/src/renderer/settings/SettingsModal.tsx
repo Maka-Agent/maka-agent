@@ -3693,7 +3693,7 @@ function HealthCenterPage() {
           <h3>健康中心</h3>
           <p>
             按层级（配置 · 验证 · 权限 · 功能 · 操作审批 · 记忆 · 运行态 · 存储）展示当前快照。
-            <strong>验证通过 ≠ 运行可用</strong> — 凭据测试只属于 validation 层，运行态需要运行态探测接入后实测。
+            <strong>验证通过 ≠ 运行可用</strong> — 凭据测试只属于 validation 层；发送通路以运行态探测结果为准。
           </p>
         </div>
         <div className="settingsHealthMeta">
@@ -3754,8 +3754,8 @@ function HealthCenterPage() {
       })}
 
       <p className="settingsHealthFootnote">
-        想要从这里直接「测试连接」「重新探测」「修复凭据」？运行态修复操作接入后显示。
-        所有真正的运行态探测落地后会自动出现在「运行态探测」层。
+        本页不直接执行测试、修复或权限变更；它只汇总当前已记录的健康信号。
+        需要处理问题时，请进入对应设置页或重新触发相关功能。
       </p>
     </div>
   );
