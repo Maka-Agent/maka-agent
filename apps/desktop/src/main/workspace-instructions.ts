@@ -1,4 +1,4 @@
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 
 export const WORKSPACE_INSTRUCTION_FILES = [
@@ -43,6 +43,12 @@ export type WorkspaceInstructionOpenFailureReason =
   | 'missing'
   | 'blocked'
   | 'not-a-file';
+
+export type WorkspaceInstructionCreateFailureReason =
+  | 'unknown-file'
+  | 'exists'
+  | 'blocked'
+  | 'write-failed';
 
 export async function buildWorkspaceInstructionsPromptFragment(cwd: string): Promise<string | undefined> {
   const instructions = await readWorkspaceInstructions(cwd);
@@ -119,6 +125,36 @@ export async function resolveWorkspaceInstructionFileForOpen(
   return { ok: true, file, path: resolved };
 }
 
+export async function createWorkspaceInstructionFile(
+  cwd: string,
+  file: string,
+): Promise<
+  | { ok: true; file: string }
+  | { ok: false; reason: WorkspaceInstructionCreateFailureReason }
+> {
+  if (!isWorkspaceInstructionFile(file)) return { ok: false, reason: 'unknown-file' };
+
+  let root: string;
+  try {
+    root = await realpath(cwd);
+  } catch {
+    return { ok: false, reason: 'blocked' };
+  }
+
+  const target = join(root, file);
+  if (!isInside(root, target)) return { ok: false, reason: 'blocked' };
+
+  try {
+    await writeFile(target, defaultWorkspaceInstructionTemplate(file), { encoding: 'utf8', flag: 'wx', mode: 0o644 });
+  } catch (error) {
+    const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
+    return { ok: false, reason: code === 'EEXIST' ? 'exists' : 'write-failed' };
+  }
+
+  const resolved = await resolveWorkspaceInstructionFileForOpen(root, file);
+  return resolved.ok ? { ok: true, file } : { ok: false, reason: 'blocked' };
+}
+
 async function readWorkspaceInstructions(cwd: string): Promise<WorkspaceInstruction[]> {
   return (await scanWorkspaceInstructions(cwd)).filter(
     (instruction): instruction is WorkspaceInstruction & { status: 'available' } =>
@@ -186,6 +222,16 @@ function isInside(root: string, target: string): boolean {
 
 function isWorkspaceInstructionFile(file: string): file is typeof WORKSPACE_INSTRUCTION_FILES[number] {
   return (WORKSPACE_INSTRUCTION_FILES as readonly string[]).includes(file);
+}
+
+function defaultWorkspaceInstructionTemplate(file: string): string {
+  return [
+    `# ${file}`,
+    '',
+    '- Describe project-specific guidance for this workspace here.',
+    '- Keep these instructions local to this project and lower priority than system, developer, safety, and permission rules.',
+    '',
+  ].join('\n');
 }
 
 function cleanPromptText(text: string): string {

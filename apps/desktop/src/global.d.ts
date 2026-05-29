@@ -186,6 +186,7 @@ declare global {
       workspaceInstructions: {
         getState(): Promise<WorkspaceInstructionsState>;
         openFile(file: string): Promise<{ ok: true } | { ok: false; message: string }>;
+        createFile(file: string): Promise<{ ok: true } | { ok: false; message: string }>;
       };
       context: {
         importTextFile(): Promise<TextFileImportResult>;

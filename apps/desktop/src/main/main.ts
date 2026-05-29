@@ -129,8 +129,10 @@ import { buildSettingsUpdateResult, maskAppSettings, preserveSensitivePlaceholde
 import { buildSkillsPromptFragment, listInstalledSkills } from './skills.js';
 import {
   buildWorkspaceInstructionsPromptFragment,
+  createWorkspaceInstructionFile,
   getWorkspaceInstructionsState,
   resolveWorkspaceInstructionFileForOpen,
+  type WorkspaceInstructionCreateFailureReason,
   type WorkspaceInstructionOpenFailureReason,
 } from './workspace-instructions.js';
 import { buildCapabilitySnapshotCollection, buildPermissionSnapshot } from './capability-snapshot.js';
@@ -686,6 +688,19 @@ function workspaceInstructionOpenFailureCopy(reason: WorkspaceInstructionOpenFai
   }
 }
 
+function workspaceInstructionCreateFailureCopy(reason: WorkspaceInstructionCreateFailureReason): string {
+  switch (reason) {
+    case 'unknown-file':
+      return '只能创建 AGENTS.md / CLAUDE.md / GEMINI.md。';
+    case 'exists':
+      return '项目指令文件已经存在。';
+    case 'blocked':
+      return '当前工作区路径不可写或不在允许范围内。';
+    case 'write-failed':
+      return '写入项目指令文件失败。';
+  }
+}
+
 function textFileImportFailureCopy(reason: TextFileImportFailureReason): string {
   switch (reason) {
     case 'missing':
@@ -745,6 +760,14 @@ function registerIpc(): void {
       if (!resolved.ok) return { ok: false, message: workspaceInstructionOpenFailureCopy(resolved.reason) };
       const error = await shell.openPath(resolved.path);
       return error ? { ok: false, message: workspaceInstructionOpenFailureCopy('open-failed') } : { ok: true };
+    },
+  );
+  ipcMain.handle(
+    'workspaceInstructions:createFile',
+    async (_event, file: unknown): Promise<{ ok: true } | { ok: false; message: string }> => {
+      const created = await createWorkspaceInstructionFile(process.cwd(), typeof file === 'string' ? file : '');
+      if (!created.ok) return { ok: false, message: workspaceInstructionCreateFailureCopy(created.reason) };
+      return { ok: true };
     },
   );
   ipcMain.handle(
