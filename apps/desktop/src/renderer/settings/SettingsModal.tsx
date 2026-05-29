@@ -31,6 +31,7 @@ import type {
   CapabilitySnapshotCollection,
   HealthSignal,
   HealthSignalLayer,
+  HealthSignalSource,
   HealthSignalStatus,
   HealthSnapshot,
   LlmConnection,
@@ -4056,6 +4057,15 @@ const HEALTH_SCOPE_LABEL: Record<HealthSignal['scope'], string> = {
   storage: '存储',
 };
 
+const HEALTH_SOURCE_LABEL: Record<HealthSignalSource, string> = {
+  connection_test: '连接测试',
+  capability_snapshot: '能力快照',
+  permission_snapshot: '权限快照',
+  runtime_probe: '运行态探测',
+  settings: '设置',
+  storage: '本地存储',
+};
+
 function HealthCenterPage() {
   const [snapshot, setSnapshot] = useState<HealthSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -4166,7 +4176,7 @@ function HealthCenterPage() {
         if (!signals || signals.length === 0) return null;
         const copy = HEALTH_LAYER_COPY[layer];
         return (
-          <section key={layer} className="settingsHealthLayer" aria-label={`${copy.label} signals`}>
+          <section key={layer} className="settingsHealthLayer" aria-label={`${copy.label}健康信号`}>
             <header>
               <h4>{copy.label}</h4>
               <small>{copy.description}</small>
@@ -4216,9 +4226,9 @@ function HealthSignalRow(props: { signal: HealthSignal }) {
       <p className="settingsHealthSignalMessage">{signal.message}</p>
       {signal.detail && <small className="settingsHealthSignalDetail">{signal.detail}</small>}
       <div className="settingsHealthSignalMeta">
-        <span>source: <code>{signal.source}</code></span>
+        <span>来源：{HEALTH_SOURCE_LABEL[signal.source]}</span>
         <span>
-          checked: <RelativeTime ts={signal.checkedAt} className="settingsHelpInlineTime" />
+          读取：<RelativeTime ts={signal.checkedAt} className="settingsHelpInlineTime" />
         </span>
         {signal.blocksSend && <span className="settingsHealthSignalBlocker" data-tone="destructive">阻塞发送</span>}
         {signal.blocksCapability && <span className="settingsHealthSignalBlocker" data-tone="warning">阻塞能力</span>}

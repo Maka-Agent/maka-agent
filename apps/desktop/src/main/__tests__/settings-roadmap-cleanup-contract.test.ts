@@ -119,14 +119,25 @@ describe('Settings coming-soon cleanup contract', () => {
   it('keeps Health Center copy scoped to read-only current signals', async () => {
     const settings = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
     const healthPage = settings.match(/function HealthCenterPage\(\)[\s\S]*?function HealthSummaryTile/);
+    const healthSignalRow = settings.match(/function HealthSignalRow\(props: \{ signal: HealthSignal \}\)[\s\S]*?function groupSignalsByLayer/);
 
     assert.ok(healthPage, 'Health Center page block must exist');
+    assert.ok(healthSignalRow, 'HealthSignalRow block must exist');
+    assert.match(settings, /const HEALTH_SOURCE_LABEL\b/, 'Health Center should have a source-label presentation map');
     assert.match(healthPage![0], /只汇总当前已记录的健康信号/, 'Health Center must explain its current read-only signal boundary');
     assert.match(healthPage![0], /发送通路以运行态探测结果为准/, 'Health Center must keep validation and operational runtime distinct');
+    assert.match(healthPage![0], /aria-label=\{`\$\{copy\.label\}健康信号`\}/, 'Health Center section aria labels should not mix English "signals" into Chinese UI');
+    assert.match(healthSignalRow![0], /来源：\{HEALTH_SOURCE_LABEL\[signal\.source\]\}/, 'Health Center row should present localized source labels');
+    assert.match(healthSignalRow![0], /读取：<RelativeTime/, 'Health Center row should present localized checked-time labels');
     assert.doesNotMatch(
       healthPage![0],
       /接入后|落地后|即将|路线图|尚未实现|TODO|V0\.1/,
       'Health Center visible copy must not read like future roadmap or demo-stage copy',
+    );
+    assert.doesNotMatch(
+      healthSignalRow![0],
+      /source:\s*<code>|checked:|connection_test|runtime_probe|capability_snapshot|permission_snapshot/,
+      'Health Center row must not expose raw source enum labels as visible metadata',
     );
   });
 
