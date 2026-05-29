@@ -2321,6 +2321,23 @@ function MemorySettingsPage(props: {
     }
   }
 
+  async function createWorkspaceInstructionFile(file: string) {
+    setBusy(true);
+    try {
+      const result = await window.maka.workspaceInstructions.createFile(file);
+      if (!result.ok) {
+        toast.error('创建项目指令失败', result.message);
+        return;
+      }
+      const instructions = await window.maka.workspaceInstructions.getState();
+      setWorkspaceInstructionState(instructions);
+      toast.success('已创建项目指令', file);
+      await openWorkspaceInstructionFile(file);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function copyPath() {
     if (!state?.path) return;
     try {
@@ -2396,6 +2413,16 @@ function MemorySettingsPage(props: {
                     onClick={() => void openWorkspaceInstructionFile(file.file)}
                   >
                     打开
+                  </button>
+                )}
+                {file.status === 'missing' && (
+                  <button
+                    type="button"
+                    className="settingsInlineTextButton"
+                    disabled={busy}
+                    onClick={() => void createWorkspaceInstructionFile(file.file)}
+                  >
+                    创建
                   </button>
                 )}
               </span>

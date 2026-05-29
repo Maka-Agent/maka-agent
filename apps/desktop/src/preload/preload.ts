@@ -278,6 +278,9 @@ contextBridge.exposeInMainWorld('maka', {
     openFile(file: string): Promise<{ ok: true } | { ok: false; message: string }> {
       return ipcRenderer.invoke('workspaceInstructions:openFile', file);
     },
+    createFile(file: string): Promise<{ ok: true } | { ok: false; message: string }> {
+      return ipcRenderer.invoke('workspaceInstructions:createFile', file);
+    },
   },
   context: {
     importTextFile(): Promise<TextFileImportResult> {

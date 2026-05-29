@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import {
   MAX_WORKSPACE_INSTRUCTION_FILE_CHARS,
   buildWorkspaceInstructionsPromptFragment,
+  createWorkspaceInstructionFile,
   getWorkspaceInstructionsState,
   resolveWorkspaceInstructionFileForOpen,
 } from '../workspace-instructions.js';
@@ -116,6 +117,37 @@ describe('workspace instructions prompt fragment', () => {
       );
     });
     await rm(outsideRoot, { recursive: true, force: true });
+  });
+
+  it('creates only missing allowlisted instruction files with a visible template', async () => {
+    await withWorkspace(async (workspaceRoot) => {
+      const created = await createWorkspaceInstructionFile(workspaceRoot, 'AGENTS.md');
+
+      assert.deepEqual(created, { ok: true, file: 'AGENTS.md' });
+      const text = await readFile(join(workspaceRoot, 'AGENTS.md'), 'utf8');
+      assert.match(text, /^# AGENTS\.md/);
+      assert.match(text, /lower priority than system, developer, safety, and permission rules/);
+      assert.deepEqual(
+        await createWorkspaceInstructionFile(workspaceRoot, 'AGENTS.md'),
+        { ok: false, reason: 'exists' },
+      );
+      assert.deepEqual(
+        await createWorkspaceInstructionFile(workspaceRoot, 'README.md'),
+        { ok: false, reason: 'unknown-file' },
+      );
+    });
+  });
+
+  it('wires create action through main, preload, and Settings UI without arbitrary paths', async () => {
+    const main = await readFile(join(process.cwd(), 'src/main/main.ts'), 'utf8');
+    const preload = await readFile(join(process.cwd(), 'src/preload/preload.ts'), 'utf8');
+    const settings = await readFile(join(process.cwd(), 'src/renderer/settings/SettingsModal.tsx'), 'utf8');
+
+    assert.match(main, /workspaceInstructions:createFile/);
+    assert.match(main, /createWorkspaceInstructionFile\(process\.cwd\(\), typeof file === 'string' \? file : ''\)/);
+    assert.match(preload, /createFile\(file: string\)/);
+    assert.match(settings, /file\.status === 'missing'/);
+    assert.match(settings, />\s*创建\s*<\/button>/);
   });
 });
 
