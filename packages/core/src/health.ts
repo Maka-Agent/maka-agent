@@ -114,7 +114,7 @@ export function healthSignalFromConnection(connection: LlmConnection, checkedAt:
       status: 'info',
       source: 'settings',
       checkedAt,
-      message: 'Connection is disabled.',
+      message: '连接已关闭。',
       blocksSend: false,
     };
   }
@@ -128,7 +128,7 @@ export function healthSignalFromConnection(connection: LlmConnection, checkedAt:
       status: 'warning',
       source: 'settings',
       checkedAt,
-      message: 'Connection is missing a default model.',
+      message: '连接缺少默认模型。',
       blocksSend: true,
     };
   }
@@ -142,8 +142,8 @@ export function healthSignalFromConnection(connection: LlmConnection, checkedAt:
       status: 'ok',
       source: 'connection_test',
       checkedAt: timeFromIso(connection.lastTestAt) ?? checkedAt,
-      message: 'Credential and endpoint validation passed.',
-      detail: 'This is validation health only; it does not mean an agent send/stream/abort path is operational.',
+      message: '凭据与端点验证已通过。',
+      detail: '这是连接验证结果，不代表发送、流式输出或中断通路已经运行通过。',
       blocksSend: false,
     };
   }
@@ -157,7 +157,7 @@ export function healthSignalFromConnection(connection: LlmConnection, checkedAt:
       status: 'error',
       source: 'connection_test',
       checkedAt: timeFromIso(connection.lastTestAt) ?? checkedAt,
-      message: 'Connection requires authentication repair.',
+      message: '连接需要重新修复认证。',
       detail: connection.lastTestMessage,
       blocksSend: true,
     };
@@ -172,7 +172,7 @@ export function healthSignalFromConnection(connection: LlmConnection, checkedAt:
       status: 'warning',
       source: 'connection_test',
       checkedAt: timeFromIso(connection.lastTestAt) ?? checkedAt,
-      message: 'Last connection validation failed.',
+      message: '上次连接验证失败。',
       detail: connection.lastTestMessage,
       blocksSend: true,
     };
@@ -186,7 +186,7 @@ export function healthSignalFromConnection(connection: LlmConnection, checkedAt:
     status: 'unknown',
     source: 'connection_test',
     checkedAt,
-    message: 'Connection has not been validated yet.',
+    message: '连接尚未验证。',
     blocksSend: false,
   };
 }
@@ -201,14 +201,14 @@ export function healthSignalFromConnectionRuntime(
   if (!latestRuntimeProbe) {
     return {
       id: `connection:${connection.slug}:runtime`,
-      label: `${connection.name} runtime`,
+      label: `${connection.name} 运行态`,
       scope: 'llm_connection',
       layer: 'runtime_probe',
       status: 'unknown',
       source: 'runtime_probe',
       checkedAt,
-      message: 'No recorded agent send runtime probe yet.',
-      detail: 'Credential validation is separate from live send/stream/abort health.',
+      message: '还没有记录到发送运行态探测。',
+      detail: '凭据验证与真实发送、流式输出、中断通路是两层健康信号。',
       blocksSend: false,
     };
   }
@@ -216,7 +216,7 @@ export function healthSignalFromConnectionRuntime(
   const status = runtimeStatusToHealth(latestRuntimeProbe.status);
   return {
     id: `connection:${connection.slug}:runtime`,
-    label: `${connection.name} runtime`,
+    label: `${connection.name} 运行态`,
     scope: 'llm_connection',
     layer: 'runtime_probe',
     status,
@@ -281,15 +281,15 @@ function healthLayerFromCapability(capability: CapabilitySnapshot): HealthSignal
 function capabilityMessage(readiness: CapabilityReadinessState): string {
   switch (readiness) {
     case 'enabled':
-      return 'Capability gates are satisfied.';
+      return '能力门禁已满足。';
     case 'paused':
-      return 'Capability is disabled or paused.';
+      return '能力已关闭或暂停。';
     case 'not_configured':
-      return 'Capability is not fully configured.';
+      return '能力尚未完整配置。';
     case 'denied':
-      return 'Capability is blocked by a required permission.';
+      return '能力被必要系统权限阻塞。';
     case 'degraded':
-      return 'Capability runtime probe is degraded.';
+      return '能力运行态探测处于降级状态。';
   }
 }
 
@@ -313,19 +313,19 @@ function runtimeStatusToHealth(status: UsageLogRow['status']): HealthSignalStatu
 function runtimeProbeMessage(status: UsageLogRow['status']): string {
   switch (status) {
     case 'success':
-      return 'Last recorded agent send completed.';
+      return '最近一次发送已完成。';
     case 'aborted':
-      return 'Last recorded agent send was stopped by the user.';
+      return '最近一次发送已由用户停止。';
     case 'error':
-      return 'Last recorded agent send failed.';
+      return '最近一次发送失败。';
   }
 }
 
 function runtimeProbeDetail(row: UsageLogRow): string {
   const parts = [
-    `model=${row.modelId}`,
-    `latency=${row.latencyMs}ms`,
+    `模型=${row.modelId}`,
+    `延迟=${row.latencyMs}ms`,
   ];
-  if (row.errorClass) parts.push(`errorClass=${row.errorClass}`);
+  if (row.errorClass) parts.push(`错误类型=${row.errorClass}`);
   return parts.join(' · ');
 }

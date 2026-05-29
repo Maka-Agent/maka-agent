@@ -41,8 +41,8 @@ describe('HealthSignal contract', () => {
     expect(result.status).toBe('ok');
     expect(result.layer).toBe('validation');
     expect(result.source).toBe('connection_test');
-    expect(result.message).toBe('Credential and endpoint validation passed.');
-    expect(result.detail).toContain('does not mean an agent send/stream/abort path is operational');
+    expect(result.message).toBe('凭据与端点验证已通过。');
+    expect(result.detail).toContain('不代表发送、流式输出或中断通路已经运行通过');
   });
 
   test('LLM runtime probe is separate from credential validation', () => {
@@ -50,7 +50,7 @@ describe('HealthSignal contract', () => {
     expect(unknown?.status).toBe('unknown');
     expect(unknown?.layer).toBe('runtime_probe');
     expect(unknown?.source).toBe('runtime_probe');
-    expect(unknown?.message).toContain('No recorded agent send');
+    expect(unknown?.message).toContain('还没有记录到发送运行态探测');
 
     const ok = healthSignalFromConnectionRuntime(connection({ lastTestStatus: 'verified' }), {
       id: 'usage_turn_1',
@@ -70,7 +70,7 @@ describe('HealthSignal contract', () => {
     }, 30);
     expect(ok?.status).toBe('ok');
     expect(ok?.checkedAt).toBe(40);
-    expect(ok?.detail).toContain('model=glm-4.7');
+    expect(ok?.detail).toContain('模型=glm-4.7');
 
     const failed = healthSignalFromConnectionRuntime(connection({ lastTestStatus: 'verified' }), {
       id: 'usage_turn_2',
@@ -96,7 +96,7 @@ describe('HealthSignal contract', () => {
     // current send block from a historical observation. `requireReadyConnection`
     // remains the authoritative send gate.
     expect(failed?.blocksSend).toBe(false);
-    expect(failed?.detail).toContain('errorClass=auth');
+    expect(failed?.detail).toContain('错误类型=auth');
   });
 
   test('disabled or unconfigured connections do not emit runtime probe health', () => {
@@ -236,11 +236,59 @@ describe('HealthSignal contract', () => {
 
     expect(denied.status).toBe('error');
     expect(denied.layer).toBe('permission');
-    expect(denied.message).toBe('Capability is blocked by a required permission.');
+    expect(denied.message).toBe('能力被必要系统权限阻塞。');
     expect(degraded.status).toBe('error');
     expect(degraded.layer).toBe('runtime_probe');
-    expect(degraded.message).toBe('Capability runtime probe is degraded.');
+    expect(degraded.message).toBe('能力运行态探测处于降级状态。');
     expect(degraded.scope).toBe('bot');
+  });
+
+  test('health signal visible copy does not expose English implementation wording', () => {
+    const signals = [
+      healthSignalFromConnection(connection({ enabled: false }), 20),
+      healthSignalFromConnection(connection({ defaultModel: '' }), 20),
+      healthSignalFromConnection(connection({ lastTestStatus: 'verified' }), 20),
+      healthSignalFromConnection(connection({ lastTestStatus: 'needs_reauth', lastTestMessage: '需要重新登录' }), 20),
+      healthSignalFromConnection(connection({ lastTestStatus: 'error', lastTestMessage: '网络超时' }), 20),
+      healthSignalFromConnection(connection({ lastTestStatus: undefined }), 20),
+      healthSignalFromConnectionRuntime(connection({ lastTestStatus: 'verified' }), undefined, 20),
+      healthSignalFromConnectionRuntime(
+        connection({ lastTestStatus: 'verified' }),
+        {
+          id: 'usage_turn_3',
+          ts: 60,
+          connectionSlug: 'zai',
+          providerId: 'zai-coding-plan',
+          modelId: 'glm-4.7',
+          inputTokens: 1,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          reasoningTokens: 0,
+          totalTokens: 1,
+          costUsd: 0,
+          latencyMs: 90,
+          status: 'error',
+          errorClass: 'auth',
+        },
+        20,
+      ),
+      healthSignalFromCapability(capability('bot:telegram', 'enabled')),
+      healthSignalFromCapability(capability('bot:telegram', 'paused')),
+      healthSignalFromCapability(capability('bot:telegram', 'not_configured')),
+      healthSignalFromCapability(capability('computer_use', 'denied')),
+      healthSignalFromCapability(capability('bot:telegram', 'degraded')),
+    ].filter((item): item is HealthSignal => Boolean(item));
+    const englishImplementationCopy = /\b(?:Connection|Credential|endpoint|validation|Capability|runtime probe|agent send|errorClass|latency|model=)\b/;
+
+    for (const signal of signals) {
+      if (englishImplementationCopy.test(signal.message)) {
+        throw new Error(`Health signal message exposes English implementation copy: ${signal.message}`);
+      }
+      if (signal.detail && englishImplementationCopy.test(signal.detail)) {
+        throw new Error(`Health signal detail exposes English implementation copy: ${signal.detail}`);
+      }
+    }
   });
 });
 
