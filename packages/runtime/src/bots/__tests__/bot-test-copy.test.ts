@@ -5,10 +5,7 @@ import { testBotChannel } from '../bot-test.js';
 
 describe('testBotChannel copy', () => {
   test('planned providers return product-facing unavailable copy', async () => {
-    // PR-BOT-WECOM-CREDENTIALS-TEST-0 + PR-BOT-DINGTALK-CREDENTIALS-TEST-0:
-    // both now have real credential tests. The remaining planned
-    // platforms are wechat (个人号 合规复杂) and qq.
-    const providers: BotProvider[] = ['wechat', 'qq'];
+    const providers: BotProvider[] = ['qq'];
 
     for (const provider of providers) {
       const result = await testBotChannel(provider, {
@@ -35,5 +32,19 @@ describe('testBotChannel copy', () => {
     assert.equal(result.ok, false);
     assert.match(result.error ?? '', /appkey/);
     assert.match(result.error ?? '', /appsecret/);
+  });
+
+  test('wechat credentials require official account app credentials', async () => {
+    const result = await testBotChannel('wechat', {
+      ...createDefaultBotChannel('wechat'),
+      enabled: true,
+      token: '',
+      appId: '',
+      appSecret: '',
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /WeChat App ID and App Secret are required/);
+    assert.doesNotMatch(result.error ?? '', /当前不支持凭据测试/);
   });
 });

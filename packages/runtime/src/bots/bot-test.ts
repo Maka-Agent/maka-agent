@@ -20,13 +20,43 @@ export async function testBotChannel(provider: BotProvider, channel: BotChannelS
     case 'feishu': return testFeishu(channel);
     case 'wecom': return testWeCom(channel);
     case 'dingtalk': return testDingTalk(channel);
-    case 'wechat':
+    case 'wechat': return testWechat(channel);
     case 'qq':
       return {
         ok: false,
         error: `${botDisplayLabel(provider)} 当前不支持凭据测试。`,
         hint: '该平台不会进入可用机器人列表或计划提醒投递目标。',
       };
+  }
+}
+
+async function testWechat(channel: BotChannelSettings): Promise<BotTestResult> {
+  const appId = channel.appId?.trim() ?? '';
+  const appSecret = channel.appSecret?.trim() || channel.token.trim();
+  if (!appId || !appSecret) {
+    return { ok: false, error: 'WeChat App ID and App Secret are required' };
+  }
+  try {
+    const url = new URL('https://api.weixin.qq.com/cgi-bin/token');
+    url.searchParams.set('grant_type', 'client_credential');
+    url.searchParams.set('appid', appId);
+    url.searchParams.set('secret', appSecret);
+    const response = await proxiedFetch(url.toString(), {
+      method: 'GET',
+      timeoutMs: BOT_TEST_TIMEOUT_MS,
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || typeof json.access_token !== 'string') {
+      return { ok: false, error: json.errmsg ?? `HTTP ${response.status}` };
+    }
+    return {
+      ok: true,
+      identity: { id: appId, username: appId, displayName: appId },
+      capabilities: { auth: true },
+      hint: '凭据有效；消息收发还需要公众号服务器配置和回调验证。',
+    };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 

@@ -170,7 +170,11 @@ const BOT_LABELS: Record<BotProvider, { label: string; help: string; support: 'r
     help: '填入企业的 corp_id 与自建应用的 secret 后测试凭据；当前先验证凭据，事件接收需要在企业后台配置 callback 域名。',
     support: 'credentials',
   },
-  wechat: { label: '微信', help: '个人号/公众号接入涉及额外合规和授权；当前不会进入可用机器人列表或计划提醒投递目标。', support: 'planned' },
+  wechat: {
+    label: '微信',
+    help: '填写微信公众号/服务号的 App ID 和 App Secret；当前只验证凭据，不表示已经接通消息收发。',
+    support: 'credentials',
+  },
   discord: {
     label: 'Discord',
     help: '填入 Bot Token 后测试凭据；当前先验证凭据对应一个真实 Bot 应用，Discord Gateway 长连接接入是独立后续。',
@@ -3112,7 +3116,9 @@ function BotChatSettingsPage(props: {
   }
 
   const support = BOT_LABELS[selected].support;
-  const readiness = selectedStatus?.readiness ?? channel.readiness;
+  const readiness = support === 'credentials'
+    ? channel.readiness
+    : selectedStatus?.readiness ?? channel.readiness;
   const copy = botReadinessCopyForSupport(support, readiness);
 
   return (
@@ -3121,9 +3127,12 @@ function BotChatSettingsPage(props: {
         {BOT_PROVIDERS.map((provider) => {
           const status = statuses?.[provider];
           const providerSupport = BOT_LABELS[provider].support;
+          const providerChannel = props.settings.botChat.channels[provider];
           const providerCopy = botReadinessCopyForSupport(
             providerSupport,
-            status?.readiness ?? props.settings.botChat.channels[provider].readiness,
+            providerSupport === 'credentials'
+              ? providerChannel.readiness
+              : status?.readiness ?? providerChannel.readiness,
           );
           return (
             <button
@@ -3199,10 +3208,6 @@ function BotChatSettingsPage(props: {
           </>
         )}
 
-        {/* PR-BOT-DISCORD-CREDENTIALS-LIVE-0: Discord 凭据级配置。`bot-test.ts`
-            已经有 `testDiscord` 调用 `/users/@me` 验证 token；UI 只缺一个
-            可见入口让用户填 token + 触发测试。事件接入需要 Gateway 长连接，
-            是独立后续。 */}
         {selected === 'discord' && (
           <>
             <label className="settingsField">
@@ -3215,10 +3220,6 @@ function BotChatSettingsPage(props: {
           </>
         )}
 
-        {/* PR-BOT-DINGTALK-CREDENTIALS-TEST-0: 钉钉自建应用凭据级配置。
-            `appId` 复用为 appkey，`appSecret` 复用为 appsecret，跟 WeCom /
-            Feishu 同语义不另开字段。事件接入需要 outgoing 机器人或 Stream
-            模式，是独立后续。 */}
         {selected === 'dingtalk' && (
           <>
             <label className="settingsField">
@@ -3235,10 +3236,6 @@ function BotChatSettingsPage(props: {
           </>
         )}
 
-        {/* PR-BOT-WECOM-CREDENTIALS-TEST-0: 企业微信凭据级配置。当前先支持
-            corp_id + corp_secret 凭据测试（走 gettoken），事件 callback
-            接入是独立后续。WeCom 的 `appId` 字段语义是 corp_id；
-            `appSecret` 是自建应用的 secret。 */}
         {selected === 'wecom' && (
           <>
             <label className="settingsField">
@@ -3255,6 +3252,22 @@ function BotChatSettingsPage(props: {
             </label>
             <div className="settingsNotice">
               企业微信凭据测试会请求 `gettoken`，验证 corp_id + secret 是否真实存在；事件接收需要在企业后台配置 callback 域名。未接通 callback 前，状态只到“凭据有效”，不会显示成运行可用。
+            </div>
+          </>
+        )}
+
+        {selected === 'wechat' && (
+          <>
+            <label className="settingsField">
+              <span>App ID</span>
+              <input value={channel.appId ?? ''} onChange={(event) => updateChannel({ appId: event.currentTarget.value })} placeholder="微信公众号 App ID" />
+            </label>
+            <label className="settingsField">
+              <span>App Secret</span>
+              <input type="password" value={channel.appSecret ?? ''} onChange={(event) => updateChannel({ appSecret: event.currentTarget.value })} placeholder="微信公众号 App Secret" />
+            </label>
+            <div className="settingsNotice">
+              微信凭据测试会向官方 token 接口申请 access_token；消息收发还需要公众号服务器地址、Token、EncodingAESKey 和回调验证，未接通前不会显示成运行可用。
             </div>
           </>
         )}
@@ -3322,7 +3335,7 @@ function BotChatSettingsPage(props: {
           <button className="maka-button" type="button" disabled={testing || support === 'planned'} onClick={testChannel}>
             {testing ? '测试中…' : '测试凭据'}
           </button>
-          <button className="maka-button subtle" type="button" disabled={restarting || !channel.enabled || support === 'planned'} onClick={restartChannel}>
+          <button className="maka-button subtle" type="button" disabled={restarting || !channel.enabled || support !== 'runtime'} onClick={restartChannel}>
             {restarting ? '重启中…' : '重启监听'}
           </button>
         </div>
