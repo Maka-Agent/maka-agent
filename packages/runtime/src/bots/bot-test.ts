@@ -10,6 +10,7 @@ export async function testBotChannel(provider: BotProvider, channel: BotChannelS
     provider !== 'wecom' &&
     provider !== 'wechat' &&
     provider !== 'dingtalk' &&
+    provider !== 'qq' &&
     !channel.token.trim()
   ) {
     return { ok: false, error: 'Bot token is required' };
@@ -21,12 +22,7 @@ export async function testBotChannel(provider: BotProvider, channel: BotChannelS
     case 'wecom': return testWeCom(channel);
     case 'dingtalk': return testDingTalk(channel);
     case 'wechat': return testWechat(channel);
-    case 'qq':
-      return {
-        ok: false,
-        error: `${botDisplayLabel(provider)} 当前不支持凭据测试。`,
-        hint: '该平台不会进入可用机器人列表或计划提醒投递目标。',
-      };
+    case 'qq': return testQQ(channel);
   }
 }
 
@@ -189,6 +185,56 @@ async function testDingTalk(channel: BotChannelSettings): Promise<BotTestResult>
       identity: { id: appkey, username: appkey, displayName: appkey },
       capabilities: { auth: true },
       hint: '凭据有效；接收消息需要 outgoing 机器人或 Stream 模式配置。',
+    };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
+ * PR-BOT-QQ-CREDENTIALS-TEST-0 (Hermes deep-dive: official QQ Channel
+ * bot): verify QQ 官方机器人 self-built app credentials by issuing an
+ * `access_token` via the bots open-platform endpoint. Same handshake
+ * shape as WeCom / DingTalk — `appId` + `clientSecret`, returns a
+ * short-lived bot access token.
+ *
+ * Storage semantics (matches the existing self-built app pattern):
+ *   - `appId` = QQ Bot App ID
+ *   - `appSecret` = QQ Bot Client Secret
+ *
+ * Success only proves the credentials exist; it does NOT prove that
+ * the bot can receive events (that needs WebSocket Gateway connection)
+ * or send messages (that needs channel context + per-channel API).
+ */
+async function testQQ(channel: BotChannelSettings): Promise<BotTestResult> {
+  const appId = channel.appId?.trim() ?? '';
+  const clientSecret = channel.appSecret?.trim() ?? '';
+  if (!appId || !clientSecret) {
+    return { ok: false, error: 'QQ 官方机器人需要 App ID 与 Client Secret' };
+  }
+  try {
+    const response = await proxiedFetch('https://bots.qq.com/app/getAppAccessToken', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appId, clientSecret }),
+      timeoutMs: BOT_TEST_TIMEOUT_MS,
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message =
+        typeof json.message === 'string' && json.message.length > 0
+          ? `QQ: ${json.message}`
+          : `HTTP ${response.status}`;
+      return { ok: false, error: message };
+    }
+    if (typeof json.access_token !== 'string' || json.access_token.length === 0) {
+      return { ok: false, error: 'QQ 官方机器人凭据测试未返回 access_token' };
+    }
+    return {
+      ok: true,
+      identity: { id: appId, username: appId, displayName: appId },
+      capabilities: { auth: true },
+      hint: '凭据有效；接收消息需要 QQ Gateway WebSocket 接入。',
     };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

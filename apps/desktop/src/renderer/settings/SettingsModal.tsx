@@ -185,7 +185,11 @@ const BOT_LABELS: Record<BotProvider, { label: string; help: string; support: 'r
     help: '填入自建应用的 appkey 与 appsecret 后测试凭据；当前先验证凭据，事件接收需要 outgoing 机器人或 Stream 模式独立配置。',
     support: 'credentials',
   },
-  qq: { label: 'QQ', help: '平台清单已保留；当前不会进入可用机器人列表或计划提醒投递目标。', support: 'planned' },
+  qq: {
+    label: 'QQ',
+    help: '填入 QQ 官方机器人的 App ID 与 Client Secret 后测试凭据；当前先验证凭据，事件接入需要 QQ Gateway WebSocket，是独立后续。',
+    support: 'credentials',
+  },
 };
 
 const BOT_READINESS_COPY: Record<BotReadinessState, { label: string; detail: string; tone: 'neutral' | 'info' | 'success' | 'warning' | 'destructive' }> = {
@@ -3268,6 +3272,25 @@ function BotChatSettingsPage(props: {
             </label>
             <div className="settingsNotice">
               微信凭据测试会向官方 token 接口申请 access_token；消息收发还需要公众号服务器地址、Token、EncodingAESKey 和回调验证，未接通前不会显示成运行可用。
+            </div>
+          </>
+        )}
+
+        {/* PR-BOT-QQ-CREDENTIALS-TEST-0: QQ 官方机器人凭据级配置。`appId` =
+            App ID，`appSecret` = Client Secret，跟 WeCom / DingTalk 同语义
+            不另开字段。事件接入需要 QQ Gateway WebSocket，是独立后续。 */}
+        {selected === 'qq' && (
+          <>
+            <label className="settingsField">
+              <span>App ID</span>
+              <input value={channel.appId ?? ''} onChange={(event) => updateChannel({ appId: event.currentTarget.value })} placeholder="QQ 开放平台 - 机器人 App ID" />
+            </label>
+            <label className="settingsField">
+              <span>Client Secret</span>
+              <input type="password" value={channel.appSecret ?? ''} onChange={(event) => updateChannel({ appSecret: event.currentTarget.value })} placeholder="QQ 开放平台 - 机器人 Client Secret" />
+            </label>
+            <div className="settingsNotice">
+              QQ 凭据测试会请求 `getAppAccessToken`，验证 App ID + Client Secret 真实存在。事件接入需要 QQ Gateway WebSocket，是独立后续，凭据有效不代表运行可用。
             </div>
           </>
         )}
