@@ -604,6 +604,7 @@ export {
 
 // bot-events.ts
 export type {
+  BotAttachmentKind,
   BotAttachmentRef,
   BotMessageEvent,
   BotPlatform,
@@ -617,6 +618,7 @@ export {
   humanizeBotStatusReason,
   isPlaintextHelpCommand,
   isPlaintextResetCommand,
+  nonTextMessageAck,
   plaintextHelpReply,
 } from './bot-events.js';
 

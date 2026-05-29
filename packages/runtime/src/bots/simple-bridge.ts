@@ -1,4 +1,4 @@
-import type { BotChannelSettings } from '@maka/core';
+import type { BotAttachmentKind, BotChannelSettings } from '@maka/core';
 import { generalizedErrorMessage } from '@maka/core/redaction';
 import { BaseBotAdapter, botReadinessFromSettings } from './base-adapter.js';
 import type { BotPlatform, BotSendOptions, BotStatus, SendCapable } from './types.js';
@@ -118,6 +118,37 @@ function isAllowedUser(
 }
 
 /**
+ * PR-BOT-NON-TEXT-MESSAGE-ACK-0 (Hermes deep-dive): map a Telegram
+ * `message` object to a stable {@link BotAttachmentKind} so the handler
+ * can choose between an ingest path (text-bearing) and an ack-only
+ * path (non-text payload that Maka cannot interpret yet).
+ *
+ * Order matters: photo / voice / video are the most common and we want
+ * the most accurate label for them. `sticker` and `animation` overlap
+ * with images/videos at the Telegram protocol level — they get their
+ * own ack copy so the user is not told "send a photo's question" when
+ * what they sent was a sticker.
+ */
+function telegramAttachmentKind(message: any): BotAttachmentKind | undefined {
+  if (!message || typeof message !== 'object') return undefined;
+  if (Array.isArray(message.photo) && message.photo.length > 0) return 'photo';
+  if (message.voice) return 'voice';
+  if (message.audio) return 'audio';
+  if (message.sticker) return 'sticker';
+  if (message.animation) return 'animation';
+  if (message.video || message.video_note) return 'video';
+  if (message.document) return 'document';
+  if (
+    message.location ||
+    message.contact ||
+    message.poll ||
+    message.dice ||
+    message.venue
+  ) return 'unknown';
+  return undefined;
+}
+
+/**
  * PR-BOT-EPHEMERAL-REPLY-0 (Hermes deep-dive): decide whether the
  * caller asked for ephemeral cleanup, and if so how long to wait.
  * Returns `undefined` when no cleanup should be scheduled. Telegram
@@ -197,6 +228,7 @@ export const __TEST__ = {
   ephemeralDelayFromOptions,
   EPHEMERAL_REPLY_MIN_MS,
   EPHEMERAL_REPLY_MAX_MS,
+  telegramAttachmentKind,
 };
 
 export class SimpleBotBridge extends BaseBotAdapter implements SendCapable {
@@ -443,6 +475,7 @@ export class SimpleBotBridge extends BaseBotAdapter implements SendCapable {
     this.lastEventAt = Date.now();
     this.readiness = 'operational';
     this.reason = undefined;
+    const attachmentKind = telegramAttachmentKind(message);
     this.emitIncomingMessage({
       platform: 'telegram',
       userId,
@@ -452,6 +485,7 @@ export class SimpleBotBridge extends BaseBotAdapter implements SendCapable {
       text: message.text ?? message.caption ?? '',
       sourceMessageId: String(message.message_id ?? ''),
       receivedAt: this.lastEventAt,
+      ...(attachmentKind ? { attachmentKind } : {}),
     });
     this.emitStatusChange();
   }
