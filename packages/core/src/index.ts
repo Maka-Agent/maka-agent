@@ -618,6 +618,7 @@ export {
   BOT_PLAINTEXT_RESET_COMMANDS,
   botConversationKey,
   botDisplayLabel,
+  botSourceEventKey,
   formatBotMessageForSession,
   humanizeBotStatusReason,
   isPlaintextHelpCommand,

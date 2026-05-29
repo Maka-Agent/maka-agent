@@ -92,6 +92,25 @@ export function botConversationKey(message: Pick<BotMessageEvent, 'platform' | '
 }
 
 /**
+ * PR-BOT-INCOMING-IDEMPOTENCY-0 (Hermes deep-dive): platform bridges
+ * can redeliver the same inbound message during reconnect / polling
+ * recovery. The runtime needs a stable event key before creating a
+ * Maka turn or sending a transient ack, otherwise a repeated platform
+ * update can produce duplicate agent replies.
+ *
+ * Scope deliberately stays at platform + chat + source message id. The
+ * id is only trusted as an idempotency key inside that chat; it is NOT
+ * a permission token and does not grant access to message history.
+ */
+export function botSourceEventKey(
+  message: Pick<BotMessageEvent, 'platform' | 'chatId' | 'sourceMessageId'>,
+): string | undefined {
+  const sourceMessageId = message.sourceMessageId.trim();
+  if (!sourceMessageId) return undefined;
+  return `${message.platform}:${message.chatId}:${sourceMessageId}`;
+}
+
+/**
  * PR-BOT-PLAINTEXT-RESET-COMMAND-0 (Hermes deep-dive): DM-only plain-text
  * "restart this conversation" affordance. Maka has no slash command
  * runtime; users on mobile cannot easily type `/restart` either, so we

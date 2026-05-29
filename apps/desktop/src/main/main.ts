@@ -20,6 +20,7 @@ import {
   buildBotPlatformPromptFragment,
   botConversationKey,
   botDisplayLabel,
+  botSourceEventKey,
   humanizeBotStatusReason,
   isBotDeliveryProvider,
   isPlaintextHelpCommand,
@@ -452,6 +453,8 @@ const runtime = new SessionManager({
 });
 const botConversationSessions = new Map<string, string>();
 const botConversationQueues = new Map<string, Promise<void>>();
+const botRecentSourceEventKeys = new Map<string, number>();
+const BOT_RECENT_SOURCE_EVENT_LIMIT = 1_000;
 
 // PR110b: onboarding service composes existing stores + runtime to
 // derive `OnboardingState` and manage `OnboardingMilestone[]`.
@@ -1988,6 +1991,7 @@ async function streamEvents(
 }
 
 async function handleBotIncomingMessage(message: BotIncomingMessage): Promise<void> {
+  if (rememberBotSourceEvent(message)) return;
   const text = message.text.trim();
   // PR-BOT-NON-TEXT-MESSAGE-ACK-0: previously a photo / voice / sticker
   // with no caption was silently dropped — the user got zero response.
@@ -2015,6 +2019,19 @@ async function handleBotIncomingMessage(message: BotIncomingMessage): Promise<vo
     if (botConversationQueues.get(key) === tracked) botConversationQueues.delete(key);
   });
   botConversationQueues.set(key, tracked);
+}
+
+function rememberBotSourceEvent(message: BotIncomingMessage): boolean {
+  const key = botSourceEventKey(message);
+  if (!key) return false;
+  if (botRecentSourceEventKeys.has(key)) return true;
+  botRecentSourceEventKeys.set(key, Date.now());
+  while (botRecentSourceEventKeys.size > BOT_RECENT_SOURCE_EVENT_LIMIT) {
+    const oldest = botRecentSourceEventKeys.keys().next().value;
+    if (!oldest) break;
+    botRecentSourceEventKeys.delete(oldest);
+  }
+  return false;
 }
 
 async function processBotIncomingMessage(

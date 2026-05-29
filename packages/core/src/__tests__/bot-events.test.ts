@@ -5,6 +5,7 @@ import {
   BOT_PLAINTEXT_RESET_COMMANDS,
   botConversationKey,
   botDisplayLabel,
+  botSourceEventKey,
   formatBotMessageForSession,
   humanizeBotStatusReason,
   isPlaintextHelpCommand,
@@ -35,6 +36,19 @@ describe('bot event contract', () => {
 
   test('builds stable conversation keys from platform and chat id', () => {
     assert.equal(botConversationKey(message), 'telegram:chat-1');
+  });
+
+  test('builds stable source event keys from platform chat and source message id', () => {
+    assert.equal(botSourceEventKey(message), 'telegram:chat-1:m1');
+    assert.equal(
+      botSourceEventKey({ ...message, platform: 'discord', chatId: 'chan-1', sourceMessageId: 'msg-99' }),
+      'discord:chan-1:msg-99',
+    );
+  });
+
+  test('does not fabricate source event keys when platform id is missing', () => {
+    assert.equal(botSourceEventKey({ ...message, sourceMessageId: '' }), undefined);
+    assert.equal(botSourceEventKey({ ...message, sourceMessageId: '   ' }), undefined);
   });
 
   test('formats incoming bot text before appending to a Maka session', () => {
