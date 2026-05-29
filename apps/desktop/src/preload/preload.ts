@@ -241,6 +241,9 @@ contextBridge.exposeInMainWorld('maka', {
     ): Promise<OnboardingSnapshot> {
       return ipcRenderer.invoke('onboarding:setMilestone', id, status);
     },
+    clearMilestone(id: OnboardingMilestoneId): Promise<OnboardingSnapshot> {
+      return ipcRenderer.invoke('onboarding:clearMilestone', id);
+    },
   },
   quickChat: {
     /**

@@ -57,6 +57,11 @@ function fakeDeps(overrides: Partial<OnboardingServiceDeps> = {}): OnboardingSer
       else milestones.push(next);
       return milestones.slice();
     },
+    clearMilestone: async (id) => {
+      const existingIdx = milestones.findIndex((m) => m.id === id);
+      if (existingIdx >= 0) milestones.splice(existingIdx, 1);
+      return milestones.slice();
+    },
     hasApiKey: async (_slug: string) => false,
     ...overrides,
   };
@@ -117,6 +122,40 @@ describe('createOnboardingService.getSnapshot', () => {
     if (snapshot.state.kind === 'needs_connection_credentials') {
       assert.equal(snapshot.state.connectionSlug, 'broken');
     }
+  });
+});
+
+describe('createOnboardingService.clearMilestone — strict validation', () => {
+  it('rejects invalid milestone id (closed enum)', async () => {
+    const service = createOnboardingService(fakeDeps());
+    await assert.rejects(
+      () => service.clearMilestone('not_a_real_milestone'),
+      /INVALID_MILESTONE_ID/,
+    );
+  });
+
+  it('clears one milestone and returns a fresh snapshot', async () => {
+    let stored: OnboardingMilestone[] = [
+      { id: 'first_chat_sent', completedAt: 1 },
+      { id: 'first_run_suggestion_workspace_map', skippedAt: 2 },
+    ];
+    const service = createOnboardingService(
+      fakeDeps({
+        listConnections: async () => [realConnection({ slug: 'a' })],
+        getDefaultSlug: async () => 'a',
+        hasApiKey: async () => true,
+        getMilestones: async () => stored,
+        clearMilestone: async (id) => {
+          stored = stored.filter((entry) => entry.id !== id);
+          return stored;
+        },
+      }),
+    );
+
+    const snapshot = await service.clearMilestone('first_run_suggestion_workspace_map');
+
+    assert.equal(snapshot.state.kind, 'ready_empty');
+    assert.deepEqual(snapshot.milestones, [{ id: 'first_chat_sent', completedAt: 1 }]);
   });
 });
 

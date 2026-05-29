@@ -47,6 +47,7 @@ export interface OnboardingServiceDeps {
     id: OnboardingMilestoneId,
     status: 'completed' | 'skipped',
   ): Promise<OnboardingMilestone[]>;
+  clearMilestone(id: OnboardingMilestoneId): Promise<OnboardingMilestone[]>;
   hasApiKey(slug: string): Promise<boolean>;
 }
 
@@ -56,6 +57,7 @@ export interface OnboardingService {
     id: unknown,
     status: unknown,
   ): Promise<OnboardingSnapshot>;
+  clearMilestone(id: unknown): Promise<OnboardingSnapshot>;
 }
 
 /**
@@ -147,6 +149,35 @@ export function createOnboardingService(deps: OnboardingServiceDeps): Onboarding
       });
       return { state, milestones };
     },
+
+    async clearMilestone(id: unknown): Promise<OnboardingSnapshot> {
+      if (typeof id !== 'string' || !isOnboardingMilestoneId(id)) {
+        throw new Error('INVALID_MILESTONE_ID');
+      }
+      const milestones = await deps.clearMilestone(id);
+      const [connections, defaultSlug, sessions] = await Promise.all([
+        deps.listConnections(),
+        deps.getDefaultSlug(),
+        deps.listSessions(),
+      ]);
+      const secretEntries = await Promise.all(
+        connections.map(async (connection) => {
+          try {
+            return [connection.slug, await deps.hasApiKey(connection.slug)] as const;
+          } catch {
+            return [connection.slug, false] as const;
+          }
+        }),
+      );
+      const secrets: Record<string, boolean> = Object.fromEntries(secretEntries);
+      const state = deriveOnboardingState({
+        connections,
+        defaultSlug: defaultSlug ?? undefined,
+        sessions,
+        secrets,
+      });
+      return { state, milestones };
+    },
   };
 }
 
@@ -177,6 +208,7 @@ export function bindOnboardingDeps(input: {
       id: OnboardingMilestoneId,
       status: 'completed' | 'skipped',
     ): Promise<OnboardingMilestone[]>;
+    clearOnboardingMilestone(id: OnboardingMilestoneId): Promise<OnboardingMilestone[]>;
   };
   connectionStore: {
     list(): Promise<LlmConnection[]>;
@@ -191,6 +223,7 @@ export function bindOnboardingDeps(input: {
     listSessions: () => input.listSessions(),
     getMilestones: async () => (await input.settingsStore.get()).onboarding.milestones,
     upsertMilestone: (id, status) => input.settingsStore.upsertOnboardingMilestone(id, status),
+    clearMilestone: (id) => input.settingsStore.clearOnboardingMilestone(id),
     hasApiKey: async (slug) => {
       const key = await input.credentialStore.getApiKey(slug);
       return typeof key === 'string' && key.length > 0;

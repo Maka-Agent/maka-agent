@@ -8,13 +8,14 @@
  *   good desktop-work request looks like before they send it.
  *
  * diverge
- * - No dismissal / persistence yet. Maka only shows this surface while
- *   `ready_empty`, and it disappears naturally after the first session.
+ * - Dismissal is explicit and reversible via the onboarding milestone
+ *   store. Only the suggestion id is persisted; prompt text is never
+ *   stored in settings.
  * - Prompts are conservative: they ask the agent to inspect and propose
  *   before mutating files.
  */
 
-import type { QuickChatMode } from '@maka/core';
+import type { OnboardingMilestoneId, QuickChatMode } from '@maka/core';
 
 export type FirstRunTaskSuggestionId =
   | 'workspace-map'
@@ -57,3 +58,13 @@ export const FIRST_RUN_TASK_SUGGESTIONS: readonly FirstRunTaskSuggestion[] = [
       '帮我联网研究一个主题：先问我主题是什么，然后用已配置的联网搜索找资料，最后给我来源、关键结论和还需要核实的点。',
   },
 ] as const;
+
+export const FIRST_RUN_TASK_SUGGESTION_MILESTONES: Record<
+  FirstRunTaskSuggestionId,
+  OnboardingMilestoneId
+> = {
+  'workspace-map': 'first_run_suggestion_workspace_map',
+  'deep-research': 'first_run_suggestion_deep_research',
+  'file-organize': 'first_run_suggestion_file_organize',
+  'web-research': 'first_run_suggestion_web_research',
+};

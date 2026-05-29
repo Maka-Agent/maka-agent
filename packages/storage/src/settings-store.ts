@@ -41,6 +41,13 @@ export interface SettingsStore {
     id: OnboardingMilestoneId,
     status: 'completed' | 'skipped',
   ): Promise<OnboardingMilestone[]>;
+  /**
+   * Remove one milestone entry without disturbing the rest. Used for
+   * reversible first-run suggestion dismissal; it still flows through
+   * the closed enum so arbitrary renderer strings cannot reshape the
+   * onboarding settings section.
+   */
+  clearOnboardingMilestone(id: OnboardingMilestoneId): Promise<OnboardingMilestone[]>;
 }
 
 export function createSettingsStore(workspaceRoot: string): SettingsStore {
@@ -109,6 +116,26 @@ class FileSettingsStore implements SettingsStore {
       result = sanitized;
     });
     if (!result) throw new Error('Failed to upsert onboarding milestone');
+    return result;
+  }
+
+  async clearOnboardingMilestone(id: OnboardingMilestoneId): Promise<OnboardingMilestone[]> {
+    let result: OnboardingMilestone[] | undefined;
+    await this.withQueue(async () => {
+      const current = await this.get();
+      const knownId = sanitizeOnboardingMilestones([{ id }]).some((entry) => entry.id === id);
+      if (!knownId) {
+        throw new Error(`invalid onboarding milestone id: ${String(id)}`);
+      }
+      const milestones = current.onboarding.milestones.filter((entry) => entry.id !== id);
+      const merged: AppSettings = {
+        ...current,
+        onboarding: { milestones },
+      };
+      await this.write(merged);
+      result = milestones;
+    });
+    if (!result) throw new Error('Failed to clear onboarding milestone');
     return result;
   }
 

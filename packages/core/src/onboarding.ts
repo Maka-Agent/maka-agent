@@ -212,6 +212,10 @@ export const ONBOARDING_MILESTONE_IDS = [
   'first_personalization',
   'first_model_swap',
   'first_artifact_open',
+  'first_run_suggestion_workspace_map',
+  'first_run_suggestion_deep_research',
+  'first_run_suggestion_file_organize',
+  'first_run_suggestion_web_research',
 ] as const;
 
 export type OnboardingMilestoneId = typeof ONBOARDING_MILESTONE_IDS[number];

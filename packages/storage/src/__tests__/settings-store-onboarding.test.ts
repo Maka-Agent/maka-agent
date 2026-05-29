@@ -171,3 +171,36 @@ describe('SettingsStore.upsertOnboardingMilestone (PR110b)', () => {
     }
   });
 });
+
+describe('SettingsStore.clearOnboardingMilestone', () => {
+  it('removes one milestone and preserves the rest', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'maka-settings-milestone-clear-'));
+    try {
+      const store = createSettingsStore(workspaceRoot);
+      await store.upsertOnboardingMilestone('first_chat_sent', 'completed');
+      await store.upsertOnboardingMilestone('first_run_suggestion_workspace_map', 'skipped');
+
+      const after = await store.clearOnboardingMilestone('first_run_suggestion_workspace_map');
+
+      assert.equal(after.some((entry) => entry.id === 'first_run_suggestion_workspace_map'), false);
+      assert.equal(after.some((entry) => entry.id === 'first_chat_sent'), true);
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects invalid milestone id (TypeScript-bypassing call)', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'maka-settings-milestone-clear-invalid-'));
+    try {
+      const store = createSettingsStore(workspaceRoot);
+      await assert.rejects(
+        () =>
+          (store.clearOnboardingMilestone as unknown as (id: string) => Promise<unknown>)
+            .call(store, 'not_a_milestone'),
+        /invalid onboarding milestone id/,
+      );
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+});

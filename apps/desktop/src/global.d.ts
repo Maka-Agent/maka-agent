@@ -172,6 +172,7 @@ declare global {
           id: OnboardingMilestoneId,
           status: 'completed' | 'skipped',
         ): Promise<OnboardingSnapshot>;
+        clearMilestone(id: OnboardingMilestoneId): Promise<OnboardingSnapshot>;
       };
       quickChat: {
         start(input?: { prompt?: string; mode?: QuickChatMode }): Promise<QuickChatResult>;

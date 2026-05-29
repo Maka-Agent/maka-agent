@@ -1604,6 +1604,9 @@ function registerIpc(): void {
     // it as a typed reject rather than silently swallowing.
     return onboardingService.setMilestone(id, status);
   });
+  ipcMain.handle('onboarding:clearMilestone', async (_event, id: unknown) => {
+    return onboardingService.clearMilestone(id);
+  });
   // PR110b: Quick Chat entry. Input shape is intentionally minimal —
   // `{ prompt?: string }` — to keep readiness gating airtight. Override
   // surfaces (connectionSlug / model) will land in PR110c/d when the

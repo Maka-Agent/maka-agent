@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
+  FIRST_RUN_TASK_SUGGESTION_MILESTONES,
   FIRST_RUN_TASK_SUGGESTIONS,
   type FirstRunTaskSuggestionId,
 } from '../../renderer/first-run-task-suggestions.js';
@@ -14,6 +15,15 @@ describe('FIRST_RUN_TASK_SUGGESTIONS', () => {
       FIRST_RUN_TASK_SUGGESTIONS.map((suggestion) => suggestion.id),
       ['workspace-map', 'deep-research', 'file-organize', 'web-research'] satisfies FirstRunTaskSuggestionId[],
     );
+  });
+
+  it('maps suggestion dismissal to closed onboarding milestone ids', () => {
+    assert.deepEqual(FIRST_RUN_TASK_SUGGESTION_MILESTONES, {
+      'workspace-map': 'first_run_suggestion_workspace_map',
+      'deep-research': 'first_run_suggestion_deep_research',
+      'file-organize': 'first_run_suggestion_file_organize',
+      'web-research': 'first_run_suggestion_web_research',
+    });
   });
 
   it('uses concrete prompt copy rather than marketing labels', () => {
@@ -55,6 +65,20 @@ describe('FIRST_RUN_TASK_SUGGESTIONS', () => {
     assert.ok(fileOrganize);
     assert.match(fileOrganize.prompt, /不要直接移动或删除文件/);
     assert.match(fileOrganize.prompt, /等我确认/);
+  });
+
+  it('makes first-run suggestion rows dismissible and restorable without storing prompts', async () => {
+    const hero = await readFile(join(process.cwd(), 'src/renderer/OnboardingHero.tsx'), 'utf8');
+    const main = await readFile(join(process.cwd(), 'src/renderer/main.tsx'), 'utf8');
+
+    assert.match(hero, /onDismissTaskSuggestion/);
+    assert.match(hero, /onRestoreTaskSuggestions/);
+    assert.match(hero, /FIRST_RUN_TASK_SUGGESTION_MILESTONES/);
+    assert.match(hero, /隐藏任务建议/);
+    assert.match(hero, /恢复 \{hiddenSuggestions\.length\} 项/);
+    assert.match(main, /window\.maka\.onboarding\.setMilestone\(FIRST_RUN_TASK_SUGGESTION_MILESTONES\[id\], 'skipped'\)/);
+    assert.match(main, /window\.maka\.onboarding\.clearMilestone\(FIRST_RUN_TASK_SUGGESTION_MILESTONES\[id\]\)/);
+    assert.doesNotMatch(hero, /setMilestone\([^)]*suggestion\.prompt/);
   });
 
   it('surfaces project instruction creation in the first-run checklist', async () => {

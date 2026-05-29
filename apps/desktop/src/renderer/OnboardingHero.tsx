@@ -19,12 +19,16 @@
 //     `connectionName` promise) until sanitized display data is
 //     wired in a later PR.
 
-import { ArrowRight, Sparkles, KeyRound, Settings as SettingsIcon, Cpu, AlertCircle, FolderOpen, Paperclip } from 'lucide-react';
+import { ArrowRight, RotateCcw, Sparkles, KeyRound, Settings as SettingsIcon, Cpu, AlertCircle, FolderOpen, Paperclip, X } from 'lucide-react';
 import { useCallback, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from 'react';
-import type { LlmConnection, OnboardingState, ProviderType, QuickChatMode, SettingsSection } from '@maka/core';
+import type { LlmConnection, OnboardingMilestone, OnboardingState, ProviderType, QuickChatMode, SettingsSection } from '@maka/core';
 import { appendPromptContextDraft, detectUiLocale, type UiLocale } from '@maka/ui';
 import { ProviderLogo, providerDisplay } from './settings/ProvidersPanel';
-import { FIRST_RUN_TASK_SUGGESTIONS } from './first-run-task-suggestions';
+import {
+  FIRST_RUN_TASK_SUGGESTIONS,
+  FIRST_RUN_TASK_SUGGESTION_MILESTONES,
+  type FirstRunTaskSuggestionId,
+} from './first-run-task-suggestions';
 
 /**
  * PR-UI-15 (@yuejing 2026-05-22): unify OnboardingHero quickChat
@@ -113,6 +117,9 @@ export interface OnboardingHeroProps {
   onImportTextFile?: () => Promise<string | undefined>;
   onImportDroppedTextFiles?: (files: File[]) => Promise<string | undefined>;
   onImportFolderOutline?: () => Promise<string | undefined>;
+  onboardingMilestones?: ReadonlyArray<OnboardingMilestone>;
+  onDismissTaskSuggestion?: (id: FirstRunTaskSuggestionId) => Promise<void> | void;
+  onRestoreTaskSuggestions?: (ids: ReadonlyArray<FirstRunTaskSuggestionId>) => Promise<void> | void;
 }
 
 export function OnboardingHero(props: OnboardingHeroProps) {
@@ -153,6 +160,9 @@ export function OnboardingHero(props: OnboardingHeroProps) {
           onImportTextFile={props.onImportTextFile}
           onImportDroppedTextFiles={props.onImportDroppedTextFiles}
           onImportFolderOutline={props.onImportFolderOutline}
+          onboardingMilestones={props.onboardingMilestones}
+          onDismissTaskSuggestion={props.onDismissTaskSuggestion}
+          onRestoreTaskSuggestions={props.onRestoreTaskSuggestions}
         />
       );
     case 'blocked':
@@ -391,12 +401,26 @@ function ReadyEmptyHero(props: {
   onImportTextFile?: () => Promise<string | undefined>;
   onImportDroppedTextFiles?: (files: File[]) => Promise<string | undefined>;
   onImportFolderOutline?: () => Promise<string | undefined>;
+  onboardingMilestones?: ReadonlyArray<OnboardingMilestone>;
+  onDismissTaskSuggestion?: (id: FirstRunTaskSuggestionId) => Promise<void> | void;
+  onRestoreTaskSuggestions?: (ids: ReadonlyArray<FirstRunTaskSuggestionId>) => Promise<void> | void;
 }) {
   const [draft, setDraft] = useState('');
   const [draftMode, setDraftMode] = useState<QuickChatMode | undefined>();
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const copy = READY_HERO_COPY_BY_LOCALE[detectUiLocale()];
+  const hiddenSuggestionIds = new Set(
+    (props.onboardingMilestones ?? [])
+      .filter((milestone) => milestone.skippedAt !== undefined)
+      .map((milestone) => milestone.id),
+  );
+  const visibleSuggestions = FIRST_RUN_TASK_SUGGESTIONS.filter(
+    (suggestion) => !hiddenSuggestionIds.has(FIRST_RUN_TASK_SUGGESTION_MILESTONES[suggestion.id]),
+  );
+  const hiddenSuggestions = FIRST_RUN_TASK_SUGGESTIONS.filter(
+    (suggestion) => hiddenSuggestionIds.has(FIRST_RUN_TASK_SUGGESTION_MILESTONES[suggestion.id]),
+  );
 
   const submit = useCallback(() => {
     if (props.quickChatPending) return;
@@ -602,22 +626,52 @@ function ReadyEmptyHero(props: {
         </div>
       </div>
 
-      <div className="maka-first-run-task-suggestions" aria-label="试试这些任务">
-        <strong>试试这些任务</strong>
-        <div className="maka-first-run-task-suggestion-list">
-          {FIRST_RUN_TASK_SUGGESTIONS.map((suggestion) => (
-            <button
-              key={suggestion.id}
-              type="button"
-              className="maka-first-run-task-suggestion"
-              onClick={() => prefillSuggestion(suggestion.prompt, suggestion.mode)}
-              disabled={props.quickChatPending}
-            >
-              {suggestion.label}
-            </button>
-          ))}
+      {(visibleSuggestions.length > 0 || hiddenSuggestions.length > 0) && (
+        <div className="maka-first-run-task-suggestions" aria-label="试试这些任务">
+          <div className="maka-first-run-task-suggestions-header">
+            <strong>试试这些任务</strong>
+            {hiddenSuggestions.length > 0 && (
+              <button
+                type="button"
+                className="maka-first-run-task-suggestions-restore"
+                onClick={() => void props.onRestoreTaskSuggestions?.(hiddenSuggestions.map((item) => item.id))}
+                disabled={props.quickChatPending || !props.onRestoreTaskSuggestions}
+              >
+                <RotateCcw size={12} strokeWidth={1.75} aria-hidden="true" />
+                <span>恢复 {hiddenSuggestions.length} 项</span>
+              </button>
+            )}
+          </div>
+          {visibleSuggestions.length > 0 && (
+            <div className="maka-first-run-task-suggestion-list">
+              {visibleSuggestions.map((suggestion) => (
+                <span key={suggestion.id} className="maka-first-run-task-suggestion-chip">
+                  <button
+                    type="button"
+                    className="maka-first-run-task-suggestion"
+                    onClick={() => prefillSuggestion(suggestion.prompt, suggestion.mode)}
+                    disabled={props.quickChatPending}
+                  >
+                    {suggestion.label}
+                  </button>
+                  {props.onDismissTaskSuggestion && (
+                    <button
+                      type="button"
+                      className="maka-first-run-task-suggestion-dismiss"
+                      onClick={() => void props.onDismissTaskSuggestion?.(suggestion.id)}
+                      disabled={props.quickChatPending}
+                      aria-label={`隐藏任务建议：${suggestion.label}`}
+                      title="隐藏"
+                    >
+                      <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </section>
   );
 }
