@@ -34,6 +34,8 @@ describe('ProviderAuth contract', () => {
     expect(configured.actionAvailability.test_credentials).toBe('available');
     expect(configured.actionAvailability.fetch_models).toBe('available');
     expect(configured.actionAvailability.revoke_auth).toBe('available');
+    expect(configured.copy.detail).toContain('等待验证');
+    expect(configured.copy.detail.includes('尚未验证')).toBe(false);
   });
 
   test('credential validation success is not runtime operational readiness', () => {

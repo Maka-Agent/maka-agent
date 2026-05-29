@@ -214,7 +214,7 @@ function copyForApiKey(label: string, state: ProviderAuthState): ProviderAuthCon
     case 'configured':
       return {
         label: `${label} 已保存凭据`,
-        detail: '凭据已保存但尚未验证；测试通过前不要把它展示成运行可用。',
+        detail: '凭据已保存，等待验证；测试通过前不要把它展示成运行可用。',
       };
     case 'disabled':
     case 'preview_only':
