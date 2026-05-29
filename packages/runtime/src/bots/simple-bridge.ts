@@ -117,12 +117,62 @@ function isAllowedUser(
   return allowedUserIds.includes(userId);
 }
 
+/**
+ * PR-BOT-RATELIMIT-RETRY-0 (Hermes deep-dive): classify a Telegram
+ * sendMessage response so the caller can decide between "done", "retry
+ * after Telegram's stated backoff", and "give up". Pure on the
+ * response object so the decision can be unit-tested without mocking
+ * the network.
+ *
+ * Why 429 specifically: Telegram's per-chat rate limits trigger 429s
+ * with a `parameters.retry_after` integer (seconds). A short, bounded
+ * retry handles the burst case (e.g. agent finished and emits 5 chunks
+ * back-to-back) without silently dropping the message. Other failure
+ * codes (400 bad request, 401 unauthorized, 403 forbidden, 5xx) are
+ * NOT retried — 4xx is permanent and 5xx Telegram outages do not
+ * resolve in a 30s window.
+ *
+ * Bounds:
+ *   - Retry delay is clamped to [1000ms, 30_000ms]. Telegram has been
+ *     observed to return inflated retry_after values during incidents;
+ *     a 30s cap keeps the bridge responsive.
+ *   - Exactly one retry. We do not loop — if the second attempt also
+ *     returns 429 the caller marks degraded and returns. Repeated 429
+ *     under load is a deployment / rate-policy issue, not something an
+ *     unbounded retry loop should mask.
+ */
+export type TelegramSendClassification =
+  | { kind: 'ok'; messageId: string | null }
+  | { kind: 'retry'; delayMs: number }
+  | { kind: 'fatal'; description: string };
+
+const TELEGRAM_RETRY_MIN_MS = 1_000;
+const TELEGRAM_RETRY_MAX_MS = 30_000;
+
+function classifyTelegramSendResponse(response: any): TelegramSendClassification {
+  if (response && response.ok === true) {
+    const id = response.result?.message_id;
+    return { kind: 'ok', messageId: typeof id === 'number' || typeof id === 'string' ? String(id) : null };
+  }
+  if (response && response.error_code === 429) {
+    const raw = Number(response.parameters?.retry_after ?? 0);
+    const requested = Number.isFinite(raw) && raw > 0 ? raw * 1000 : TELEGRAM_RETRY_MIN_MS;
+    const delayMs = Math.min(Math.max(requested, TELEGRAM_RETRY_MIN_MS), TELEGRAM_RETRY_MAX_MS);
+    return { kind: 'retry', delayMs };
+  }
+  const description = typeof response?.description === 'string' ? response.description : 'send-failed';
+  return { kind: 'fatal', description };
+}
+
 export const __TEST__ = {
   utf16Len,
   prefixWithinUtf16,
   splitForTelegram,
   buildTelegramSendBody,
   isAllowedUser,
+  classifyTelegramSendResponse,
+  TELEGRAM_RETRY_MIN_MS,
+  TELEGRAM_RETRY_MAX_MS,
 };
 
 export class SimpleBotBridge extends BaseBotAdapter implements SendCapable {
@@ -191,18 +241,27 @@ export class SimpleBotBridge extends BaseBotAdapter implements SendCapable {
     let lastMessageId: string | null = null;
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
-      const response = await telegramApi(
-        this.settings.token,
-        'sendMessage',
-        buildTelegramSendBody(chatId, chunk, options, i),
-      );
-      if (!response.ok) {
+      const body = buildTelegramSendBody(chatId, chunk, options, i);
+      // PR-BOT-RATELIMIT-RETRY-0: one bounded retry on Telegram 429.
+      // Burst-send (agent emits 5 chunks back-to-back) is exactly the
+      // case this targets — without the retry, chunk 2 silently drops
+      // and the user sees a truncated reply.
+      let response = await telegramApi(this.settings.token, 'sendMessage', body);
+      let classification = classifyTelegramSendResponse(response);
+      if (classification.kind === 'retry') {
+        await sleep(classification.delayMs);
+        response = await telegramApi(this.settings.token, 'sendMessage', body);
+        classification = classifyTelegramSendResponse(response);
+      }
+      if (classification.kind !== 'ok') {
         this.readiness = this.readiness === 'operational' ? 'degraded' : 'credentials_valid';
-        this.reason = response.description ?? 'send-failed';
+        this.reason = classification.kind === 'retry'
+          ? 'rate-limited'
+          : classification.description;
         this.emitStatusChange();
         return null;
       }
-      lastMessageId = String(response.result?.message_id ?? '') || lastMessageId;
+      lastMessageId = classification.messageId ?? lastMessageId;
     }
     this.readiness = 'operational';
     this.reason = undefined;
