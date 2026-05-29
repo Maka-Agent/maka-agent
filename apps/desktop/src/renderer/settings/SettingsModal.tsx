@@ -164,21 +164,32 @@ const BOT_LABELS: Record<BotProvider, { label: string; help: string; support: 'r
     help: '填写飞书自建应用的 App ID、App Secret 和事件订阅域名；当前先验证凭据，事件接收需要企业后台回调接入。',
     support: 'credentials',
   },
-  wecom: { label: '企业微信', help: '企业微信机器人运行时尚未接入。', support: 'planned' },
-  wechat: { label: '微信', help: '微信个人号/公众号接入涉及额外合规和授权，尚未接入。', support: 'planned' },
-  discord: { label: 'Discord', help: 'Discord 机器人运行时尚未接入。', support: 'planned' },
-  dingtalk: { label: '钉钉', help: '钉钉机器人运行时尚未接入。', support: 'planned' },
-  qq: { label: 'QQ', help: 'QQ 机器人运行时尚未接入。', support: 'planned' },
+  wecom: { label: '企业微信', help: '入口保留为平台清单；开放配置前需要完成凭据验证、收发 smoke 和审计边界。', support: 'planned' },
+  wechat: { label: '微信', help: '个人号/公众号接入涉及额外合规和授权；开放配置前需要先完成权限边界。', support: 'planned' },
+  discord: { label: 'Discord', help: '入口保留为平台清单；开放配置前需要完成凭据验证、收发 smoke 和失败日志。', support: 'planned' },
+  dingtalk: { label: '钉钉', help: '入口保留为平台清单；开放配置前需要完成凭据验证、收发 smoke 和审计边界。', support: 'planned' },
+  qq: { label: 'QQ', help: '入口保留为平台清单；开放配置前需要完成凭据验证、收发 smoke 和审计边界。', support: 'planned' },
 };
 
 const BOT_READINESS_COPY: Record<BotReadinessState, { label: string; detail: string; tone: 'neutral' | 'info' | 'success' | 'warning' | 'destructive' }> = {
-  unscaffolded: { label: '未接入', detail: '代码中还没有这个平台的运行时。', tone: 'neutral' },
+  unscaffolded: { label: '未开放', detail: '该平台暂无可用运行时。', tone: 'neutral' },
   scaffolded: { label: '待配置', detail: '还没有完成这个平台需要的凭据配置。', tone: 'neutral' },
   configured: { label: '已配置', detail: '已填写配置；还没有证明凭据或运行态可用。', tone: 'info' },
   credentials_valid: { label: '凭据有效', detail: '凭据探测通过；这不代表已能收发消息。', tone: 'warning' },
   operational: { label: '运行可用', detail: '最近一次运行态探测或收发 smoke 成功。', tone: 'success' },
   degraded: { label: '运行降级', detail: '之前可用，但最近运行态探测失败。', tone: 'destructive' },
 };
+
+const BOT_PLANNED_COPY = {
+  label: '未开放',
+  detail: '该平台运行时未开放，当前不会保存为可用机器人。',
+  tone: 'neutral' as const,
+};
+
+function botReadinessCopyForSupport(support: 'runtime' | 'credentials' | 'planned', readiness: BotReadinessState) {
+  if (support === 'planned') return BOT_PLANNED_COPY;
+  return BOT_READINESS_COPY[readiness] ?? BOT_READINESS_COPY.scaffolded;
+}
 
 export function SettingsModal(props: {
   connections: LlmConnection[];
@@ -2908,7 +2919,7 @@ function BotChatSettingsPage(props: {
 
   const support = BOT_LABELS[selected].support;
   const readiness = selectedStatus?.readiness ?? channel.readiness;
-  const copy = BOT_READINESS_COPY[readiness] ?? BOT_READINESS_COPY.scaffolded;
+  const copy = botReadinessCopyForSupport(support, readiness);
 
   return (
     <div className="settingsBotLayout">
@@ -2916,17 +2927,10 @@ function BotChatSettingsPage(props: {
         {BOT_PROVIDERS.map((provider) => {
           const status = statuses?.[provider];
           const providerSupport = BOT_LABELS[provider].support;
-          // PR-PLACEHOLDER-SWEEP-0: planned platforms render a single
-          // "未接入" tag instead of the credentials-flow readiness
-          // states. The credentials chain doesn't apply when there's
-          // no runtime to be valid against — showing "未配置" would be
-          // misleading.
-          const providerCopy =
-            providerSupport === 'planned'
-              ? { label: '未接入', tone: 'neutral' as const }
-              : BOT_READINESS_COPY[
-                  status?.readiness ?? props.settings.botChat.channels[provider].readiness
-                ] ?? BOT_READINESS_COPY.scaffolded;
+          const providerCopy = botReadinessCopyForSupport(
+            providerSupport,
+            status?.readiness ?? props.settings.botChat.channels[provider].readiness,
+          );
           return (
             <button
               key={provider}
@@ -2999,7 +3003,7 @@ function BotChatSettingsPage(props: {
 
         {support === 'planned' && (
           <div className="settingsNotice" data-tone="passive">
-            这个平台还没有运行时接入，当前不会保存为可用机器人。后续接入前需要先补凭据测试、收发 smoke、权限边界和失败日志。
+            这个平台当前只作为平台清单展示，不会进入可用机器人列表。开放前必须补齐凭据测试、收发 smoke、权限边界和失败日志。
           </div>
         )}
 
@@ -3085,8 +3089,8 @@ function botStatusDetail(status: BotStatus): string {
     case 'missing-feishu-credentials': return '缺少飞书 App ID 或 App Secret';
     case 'feishu-domain-required': return '飞书凭据有效，但还没有事件订阅域名';
     case 'feishu-events-not-connected': return '飞书凭据有效，等待事件回调接入';
-    case 'scaffold-only': return '平台入口已保留，运行时尚未接入';
-    case 'unimplemented': return '平台运行时尚未接入';
+    case 'scaffold-only': return '平台入口已保留，运行时未开放';
+    case 'unimplemented': return '平台运行时未开放';
     case 'stopped': return '监听已停止';
     // PR-BOT-CHAT-POLISH-0: the previous fallback `status.reason ??
     // '暂无运行细节'` would surface a raw reason code (e.g.
