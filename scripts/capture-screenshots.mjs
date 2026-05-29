@@ -75,6 +75,8 @@ const ALL_SCENARIOS = [
   'settings-about',
   'settings-theme',
   'settings-daily-review',
+  'module-skills',
+  'module-daily-review',
   'workstation-statuses',
   // PR-PLAN-REMINDER-MVP-0: first non-placeholder 计划 surface.
   // Opens the Automations module with scheduled / paused / completed

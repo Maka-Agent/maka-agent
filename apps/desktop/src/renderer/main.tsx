@@ -225,8 +225,8 @@ function AppShell() {
   );
   const liveTools = useMemo(() => (activeId ? liveToolsBySession[activeId] ?? [] : []), [activeId, liveToolsBySession]);
   const activeSessionEventHealth = activeId ? sessionEventHealthBySession[activeId] : undefined;
-  // PR-DAILY-REVIEW-MVP-0: bridge for the SessionListPanel's daily
-  // review section. Memoized so the panel's `useEffect` cleanup keys
+  // PR-DAILY-REVIEW-MVP-0: bridge for the main Daily Review module.
+  // Memoized so the panel's `useEffect` cleanup keys
   // off a stable reference instead of refetching on every render.
   const dailyReviewBridge = useMemo(
     () => ({
@@ -2033,6 +2033,31 @@ function AppShell() {
                 turnFailedReasonLabels={turnFailedReasonLabels}
                 turnLineageBadgesByTurn={turnLineageBadgesByTurn}
                 onLineageBadgeClick={handleLineageBadgeClick}
+                skills={skills}
+                onRefreshSkills={() => void refreshSkills()}
+                onCreateSkillTemplate={() => void createSkillTemplate()}
+                onOpenSkill={(skillId) => void openSkill(skillId)}
+                planReminders={planReminders}
+                onCreatePlanReminder={(input) => void createPlanReminder(input)}
+                onUpdatePlanReminder={(id, patch) => void updatePlanReminder(id, patch)}
+                onTogglePlanReminder={(id, enabled) => void togglePlanReminder(id, enabled)}
+                onTriggerPlanReminderNow={(id) => void triggerPlanReminderNow(id)}
+                onSnoozePlanReminder={(id) => void snoozePlanReminder(id)}
+                onClearPlanReminderRunHistory={(id) => void clearPlanReminderRunHistory(id)}
+                onDeletePlanReminder={(id) => void deletePlanReminder(id)}
+                dailyReviewBridge={dailyReviewBridge}
+                onSelectSession={setActiveId}
+                onCopyDailyReviewMarkdown={async ({ markdown, label, summary }) => {
+                  try {
+                    await navigator.clipboard.writeText(markdown);
+                    toastApi.success(
+                      `已复制${label}回顾`,
+                      `${summary.totals.sessionCount} 个对话 · ${summary.totals.requestCount} 个请求`,
+                    );
+                  } catch (error) {
+                    toastApi.error('复制失败', error instanceof Error ? error.message : '剪贴板不可用');
+                  }
+                }}
                 scrollTargetTurn={
                   activeId && searchScrollTarget?.sessionId === activeId
                     ? { turnId: searchScrollTarget.turnId, nonce: searchScrollTarget.nonce }

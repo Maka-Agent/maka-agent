@@ -454,6 +454,30 @@ button:active {
   text-transform: uppercase;
 }
 
+.maka-sidebar-module-hint {
+  align-self: start;
+  margin: 14px;
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--foreground-10);
+  border-radius: 8px;
+  background: var(--foreground-3);
+  color: var(--foreground-60);
+  font-size: 12px;
+}
+
+.maka-sidebar-module-hint-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+}
+
+.maka-sidebar-module-hint strong {
+  color: var(--foreground);
+  font-size: 13px;
+}
+
 .maka-session-panel-footer {
   display: grid;
   gap: 2px;
@@ -1985,6 +2009,13 @@ button:active {
   padding: 8px;
 }
 
+.maka-module-main .maka-plan-panel {
+  padding: 0;
+  max-width: 980px;
+  width: 100%;
+  gap: 14px;
+}
+
 .maka-plan-form,
 .maka-plan-card {
   display: grid;
@@ -2316,6 +2347,125 @@ button:active {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.maka-module-main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px;
+  padding: 20px;
+  overflow: auto;
+}
+
+.maka-module-main-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.maka-module-main-header h2 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.maka-module-main-header p {
+  margin: 5px 0 0;
+  color: var(--foreground-60);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.maka-skill-library-list {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.maka-skill-library-row {
+  appearance: none;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(140px, 0.35fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--foreground-10);
+  border-radius: 8px;
+  background: var(--foreground-3);
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+}
+
+.maka-skill-library-row:hover {
+  border-color: oklch(from var(--accent) l c h / 0.28);
+  background: oklch(from var(--accent) l c h / 0.06);
+}
+
+.maka-skill-library-row:focus-visible {
+  outline: 3px solid oklch(from var(--accent) l c h / 0.35);
+  outline-offset: 2px;
+}
+
+.maka-skill-library-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.maka-skill-library-description {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--foreground-60);
+  font-size: 13px;
+}
+
+.maka-skill-library-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--foreground-50);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+@media (max-width: 820px) {
+  .maka-module-main {
+    padding: 16px;
+  }
+
+  .maka-module-main-header {
+    display: grid;
+  }
+
+  .maka-skill-library-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .maka-skill-library-meta {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+}
+
+:where(input, select, textarea):focus {
+  outline: none;
+  border-color: oklch(from var(--accent) l c h / 0.48);
+  box-shadow: inset 0 0 0 1px oklch(from var(--accent) l c h / 0.22) !important;
 }
 
 .maka-chat-header {
@@ -5317,6 +5467,8 @@ button:active {
 }
 
 .settingsSegmented {
+  justify-self: start;
+  width: fit-content;
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -9402,6 +9554,12 @@ button:active {
   padding: 10px 12px 20px;
 }
 
+.maka-module-main .maka-daily-review-panel {
+  padding: 0;
+  max-width: 980px;
+  width: 100%;
+}
+
 .maka-daily-review-header {
   display: grid;
   grid-template-columns: 32px 1fr 32px;
@@ -9444,6 +9602,10 @@ button:active {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
   gap: 8px;
+}
+
+.maka-module-main .maka-daily-review-totals {
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
 }
 
 .maka-daily-review-totals-cell {

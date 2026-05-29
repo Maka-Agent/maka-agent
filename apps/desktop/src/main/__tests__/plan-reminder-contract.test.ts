@@ -33,9 +33,10 @@ describe('Plan reminder MVP contract', () => {
     assert.match(globalTypes, /plans:\s*\{[\s\S]*create\(input: \{ title: string; note\?: string; runAt: number \| string; recurrence\?: PlanReminderRecurrence; cronExpression\?: string; delivery\?: PlanReminderDeliveryTarget \}\)/, 'global type must include delivery-aware plans API');
   });
 
-  it('replaces the automations placeholder with PlanReminderPanel', async () => {
+  it('renders the automations module with PlanReminderPanel in the main content pane', async () => {
     const ui = await readRepo('packages/ui/src/components.tsx');
-    assert.match(ui, /props\.selection\.section === 'automations'[\s\S]*<PlanReminderPanel/, '计划 module must render PlanReminderPanel');
+    assert.match(ui, /if \(props\.mode === 'automations'\)[\s\S]*<PlanReminderPanel/, '计划 module must render PlanReminderPanel in ChatView main content');
+    assert.match(ui, /props\.selection\.section === 'automations'[\s\S]*<SidebarModuleHint/, 'sidebar Plan section must stay a navigation hint, not the detail form');
     assert.doesNotMatch(ui, /title:\s*'计划任务即将推出'/, '计划 must not be the old coming-soon placeholder');
     assert.match(ui, /创建提醒/, '计划 UI must include reminder creation');
     assert.match(ui, /编辑提醒/, '计划 UI must include reminder editing');

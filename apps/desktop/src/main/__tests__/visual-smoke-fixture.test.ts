@@ -556,6 +556,18 @@ describe('visual smoke fixture mode', () => {
     }
   });
 
+  it('module fixtures open Skills and Daily Review in the app module surface', async () => {
+    const skills = resolveVisualSmokeFixture('module-skills', false);
+    const dailyReview = resolveVisualSmokeFixture('module-daily-review', false);
+
+    assert.ok(skills);
+    assert.ok(dailyReview);
+    assert.equal(getVisualSmokeState(skills)?.sidebarSection, 'skills');
+    assert.equal(getVisualSmokeState(skills)?.activeSessionId, 'visual-smoke-turn');
+    assert.equal(getVisualSmokeState(dailyReview)?.sidebarSection, 'daily-review');
+    assert.equal(getVisualSmokeState(dailyReview)?.activeSessionId, 'visual-smoke-turn');
+  });
+
   it('sidebar-row-actions-visible shares the 60-session seed and sets focusActiveRow so the action overlay shows (PR-SIDEBAR-IA-0 Phase 3 P0 fixup v4)', async () => {
     // PR-SIDEBAR-IA-0 Phase 3 P0 fixup v4 (WAWQAQ msg `5dd1c348`,
     // kenji `b3d156e9`): the sidebar-row-actions-visible scenario

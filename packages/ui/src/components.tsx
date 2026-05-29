@@ -251,6 +251,25 @@ export interface SkillEntry {
   declaredTools?: string[];
 }
 
+type PlanReminderDraftInput = {
+  title: string;
+  note?: string;
+  runAt: number;
+  recurrence?: PlanReminderRecurrence;
+  cronExpression?: string;
+  delivery?: PlanReminderDeliveryTarget;
+};
+
+type PlanReminderUpdatePatch = {
+  title?: string;
+  note?: string;
+  runAt?: number;
+  recurrence?: PlanReminderRecurrence;
+  cronExpression?: string;
+  delivery?: PlanReminderDeliveryTarget;
+  enabled?: boolean;
+};
+
 export interface SessionRowActions {
   /** Flag (pin) state toggle. */
   onToggleFlag(sessionId: string, next: boolean): void;
@@ -324,8 +343,8 @@ export function SessionListPanel(props: {
    * lifecycle behind this callback.
    */
   onOpenSearchModal?(): void;
-  onCreatePlanReminder?(input: { title: string; note?: string; runAt: number; recurrence?: PlanReminderRecurrence; cronExpression?: string; delivery?: PlanReminderDeliveryTarget }): void;
-  onUpdatePlanReminder?(id: string, patch: { title?: string; note?: string; runAt?: number; recurrence?: PlanReminderRecurrence; cronExpression?: string; delivery?: PlanReminderDeliveryTarget; enabled?: boolean }): void;
+  onCreatePlanReminder?(input: PlanReminderDraftInput): void;
+  onUpdatePlanReminder?(id: string, patch: PlanReminderUpdatePatch): void;
   onTogglePlanReminder?(id: string, enabled: boolean): void;
   onTriggerPlanReminderNow?(id: string): void;
   onSnoozePlanReminder?(id: string): void;
@@ -552,66 +571,16 @@ export function SessionListPanel(props: {
       <section className="maka-session-list" aria-label={title}>
         <div className="maka-session-list-title">{title}</div>
         {props.selection.section === 'skills' ? (
-          (props.skills && props.skills.length > 0) ? (
-            <div className="maka-list-stack">
-              {props.skills.map((skill) => {
-                const tools = skill.declaredTools ?? [];
-                const toolsLabel = tools.length > 0 ? tools.join(', ') : '';
-                const hoverText = tools.length > 0
-                  ? `${skill.path}\n\nRequests: ${toolsLabel}\nPermissionEngine still applies — this is a declaration, not a grant.`
-                  : skill.path;
-                return (
-                  <button
-                    key={skill.id}
-                    type="button"
-                    className="maka-list-row maka-skill-row"
-                    onClick={() => props.onOpenSkill?.(skill.id)}
-                    title={hoverText}
-                  >
-                    <div className="maka-list-row-text">
-                      <div className="maka-list-row-name">{skill.name}</div>
-                      {skill.description && (
-                        <div className="maka-list-row-preview">{skill.description}</div>
-                      )}
-                      <div className="maka-list-row-meta">
-                        {skill.id}
-                        {tools.length > 0 && (
-                          <span className="maka-skill-tools" aria-label="声明的工具">
-                            <span className="maka-skill-tools-label">requests</span>
-                            <span>{toolsLabel}</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyState
-              Icon={Sparkles}
-              title="还没有 Skill"
-              body={
-                <>
-                  把一个含 <code className="maka-empty-state-code">SKILL.md</code> 的文件夹放到工作区的
-                  {' '}<code className="maka-empty-state-code">skills/</code> 目录下，刷新后会出现在这里。
-                  工作区路径在 设置 · 关于 · 工作区。
-                </>
-              }
-              cta={props.onCreateSkillTemplate ? { label: '创建示例技能', onClick: props.onCreateSkillTemplate } : undefined}
-              secondaryCta={props.onRefreshSkills ? { label: '刷新技能', onClick: props.onRefreshSkills } : undefined}
-            />
-          )
+          <SidebarModuleHint
+            Icon={Sparkles}
+            title="技能库"
+            body="已在右侧内容栏打开。"
+          />
         ) : props.selection.section === 'automations' ? (
-          <PlanReminderPanel
-            reminders={props.planReminders ?? []}
-            onCreate={props.onCreatePlanReminder}
-            onUpdate={props.onUpdatePlanReminder}
-            onToggle={props.onTogglePlanReminder}
-            onTriggerNow={props.onTriggerPlanReminderNow}
-            onSnooze={props.onSnoozePlanReminder}
-            onClearRunHistory={props.onClearPlanReminderRunHistory}
-            onDelete={props.onDeletePlanReminder}
+          <SidebarModuleHint
+            Icon={Clock}
+            title="计划"
+            body="已在右侧内容栏打开。"
           />
         ) : props.selection.section === 'sessions' ? (
           props.sessions.length === 0 ? (
@@ -649,28 +618,14 @@ export function SessionListPanel(props: {
               />
             </div>
           )
-        ) : props.selection.section === 'daily-review' && props.dailyReviewBridge ? (
-          // PR-DAILY-REVIEW-MVP-0: real panel — reads telemetry +
-          // session metadata via the bridge. Stub fallback kept just
-          // below for fixtures that don't wire a bridge.
-          <DailyReviewPanel
-            bridge={props.dailyReviewBridge}
-            onSelectSession={props.onSelectSession}
-            onCopyMarkdown={props.onCopyDailyReviewMarkdown}
+        ) : props.selection.section === 'daily-review' ? (
+          <SidebarModuleHint
+            Icon={CalendarDays}
+            title="每日回顾"
+            body="已在右侧内容栏打开。"
           />
         ) : (
-          (() => {
-            const fallback = MODULE_FALLBACK_VIEWS[props.selection.section];
-            if (!fallback) return null;
-            return (
-              <EmptyState
-                Icon={fallback.Icon}
-                title={fallback.title}
-                body={fallback.body}
-                dataEmptyView={props.selection.section}
-              />
-            );
-          })()
+          null
         )}
       </section>
 
@@ -706,27 +661,6 @@ export function SessionListPanel(props: {
     </aside>
   );
 }
-
-/**
- * PR-SIDEBAR-IA-0 Phase 2: fallback copy + icon for modules whose host
- * bridge is absent. Automations/计划 is backed by the local plan-reminder
- * runtime; Daily Review renders the real panel when `dailyReviewBridge`
- * is provided by the desktop shell.
- *
- * Per xuan `47e204f2` #1, the fallback view registry is intentionally minimal
- * — empty-state shape, fixed Chinese copy, no router / settings /
- * storage touchpoints.
- */
-const MODULE_FALLBACK_VIEWS: Record<
-  Exclude<NavSelection['section'], 'sessions' | 'skills' | 'automations'>,
-  { Icon: typeof Search; title: string; body: string }
-> = {
-  'daily-review': {
-    Icon: CalendarDays,
-    title: '每日回顾未连接',
-    body: '当前宿主没有注入本地回顾数据桥；请从桌面版正式入口打开，或稍后刷新重试。',
-  },
-};
 
 /**
  * PR-EMPTY-STATE-COMPONENT-0: shared empty-state container. Folds the
@@ -785,6 +719,76 @@ export function EmptyState(props: EmptyStateProps) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function SidebarModuleHint(props: { Icon: EmptyStateProps['Icon']; title: string; body: string }) {
+  return (
+    <div className="maka-sidebar-module-hint">
+      <props.Icon className="maka-sidebar-module-hint-icon" strokeWidth={1.5} />
+      <strong>{props.title}</strong>
+      <span>{props.body}</span>
+    </div>
+  );
+}
+
+function SkillLibraryPanel(props: {
+  skills?: SkillEntry[];
+  onRefreshSkills?(): void;
+  onCreateSkillTemplate?(): void;
+  onOpenSkill?(skillId: string): void;
+}) {
+  if (!props.skills || props.skills.length === 0) {
+    return (
+      <EmptyState
+        Icon={Sparkles}
+        title="还没有 Skill"
+        body={
+          <>
+            把一个含 <code className="maka-empty-state-code">SKILL.md</code> 的文件夹放到工作区的
+            {' '}<code className="maka-empty-state-code">skills/</code> 目录下，刷新后会出现在这里。
+            工作区路径在 设置 · 关于 · 工作区。
+          </>
+        }
+        cta={props.onCreateSkillTemplate ? { label: '创建示例技能', onClick: props.onCreateSkillTemplate } : undefined}
+        secondaryCta={props.onRefreshSkills ? { label: '刷新技能', onClick: props.onRefreshSkills } : undefined}
+      />
+    );
+  }
+
+  return (
+    <div className="maka-skill-library-list">
+      {props.skills.map((skill) => {
+        const tools = skill.declaredTools ?? [];
+        const toolsLabel = tools.length > 0 ? tools.join(', ') : '';
+        const hoverText = tools.length > 0
+          ? `${skill.path}\n\n声明工具：${toolsLabel}\n权限仍按当前会话策略判断；这里不是授权。`
+          : skill.path;
+        return (
+          <button
+            key={skill.id}
+            type="button"
+            className="maka-skill-library-row"
+            onClick={() => props.onOpenSkill?.(skill.id)}
+            title={hoverText}
+          >
+            <span className="maka-skill-library-name">{skill.name}</span>
+            {skill.description && (
+              <span className="maka-skill-library-description">{skill.description}</span>
+            )}
+            <span className="maka-skill-library-meta">
+              <span>{skill.id}</span>
+              {tools.length > 0 && (
+                <span className="maka-skill-tools" aria-label="声明的工具">
+                  <span className="maka-skill-tools-label">工具</span>
+                  <span>{toolsLabel}</span>
+                </span>
+              )}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -1076,8 +1080,8 @@ function DailyReviewTopList(props: { title: string; entries: ReadonlyArray<Daily
 
 function PlanReminderPanel(props: {
   reminders: PlanReminder[];
-  onCreate?(input: { title: string; note?: string; runAt: number; recurrence?: PlanReminderRecurrence; cronExpression?: string; delivery?: PlanReminderDeliveryTarget }): void;
-  onUpdate?(id: string, patch: { title?: string; note?: string; runAt?: number; recurrence?: PlanReminderRecurrence; cronExpression?: string; delivery?: PlanReminderDeliveryTarget; enabled?: boolean }): void;
+  onCreate?(input: PlanReminderDraftInput): void;
+  onUpdate?(id: string, patch: PlanReminderUpdatePatch): void;
   onToggle?(id: string, enabled: boolean): void;
   onTriggerNow?(id: string): void;
   onSnooze?(id: string): void;
@@ -2618,6 +2622,21 @@ export function ChatView(props: {
   turnFailedReasonLabels?: Record<string, string>;
   turnLineageBadgesByTurn?: Record<string, TurnLineageBadge[]>;
   onLineageBadgeClick?: (targetTurnId: string) => void;
+  skills?: SkillEntry[];
+  onRefreshSkills?(): void;
+  onCreateSkillTemplate?(): void;
+  onOpenSkill?(skillId: string): void;
+  planReminders?: PlanReminder[];
+  onCreatePlanReminder?(input: PlanReminderDraftInput): void;
+  onUpdatePlanReminder?(id: string, patch: PlanReminderUpdatePatch): void;
+  onTogglePlanReminder?: (id: string, enabled: boolean) => void;
+  onTriggerPlanReminderNow?: (id: string) => void;
+  onSnoozePlanReminder?: (id: string) => void;
+  onClearPlanReminderRunHistory?: (id: string) => void;
+  onDeletePlanReminder?: (id: string) => void;
+  dailyReviewBridge?: DailyReviewBridge;
+  onCopyDailyReviewMarkdown?: (input: { markdown: string; label: string; summary: DailyReviewSummary }) => Promise<void> | void;
+  onSelectSession?: (sessionId: string) => void;
   /**
    * Search-result navigation target. The desktop shell owns session
    * switching and hands the matched turn id here after selection; the
@@ -2717,28 +2736,71 @@ export function ChatView(props: {
 
   if (props.mode === 'skills') {
     return (
-      <main className="maka-main detailPane">
-        <div className="maka-center-state">未选择技能</div>
+      <main className="maka-main detailPane maka-module-main">
+        <header className="maka-module-main-header">
+          <div>
+            <h2>技能</h2>
+            <p>管理工作区里的 Skill 指令文件。</p>
+          </div>
+          <button className="maka-button maka-button-ghost" type="button" onClick={props.onRefreshSkills} disabled={!props.onRefreshSkills}>
+            刷新
+          </button>
+        </header>
+        <SkillLibraryPanel
+          skills={props.skills}
+          onRefreshSkills={props.onRefreshSkills}
+          onCreateSkillTemplate={props.onCreateSkillTemplate}
+          onOpenSkill={props.onOpenSkill}
+        />
       </main>
     );
   }
 
   if (props.mode === 'automations') {
     return (
-      <main className="maka-main detailPane">
-        <div className="maka-center-state">计划提醒在左侧管理；到点后会触发提醒并记录执行结果。</div>
+      <main className="maka-main detailPane maka-module-main">
+        <header className="maka-module-main-header">
+          <div>
+            <h2>计划</h2>
+            <p>创建和管理本机计划提醒。</p>
+          </div>
+        </header>
+        <PlanReminderPanel
+          reminders={props.planReminders ?? []}
+          onCreate={props.onCreatePlanReminder}
+          onUpdate={props.onUpdatePlanReminder}
+          onToggle={props.onTogglePlanReminder}
+          onTriggerNow={props.onTriggerPlanReminderNow}
+          onSnooze={props.onSnoozePlanReminder}
+          onClearRunHistory={props.onClearPlanReminderRunHistory}
+          onDelete={props.onDeletePlanReminder}
+        />
       </main>
     );
   }
 
-  // Daily Review is rendered in the sidebar module when the desktop
-  // shell injects `dailyReviewBridge`. This detail pane is only a
-  // bridge-missing fallback for older hosts / fixture-only callers.
-  // Search is a modal trigger and never becomes the active section.
   if (props.mode === 'daily-review') {
     return (
-      <main className="maka-main detailPane">
-        <div className="maka-center-state">每日回顾数据桥未连接；请从桌面版侧栏入口打开每日回顾。</div>
+      <main className="maka-main detailPane maka-module-main">
+        <header className="maka-module-main-header">
+          <div>
+            <h2>每日回顾</h2>
+            <p>查看本机对话、请求、Token、费用和工具调用汇总。</p>
+          </div>
+        </header>
+        {props.dailyReviewBridge ? (
+          <DailyReviewPanel
+            bridge={props.dailyReviewBridge}
+            onSelectSession={props.onSelectSession}
+            onCopyMarkdown={props.onCopyDailyReviewMarkdown}
+          />
+        ) : (
+          <EmptyState
+            Icon={CalendarDays}
+            title="每日回顾未连接"
+            body="桌面端数据桥暂不可用。"
+          />
+        )}
       </main>
     );
   }

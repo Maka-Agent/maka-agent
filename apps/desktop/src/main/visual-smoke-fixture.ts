@@ -40,6 +40,8 @@ const VISUAL_SMOKE_SCENARIOS = new Set<VisualSmokeScenario>([
   'settings-about',
   'settings-theme',
   'settings-daily-review',
+  'module-skills',
+  'module-daily-review',
   // PR109b: workstation-statuses — seed one session per SessionStatus
   // (running / waiting_for_user / blocked × 4 reasons / active / review
   // / done / archived) so the sidebar grouping screenshot covers every
@@ -332,6 +334,10 @@ export function getVisualSmokeState(fixture: VisualSmokeFixture | null): VisualS
       return { ...state, activeSessionId: TURN_SESSION_ID, openSettingsSection: 'theme' };
     case 'settings-daily-review':
       return { ...state, activeSessionId: TURN_SESSION_ID, openSettingsSection: 'daily-review' };
+    case 'module-skills':
+      return { ...state, activeSessionId: TURN_SESSION_ID, sidebarSection: 'skills' };
+    case 'module-daily-review':
+      return { ...state, activeSessionId: TURN_SESSION_ID, sidebarSection: 'daily-review' };
     case 'workstation-statuses':
       // Active session is the running one so the chat header status
       // badge ("进行中") is visible in the screenshot alongside the

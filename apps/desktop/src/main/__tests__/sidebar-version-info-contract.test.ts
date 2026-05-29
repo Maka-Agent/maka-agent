@@ -52,12 +52,13 @@ describe('sidebar version info contract', () => {
     );
   });
 
-  it('daily review fallback copy is a bridge-missing state, not a coming-soon product claim', async () => {
+  it('daily review fallback copy is a main-pane bridge-missing state, not a coming-soon product claim', async () => {
     const ui = await readRepo('packages/ui/src/components.tsx');
-    const dailyReviewStub = ui.match(/'daily-review':\s*\{[\s\S]*?\n\s*\},/)?.[0] ?? '';
-    assert.match(dailyReviewStub, /每日回顾未连接/);
-    assert.doesNotMatch(dailyReviewStub, /即将推出|入口占位|未接真实数据/);
-    assert.match(ui, /每日回顾数据桥未连接/, 'Daily Review detail fallback must explain the missing bridge');
+    const dailyReviewModeBlock = ui.match(/if \(props\.mode === 'daily-review'\) \{[\s\S]*?^\s*\}/m)?.[0] ?? '';
+
+    assert.match(dailyReviewModeBlock, /每日回顾未连接/);
+    assert.doesNotMatch(dailyReviewModeBlock, /即将推出|入口占位|未接真实数据/);
+    assert.match(dailyReviewModeBlock, /桌面端数据桥暂不可用/, 'Daily Review main-pane fallback must explain the missing bridge');
     assert.doesNotMatch(ui, /占位内容/, 'Daily Review fallback must not describe itself as placeholder content');
   });
 });

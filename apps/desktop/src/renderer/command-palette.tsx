@@ -152,7 +152,7 @@ export function buildCommandList(args: {
    */
   onTestNetworkProxy?(): Promise<void> | void;
   /**
-   * PR-CMD-PALETTE-ENRICH-0: jump to a sidebar module (会话 / 计划 /
+   * PR-CMD-PALETTE-ENRICH-0: jump to an app module (会话 / 计划 /
    * 技能 / 每日回顾) directly from the palette. Search itself is
    * already covered by the existing thread-search hookup, so the
    * `search` module nav id is intentionally omitted here.
@@ -247,8 +247,8 @@ export function buildCommandList(args: {
     },
   ];
 
-  // PR-CMD-PALETTE-ENRICH-0: sidebar module jumps. Lets ⌘K →
-  // "每日回顾" / "技能" / "计划" switch the left rail without an
+  // PR-CMD-PALETTE-ENRICH-0: app module jumps. Lets ⌘K →
+  // "每日回顾" / "技能" / "计划" switch app modules without an
   // extra mouse click. Cheap to ship — pure callback wiring.
   if (args.onSelectModule) {
     const select = args.onSelectModule;
@@ -273,7 +273,7 @@ export function buildCommandList(args: {
     cmds.push({
       id: 'nav:skills',
       kind: 'action',
-      label: '侧栏 · 技能',
+      label: '打开 · 技能',
       group: '导航',
       Icon: Sparkles,
       keywords: ['skills', '技能'],
@@ -282,7 +282,7 @@ export function buildCommandList(args: {
     cmds.push({
       id: 'nav:daily-review',
       kind: 'action',
-      label: '侧栏 · 每日回顾',
+      label: '打开 · 每日回顾',
       group: '导航',
       Icon: CalendarDays,
       keywords: ['daily', 'review', 'today', '每日', '回顾', '今天'],

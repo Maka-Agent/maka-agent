@@ -718,7 +718,7 @@ function DailyReviewSettingsPage(props: { onOpenDailyReview?: () => void }) {
           </div>
           <p>
             每日回顾会按你选择的日期范围，把活跃会话、模型用量、工具调用聚合到一个面板里。
-            侧栏 "每日回顾" 入口支持今日 / 本周 / 本月切换、左右翻页、复制 Markdown 摘要，也可以点击会话直接打开。
+            主内容栏里的 "每日回顾" 支持今日 / 本周 / 本月切换、左右翻页、复制 Markdown 摘要，也可以点击会话直接打开。
           </p>
           {props.onOpenDailyReview && (
             <button
@@ -727,7 +727,7 @@ function DailyReviewSettingsPage(props: { onOpenDailyReview?: () => void }) {
               onClick={props.onOpenDailyReview}
               style={{ marginTop: 8 }}
             >
-              在侧栏打开每日回顾
+              打开每日回顾
             </button>
           )}
         </div>
@@ -1649,19 +1649,20 @@ function PersonalizationSettingsPage(props: {
         choice wins over navigator.language; visual-smoke override
         wins over both (deterministic baselines).
       */}
-      <label className="settingsField">
+      <div className="settingsField">
         <span>界面语言</span>
-        <select
+        <Segmented
           value={uiLocale}
-          onChange={(event) => setUiLocale(event.currentTarget.value as UiLocalePreference)}
-          aria-label="界面语言"
-        >
-          <option value="auto">跟随系统</option>
-          <option value="zh">中文</option>
-          <option value="en">English</option>
-        </select>
+          options={[
+            ['auto', '跟随系统'],
+            ['zh', '中文'],
+            ['en', 'English'],
+          ]}
+          onChange={(next) => setUiLocale(next as UiLocalePreference)}
+          ariaLabel="界面语言"
+        />
         <small>选择 Maka 界面的显示语言。保存后立即生效，重启后保持。</small>
-      </label>
+      </div>
 
       <label className="settingsField">
         <span>助手语气偏好</span>
@@ -3678,11 +3679,18 @@ function MetricCard(props: { title: string; value: string; detail?: string }) {
   );
 }
 
-function Segmented<T extends string>(props: { value: T; options: Array<[T, string]>; onChange(value: T): void }) {
+function Segmented<T extends string>(props: { value: T; options: Array<[T, string]>; onChange(value: T): void; ariaLabel?: string }) {
   return (
-    <div className="settingsSegmented">
+    <div className="settingsSegmented" role="radiogroup" aria-label={props.ariaLabel}>
       {props.options.map(([value, label]) => (
-        <button key={value} type="button" data-active={props.value === value} onClick={() => props.onChange(value)}>
+        <button
+          key={value}
+          type="button"
+          role="radio"
+          aria-checked={props.value === value}
+          data-active={props.value === value}
+          onClick={() => props.onChange(value)}
+        >
           {label}
         </button>
       ))}
