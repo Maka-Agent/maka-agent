@@ -70,4 +70,18 @@ describe('Settings coming-soon cleanup contract', () => {
       'Permission Center visible copy must not expose implementation roadmap/helper language',
     );
   });
+
+  it('keeps Health Center copy scoped to read-only current signals', async () => {
+    const settings = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
+    const healthPage = settings.match(/function HealthCenterPage\(\)[\s\S]*?function HealthSummaryTile/);
+
+    assert.ok(healthPage, 'Health Center page block must exist');
+    assert.match(healthPage![0], /只汇总当前已记录的健康信号/, 'Health Center must explain its current read-only signal boundary');
+    assert.match(healthPage![0], /发送通路以运行态探测结果为准/, 'Health Center must keep validation and operational runtime distinct');
+    assert.doesNotMatch(
+      healthPage![0],
+      /接入后|落地后|即将|路线图|尚未实现|TODO|V0\.1/,
+      'Health Center visible copy must not read like future roadmap or demo-stage copy',
+    );
+  });
 });
