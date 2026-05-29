@@ -151,8 +151,8 @@ function officeDocumentsCapability(probe: OfficeCliProbe | undefined, now: numbe
     state: available ? 'enabled' : 'partial',
     source: 'runtime',
     reason: available
-      ? 'Office 文档可通过本地 officecli 读取与校验。'
-      : 'Office 文档工作流已接入；安装 officecli 并确认版本探测通过后即可读取与校验。',
+      ? 'Office 文档可通过本地 officecli 读取、校验与按次授权编辑。'
+      : 'Office 文档工作流已接入；安装 officecli 并确认版本探测通过后即可读取、校验与按次授权编辑。',
   };
   const runtimeProbe: CapabilityRuntimeProbeSignal = available
     ? {

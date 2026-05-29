@@ -21,10 +21,11 @@ describe('Office document capability contract', () => {
     assert.match(snapshot, /id:\s*'office_documents'/);
     assert.match(snapshot, /label:\s*'Office 文档'/);
     assert.match(snapshot, /officecli/);
-    assert.match(snapshot, /读取与校验/);
+    assert.match(snapshot, /读取、校验与按次授权编辑/);
     assert.match(snapshot, /安装 officecli 后重启 Maka 或刷新能力快照/);
     assert.match(snapshot, /officecli --version/);
-    assert.doesNotMatch(snapshot, /读取、校验与生成/);
+    const officeCapabilityBlock = snapshot.match(/function officeDocumentsCapability[\s\S]*?function officeCliProbeReason/)?.[0] ?? '';
+    assert.doesNotMatch(officeCapabilityBlock, /读取与校验。|只读|生成/, 'Office capability copy must not lag behind the permission-gated edit tool');
     assert.match(main, /probeOfficeCli\(\{ now: permissions\.checkedAt \}\)/);
     assert.match(main, /probeOfficeCli\(\{ now \}\)/);
   });
@@ -72,6 +73,12 @@ describe('Office document capability contract', () => {
     assert.match(components, /data-kind="office_document"/);
     assert.match(components, /function presentOfficeDocumentReason/);
     assert.match(components, /officecli 未安装/);
+    assert.match(components, /Office 文档操作未完成。/);
+    assert.match(components, /操作超时/);
+    assert.match(components, /操作失败/);
+    const officePreviewBlock = components.match(/function OfficeDocumentPreview[\s\S]*?function presentOfficeDocumentReason/)?.[0] ?? '';
+    const officeReasonBlock = components.match(/function presentOfficeDocumentReason[\s\S]*?\n\}/)?.[0] ?? '';
+    assert.doesNotMatch(`${officePreviewBlock}\n${officeReasonBlock}`, /Office 文档读取未完成。|读取超时|读取失败|read-only Office adapter/, 'Office result preview must describe read and edit operations, not only reads');
     assert.doesNotMatch(components, /诊断：\{redactSecrets\(result\.reason\)\}/);
     const officeBranch = components.indexOf("content.kind === 'office_document'");
     const jsonBranch = components.indexOf("content.kind === 'json'");

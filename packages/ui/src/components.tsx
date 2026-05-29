@@ -5183,7 +5183,7 @@ function renderPermissionSummary(request: PermissionRequestEvent): ReactNode | u
  * - `file_diff`: line-level red/green diff coloring
  * - `terminal`: stdout + stderr split with exit-code badge + stderr in
  *   destructive tone
- * - `office_document`: read-only Office adapter stdout/stderr/diagnostic cards
+ * - `office_document`: Office adapter stdout/stderr/diagnostic cards
  * - `json`: pretty-printed in a code block
  * - `text` / others: plain `<pre>` fallback
  *
@@ -5294,7 +5294,7 @@ function OfficeDocumentPreview(props: {
       {args && <code className="maka-office-document-args">officecli {args}</code>}
       {!result.ok && (
         <div className="maka-office-document-message" role="note">
-          <span>{message || 'Office 文档读取未完成。'}</span>
+          <span>{message || 'Office 文档操作未完成。'}</span>
           {reason && <small>诊断：{reason}</small>}
         </div>
       )}
@@ -5340,9 +5340,9 @@ function presentOfficeDocumentReason(reason: string | undefined): string | undef
     case 'officecli_missing':
       return 'officecli 未安装';
     case 'officecli_timeout':
-      return '读取超时';
+      return '操作超时';
     case 'officecli_failed':
-      return '读取失败';
+      return '操作失败';
     case undefined:
       return undefined;
     default:
