@@ -2165,11 +2165,71 @@ function AppShell(props: {
                 toastApi.error('复制失败', '剪贴板不可用');
               }
             },
+            onSaveActiveConversationToFile: async () => {
+              if (!activeId) return;
+              const session = sessions.find((s) => s.id === activeId);
+              const sessionName = session?.name ?? '新建对话';
+              const markdown = renderConversationMarkdown(sessionName, messages);
+              const now = new Date();
+              const yyyy = now.getFullYear();
+              const mm = String(now.getMonth() + 1).padStart(2, '0');
+              const dd = String(now.getDate()).padStart(2, '0');
+              // Make the filename mostly portable: collapse whitespace
+              // and quote chars that some file pickers don't like.
+              const sanitizedSession = sessionName
+                .replace(/[\s ]+/g, '-')
+                .replace(/["<>:|?*]/g, '')
+                .slice(0, 80);
+              const defaultName = `maka-${sanitizedSession}-${yyyy}-${mm}-${dd}.md`;
+              try {
+                const result = await window.maka.sessions.saveConversationToFile({ markdown, defaultName });
+                if (result.ok) {
+                  toastApi.success(
+                    '已保存当前对话',
+                    `${markdown.split('\n').length} 行 · 保存为 ${defaultName}`,
+                  );
+                } else if (result.reason === 'canceled') {
+                  // User dismissed the dialog — no toast.
+                } else if (result.reason === 'invalid_input') {
+                  toastApi.error('保存失败', '导出内容无效');
+                } else {
+                  toastApi.error('保存失败', '无法写入选择的位置');
+                }
+              } catch (err) {
+                toastApi.error(
+                  '保存失败',
+                  err instanceof Error ? err.message : '导出当前对话失败',
+                );
+              }
+            },
             onOpenLocalMemoryFile: async () => {
               try {
                 const result = await window.maka.memory.openFile();
                 if (!result.ok) {
                   toastApi.error('无法打开 MEMORY.md', result.message);
+                }
+              } catch (err) {
+                toastApi.error('打开失败', err instanceof Error ? err.message : '路径无效');
+              }
+            },
+            onOpenWorkspaceInstructionsFile: async () => {
+              try {
+                // PR-CMD-PALETTE-OPEN-WORKSPACE-INSTRUCTIONS-0: open the
+                // first available workspace instruction file. If none are
+                // available, surface a hint so the user knows where to
+                // create one rather than getting a silent no-op.
+                const state = await window.maka.workspaceInstructions.getState();
+                const available = state.files.find((f) => f.status === 'available');
+                if (!available) {
+                  toastApi.info(
+                    '当前项目还没有项目指引',
+                    '在 Settings · 记忆 里可以创建 AGENTS.md 或 CLAUDE.md',
+                  );
+                  return;
+                }
+                const result = await window.maka.workspaceInstructions.openFile(available.file);
+                if (!result.ok) {
+                  toastApi.error(`无法打开 ${available.file}`, result.message);
                 }
               } catch (err) {
                 toastApi.error('打开失败', err instanceof Error ? err.message : '路径无效');
