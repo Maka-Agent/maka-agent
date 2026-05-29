@@ -127,6 +127,12 @@ declare global {
         regenerateTurn(sessionId: string, input: RegenerateTurnInput): Promise<void>;
         branchFromTurn(sessionId: string, input: BranchFromTurnInput): Promise<SessionSummary>;
         respondToPermission(sessionId: string, response: PermissionResponse): Promise<void>;
+        saveConversationToFile(input: {
+          markdown: string;
+          defaultName: string;
+        }): Promise<
+          { ok: true; path: string } | { ok: false; reason: 'canceled' | 'write_failed' | 'invalid_input' }
+        >;
         subscribeEvents(sessionId: string, handler: (event: SessionEvent) => void): () => void;
         subscribeChanges(handler: (event: SessionChangedEvent) => void): () => void;
         archive(sessionId: string): Promise<void>;
