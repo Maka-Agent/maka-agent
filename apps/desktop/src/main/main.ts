@@ -175,6 +175,16 @@ const openGateway = new OpenGatewayService({
   getSettings: () => settingsStore.get(),
   listSessions: () => runtime.listSessions(),
   readMessages: (sessionId) => runtime.getMessages(sessionId),
+  sendMessage: async (sessionId, input) => {
+    await ensureSessionCanSend(sessionId);
+    const turnId = randomUUID();
+    const iterator = runtime.sendMessage(sessionId, {
+      turnId,
+      text: input.text,
+    });
+    void streamEvents(sessionId, iterator, turnId);
+    return { turnId };
+  },
   searchThread: (query) =>
     runThreadSearch({ source: 'thread', query }, {
       listSessions: () => runtime.listSessions(),

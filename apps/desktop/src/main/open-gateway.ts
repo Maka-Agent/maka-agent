@@ -15,6 +15,7 @@ export interface OpenGatewayDeps {
   getSettings(): Promise<AppSettings>;
   listSessions(): Promise<SessionSummary[]>;
   readMessages(sessionId: string): Promise<StoredMessage[]>;
+  sendMessage?(sessionId: string, input: { text: string }): Promise<{ turnId: string }>;
   searchThread(query: string): Promise<SearchResult[] | { ok: false; reason: SearchErrorReason; message: string }>;
   now?(): number;
 }
@@ -118,12 +119,12 @@ export class OpenGatewayService {
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     res.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1');
     res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     if (req.method === 'OPTIONS') {
       writeJson(res, 204, {});
       return;
     }
-    if (req.method !== 'GET') {
+    if (req.method !== 'GET' && req.method !== 'POST') {
       writeJson(res, 405, { ok: false, error: 'method_not_allowed' });
       return;
     }
@@ -141,22 +142,59 @@ export class OpenGatewayService {
     }
 
     if (url.pathname === '/v1/capabilities') {
+      if (req.method !== 'GET') {
+        writeJson(res, 405, { ok: false, error: 'method_not_allowed' });
+        return;
+      }
       writeJson(res, 200, {
         ok: true,
-        capabilities: ['sessions.list', 'sessions.messages.read', 'search.thread'],
+        capabilities: [
+          'sessions.list',
+          'sessions.messages.read',
+          ...(this.deps.sendMessage ? ['sessions.messages.send'] : []),
+          'search.thread',
+        ],
       });
       return;
     }
     if (url.pathname === '/v1/sessions') {
+      if (req.method !== 'GET') {
+        writeJson(res, 405, { ok: false, error: 'method_not_allowed' });
+        return;
+      }
       writeJson(res, 200, { ok: true, sessions: await this.deps.listSessions() });
       return;
     }
     const messageMatch = url.pathname.match(/^\/v1\/sessions\/([^/]+)\/messages$/);
     if (messageMatch) {
-      writeJson(res, 200, { ok: true, messages: await this.deps.readMessages(decodeURIComponent(messageMatch[1]!)) });
+      const sessionId = decodeURIComponent(messageMatch[1]!);
+      if (req.method === 'GET') {
+        writeJson(res, 200, { ok: true, messages: await this.deps.readMessages(sessionId) });
+        return;
+      }
+      if (!this.deps.sendMessage) {
+        writeJson(res, 503, { ok: false, error: 'send_unavailable' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      if (!body.ok) {
+        writeJson(res, body.status, { ok: false, error: body.error });
+        return;
+      }
+      const input = parseSendMessageBody(body.value);
+      if (!input.ok) {
+        writeJson(res, 400, { ok: false, error: input.error });
+        return;
+      }
+      const result = await this.deps.sendMessage(sessionId, { text: input.text });
+      writeJson(res, 202, { ok: true, turnId: result.turnId });
       return;
     }
     if (url.pathname === '/v1/search/thread') {
+      if (req.method !== 'GET') {
+        writeJson(res, 405, { ok: false, error: 'method_not_allowed' });
+        return;
+      }
       const query = url.searchParams.get('q') ?? '';
       writeJson(res, 200, { ok: true, result: await this.deps.searchThread(query) });
       return;
@@ -182,4 +220,49 @@ function writeJson(res: ServerResponse, statusCode: number, payload: unknown): v
     return;
   }
   res.end(JSON.stringify(payload));
+}
+
+type JsonBodyResult =
+  | { ok: true; value: unknown }
+  | { ok: false; status: number; error: string };
+
+const OPEN_GATEWAY_MAX_BODY_BYTES = 16 * 1024;
+
+async function readJsonBody(req: IncomingMessage): Promise<JsonBodyResult> {
+  const declared = Number(req.headers['content-length'] ?? 0);
+  if (Number.isFinite(declared) && declared > OPEN_GATEWAY_MAX_BODY_BYTES) {
+    drainRequest(req);
+    return { ok: false, status: 413, error: 'payload_too_large' };
+  }
+
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buffer.byteLength;
+    if (total > OPEN_GATEWAY_MAX_BODY_BYTES) {
+      drainRequest(req);
+      return { ok: false, status: 413, error: 'payload_too_large' };
+    }
+    chunks.push(buffer);
+  }
+
+  try {
+    return { ok: true, value: JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') };
+  } catch {
+    return { ok: false, status: 400, error: 'invalid_json' };
+  }
+}
+
+function drainRequest(req: IncomingMessage): void {
+  req.resume();
+}
+
+function parseSendMessageBody(value: unknown): { ok: true; text: string } | { ok: false; error: string } {
+  if (!value || typeof value !== 'object') return { ok: false, error: 'invalid_body' };
+  const text = (value as { text?: unknown }).text;
+  if (typeof text !== 'string') return { ok: false, error: 'invalid_text' };
+  if (text.trim().length === 0) return { ok: false, error: 'empty_text' };
+  if (text.length > 8_000) return { ok: false, error: 'text_too_large' };
+  return { ok: true, text };
 }

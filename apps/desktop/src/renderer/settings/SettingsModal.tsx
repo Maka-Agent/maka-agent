@@ -2649,11 +2649,12 @@ function OpenGatewaySettingsPage(props: {
         <SettingRow title="能力清单" detail="需要 Bearer token，返回当前开放的本机 API 能力。" value="GET /v1/capabilities" />
         <SettingRow title="会话列表" detail="需要 Bearer token，返回本地 session summary。" value="GET /v1/sessions" />
         <SettingRow title="会话消息" detail="需要 Bearer token，按 sessionId 读取本地消息。" value="GET /v1/sessions/:id/messages" />
+        <SettingRow title="发送消息" detail="需要 Bearer token，向已有会话追加一条用户消息并返回 turnId。" value="POST /v1/sessions/:id/messages" />
         <SettingRow title="本地搜索" detail="需要 Bearer token，复用 Maka 的 thread search。" value="GET /v1/search/thread?q=..." />
       </SettingsRows>
 
       <p className="settingsHelpText">
-        所有 /v1 接口只读且默认关闭。把监听地址设成 0.0.0.0 会让同一局域网设备可访问，请只在可信网络中使用。
+        /v1 接口默认关闭且都需要 token；发送消息会走当前会话的模型和权限边界。把监听地址设成 0.0.0.0 会让同一局域网设备可访问，请只在可信网络中使用。
       </p>
     </div>
   );

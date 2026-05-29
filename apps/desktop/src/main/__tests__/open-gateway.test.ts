@@ -44,7 +44,12 @@ describe('OpenGatewayService', () => {
 
     const authorized = await fetchJson(`${status.baseUrl}/v1/capabilities`, 'dev-token');
     assert.equal(authorized.status, 200);
-    assert.deepEqual(authorized.body.capabilities, ['sessions.list', 'sessions.messages.read', 'search.thread']);
+    assert.deepEqual(authorized.body.capabilities, [
+      'sessions.list',
+      'sessions.messages.read',
+      'sessions.messages.send',
+      'search.thread',
+    ]);
   });
 
   test('exposes local sessions, messages, and thread search read APIs', async () => {
@@ -76,6 +81,66 @@ describe('OpenGatewayService', () => {
     assert.equal(searchedFor, 'gateway');
     assert.equal(searchResponse.body.result[0].target.sessionId, 's1');
   });
+
+  test('accepts token-protected session sends without exposing a streaming socket', async () => {
+    let sent: { sessionId: string; text: string } | null = null;
+    const service = makeService({
+      sendMessage: async (sessionId, input) => {
+        sent = { sessionId, text: input.text };
+        return { turnId: 'turn-gateway' };
+      },
+    });
+    activeServices.push(service);
+    const status = await service.sync(createGatewaySettings({ enabled: true, port: 0, token: 'dev-token' }).openGateway);
+    assert.ok(status.baseUrl);
+
+    const unauthorized = await fetchJson(`${status.baseUrl}/v1/sessions/s1/messages`, {
+      method: 'POST',
+      body: { text: 'hello from gateway' },
+    });
+    assert.equal(unauthorized.status, 401);
+    assert.equal(sent, null);
+
+    const response = await fetchJson(`${status.baseUrl}/v1/sessions/s1/messages`, {
+      token: 'dev-token',
+      method: 'POST',
+      body: { text: 'hello from gateway' },
+    });
+
+    assert.equal(response.status, 202);
+    assert.equal(response.body.turnId, 'turn-gateway');
+    assert.deepEqual(sent, { sessionId: 's1', text: 'hello from gateway' });
+  });
+
+  test('rejects invalid gateway send bodies before calling runtime send', async () => {
+    let calls = 0;
+    const service = makeService({
+      sendMessage: async () => {
+        calls += 1;
+        return { turnId: 'turn-never' };
+      },
+    });
+    activeServices.push(service);
+    const status = await service.sync(createGatewaySettings({ enabled: true, port: 0, token: 'dev-token' }).openGateway);
+    assert.ok(status.baseUrl);
+
+    const empty = await fetchJson(`${status.baseUrl}/v1/sessions/s1/messages`, {
+      token: 'dev-token',
+      method: 'POST',
+      body: { text: '   ' },
+    });
+    assert.equal(empty.status, 400);
+    assert.equal(empty.body.error, 'empty_text');
+
+    const oversize = await fetchJson(`${status.baseUrl}/v1/sessions/s1/messages`, {
+      token: 'dev-token',
+      method: 'POST',
+      body: { text: 'x'.repeat(8_001) },
+    });
+    assert.equal(oversize.status, 400);
+    assert.equal(oversize.body.error, 'text_too_large');
+    assert.equal(calls, 0);
+  });
 });
 
 function makeService(overrides: Partial<ConstructorParameters<typeof OpenGatewayService>[0]> = {}): OpenGatewayService {
@@ -84,6 +149,7 @@ function makeService(overrides: Partial<ConstructorParameters<typeof OpenGateway
     getSettings: async () => settings,
     listSessions: async () => [],
     readMessages: async () => [],
+    sendMessage: async () => ({ turnId: 'turn-1' }),
     searchThread: async () => [],
     now: () => 1_700_000_000_000,
     ...overrides,
@@ -104,9 +170,15 @@ function createGatewaySettings(patch: Partial<AppSettings['openGateway']>): AppS
   return settings;
 }
 
-async function fetchJson(url: string, token?: string): Promise<{ status: number; body: any }> {
+async function fetchJson(
+  url: string,
+  input?: string | { token?: string; method?: string; body?: unknown },
+): Promise<{ status: number; body: any }> {
+  const token = typeof input === 'string' ? input : input?.token;
   const response = await fetch(url, {
+    method: typeof input === 'string' ? undefined : input?.method,
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: typeof input === 'string' || input?.body === undefined ? undefined : JSON.stringify(input.body),
   });
   return {
     status: response.status,
