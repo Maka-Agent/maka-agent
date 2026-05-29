@@ -51,6 +51,19 @@ describe('local MEMORY.md Settings UI contract', () => {
     );
   });
 
+  it('labels the missing MEMORY.md path as an actionable create state', async () => {
+    const src = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
+    const memoryPage = src.match(/function MemorySettingsPage\([\s\S]*?function MemoryEntryList/);
+
+    assert.ok(memoryPage, 'Memory settings page block must exist');
+    assert.match(memoryPage![0], /等待创建 MEMORY\.md/);
+    assert.doesNotMatch(
+      memoryPage![0],
+      /MEMORY\.md 尚未创建/,
+      'Missing MEMORY.md copy should read as an actionable create state, not unfinished implementation copy',
+    );
+  });
+
   it('manual add stays draft-only and routes through the core helper', async () => {
     const src = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
     const manualAddBlock = src.match(/function addManualMemoryDraftEntry\(\) \{[\s\S]*?\n  \}\n\n  async function updateMemoryEntryStatus/)?.[0] ?? '';

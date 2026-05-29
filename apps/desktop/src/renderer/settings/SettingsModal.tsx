@@ -2667,7 +2667,7 @@ function MemorySettingsPage(props: {
       )}
 
       <div className="settingsConnectionMeta">
-        <span>{effective.path || 'MEMORY.md 尚未创建'}</span>
+        <span>{effective.path || '等待创建 MEMORY.md'}</span>
         <span>{effective.activeEntryCount} 条生效</span>
         {effective.archivedEntryCount > 0 && <span>{effective.archivedEntryCount} 条已归档</span>}
       </div>
