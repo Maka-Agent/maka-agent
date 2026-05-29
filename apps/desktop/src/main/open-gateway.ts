@@ -231,6 +231,11 @@ export class OpenGatewayService {
             endpoint: '/v1/sessions/{sessionId}/events/state',
             includesPayloads: false,
           },
+          recent: {
+            endpoint: '/v1/sessions/{sessionId}/events/recent',
+            limit: OPEN_GATEWAY_EVENT_RECENT_LIMIT,
+            includesPayloads: false,
+          },
           globalState: {
             endpoint: '/v1/events/state',
             includesPayloads: false,
@@ -393,6 +398,21 @@ export class OpenGatewayService {
       }
       const sessionId = decodeURIComponent(eventStateMatch[1]!);
       writeJson(res, 200, { ok: true, state: this.buildReplayState(sessionId) });
+      return;
+    }
+    const recentEventsMatch = url.pathname.match(/^\/v1\/sessions\/([^/]+)\/events\/recent$/);
+    if (recentEventsMatch) {
+      if (req.method !== 'GET') {
+        writeJson(res, 405, { ok: false, error: 'method_not_allowed' });
+        return;
+      }
+      const sessionId = decodeURIComponent(recentEventsMatch[1]!);
+      writeJson(res, 200, {
+        ok: true,
+        events: buildGatewayRecentEvents(this.recentEvents.get(sessionId) ?? []),
+        includesPayloads: false,
+        limit: OPEN_GATEWAY_EVENT_RECENT_LIMIT,
+      });
       return;
     }
     const incidentsMatch = url.pathname.match(/^\/v1\/sessions\/([^/]+)\/incidents$/);
@@ -586,6 +606,7 @@ const OPEN_GATEWAY_MESSAGE_PAGE_DEFAULT_LIMIT = 100;
 const OPEN_GATEWAY_MESSAGE_PAGE_MAX_LIMIT = 200;
 const OPEN_GATEWAY_EVENT_HEARTBEAT_MS = 15_000;
 const OPEN_GATEWAY_EVENT_REPLAY_LIMIT = 100;
+const OPEN_GATEWAY_EVENT_RECENT_LIMIT = 50;
 const OPEN_GATEWAY_REPLAY_CURSOR_LIMIT = 256;
 const OPEN_GATEWAY_REPLAY_MISS_EVENT = 'gateway_replay_miss';
 const OPEN_GATEWAY_INCIDENT_LIMIT = 20;
@@ -648,6 +669,7 @@ function buildGatewayCapabilities(sendAvailable: boolean): string[] {
     'sessions.events.replay',
     'sessions.events.replay_miss',
     'sessions.events.state',
+    'sessions.events.recent',
     'sessions.incidents.read',
     'search.thread',
   ];
@@ -760,6 +782,13 @@ function buildGatewayOpenApiSpec(sendAvailable: boolean): Record<string, unknown
           summary: 'Event replay state',
           parameters: [pathParam('sessionId', 'Session id')],
           responses: jsonResponses('Replay buffer and active stream state without event payloads.'),
+        },
+      },
+      '/v1/sessions/{sessionId}/events/recent': {
+        get: {
+          summary: 'Recent event summaries',
+          parameters: [pathParam('sessionId', 'Session id')],
+          responses: jsonResponses('Bounded recent event summaries without event payloads.'),
         },
       },
       '/v1/events/state': {
@@ -1131,6 +1160,10 @@ function summarizeReplayEvent(event: SessionEvent): GatewayReplayEventSummary {
     ...('turnId' in event ? { turnId: capReplayCursor(redactSecrets(event.turnId)) } : {}),
     ...('ts' in event ? { ts: event.ts } : {}),
   };
+}
+
+function buildGatewayRecentEvents(events: readonly SessionEvent[]): GatewayReplayEventSummary[] {
+  return events.slice(-OPEN_GATEWAY_EVENT_RECENT_LIMIT).map(summarizeReplayEvent);
 }
 
 function formatSseEvent(input: { id: string; event: string; data: unknown }): string {
