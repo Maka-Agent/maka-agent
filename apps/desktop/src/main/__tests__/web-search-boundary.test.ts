@@ -78,12 +78,12 @@ describe('web-search renderer boundary (PR-WEB-SEARCH-TAVILY-0)', () => {
     assert.match(
       settings,
       /const queriedCredentialVersion = tavily\.credentialVersion/,
-      'demo query must snapshot the saved key version before awaiting network',
+      'live query must snapshot the saved key version before awaiting network',
     );
     assert.match(
       settings,
       /persistCredentialStatus\('valid', queriedCredentialVersion\)/,
-      'successful demo query status must carry the observed key version',
+      'successful live query status must carry the observed key version',
     );
   });
 
@@ -95,7 +95,7 @@ describe('web-search renderer boundary (PR-WEB-SEARCH-TAVILY-0)', () => {
     assert.match(helper![0], /先保存 Tavily API key/);
     assert.match(helper![0], /先启用联网搜索/);
     assert.match(helper![0], /输入查询后再搜索/);
-    assert.match(settings, /disabled=\{demoRunning \|\| queryDisabledReason !== null\}/);
+    assert.match(settings, /disabled=\{liveQueryRunning \|\| queryDisabledReason !== null\}/);
     assert.match(settings, /\{queryDisabledReason\}/);
     assert.doesNotMatch(
       settings,
@@ -113,6 +113,6 @@ describe('web-search renderer boundary (PR-WEB-SEARCH-TAVILY-0)', () => {
     assert.match(page![0], /不写入会话也不写入遥测/);
     assert.match(page![0], /Electron safeStorage 最佳实践/);
     assert.doesNotMatch(page![0], />试一下</);
-    assert.doesNotMatch(page![0], />试一下<|不入 telemetry/);
+    assert.doesNotMatch(page![0], />试一下<|不入 telemetry|demoQuery|demoRunning|runDemo|demoResults|demoError|试一下" demo/);
   });
 });

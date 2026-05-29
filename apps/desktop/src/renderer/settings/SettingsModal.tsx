@@ -1941,7 +1941,7 @@ function ThemeSettingsPage(props: {
  * "keep current" in `mergeWebSearchSettings`.
  *
  * The "测试" button calls `web-search:test` (main-process Tavily call)
- * and surfaces ok/fail via toast. The "试一下" demo runs a real query
+ * and surfaces ok/fail via toast. The live-query verifier runs a real query
  * and renders 3-5 plain-text rows.
  */
 function WebSearchSettingsPage(props: {
@@ -1953,10 +1953,10 @@ function WebSearchSettingsPage(props: {
   const tavilyKey = tavily.apiKey;
   const [draftKey, setDraftKey] = useState('');
   const [testing, setTesting] = useState(false);
-  const [demoQuery, setDemoQuery] = useState('');
-  const [demoRunning, setDemoRunning] = useState(false);
-  const [demoResults, setDemoResults] = useState<readonly { title: string; url: string; snippet: string; source: string }[] | null>(null);
-  const [demoError, setDemoError] = useState<string | null>(null);
+  const [liveQuery, setLiveQuery] = useState('');
+  const [liveQueryRunning, setLiveQueryRunning] = useState(false);
+  const [liveQueryResults, setLiveQueryResults] = useState<readonly { title: string; url: string; snippet: string; source: string }[] | null>(null);
+  const [liveQueryError, setLiveQueryError] = useState<string | null>(null);
   const toast = useToast();
 
   async function setEnabled(enabled: boolean) {
@@ -2018,12 +2018,12 @@ function WebSearchSettingsPage(props: {
     }
   }
 
-  async function runDemo() {
-    const trimmed = demoQuery.trim();
+  async function runLiveQuery() {
+    const trimmed = liveQuery.trim();
     if (trimmed.length === 0) return;
-    setDemoRunning(true);
-    setDemoError(null);
-    setDemoResults(null);
+    setLiveQueryRunning(true);
+    setLiveQueryError(null);
+    setLiveQueryResults(null);
     const queriedCredentialVersion = tavily.credentialVersion;
     try {
       const result = await window.maka.webSearch.query({
@@ -2032,20 +2032,20 @@ function WebSearchSettingsPage(props: {
         limit: 5,
       });
       if (result.ok) {
-        setDemoResults(result.results);
+        setLiveQueryResults(result.results);
         if (hasStoredKey) {
           await persistCredentialStatus('valid', queriedCredentialVersion);
         }
       } else {
-        setDemoError(result.message);
+        setLiveQueryError(result.message);
         if (hasStoredKey) {
           await persistCredentialStatus(webSearchCredentialStatusFromResponse(result), queriedCredentialVersion);
         }
       }
     } catch (err) {
-      setDemoError(err instanceof Error ? err.message : String(err));
+      setLiveQueryError(err instanceof Error ? err.message : String(err));
     } finally {
-      setDemoRunning(false);
+      setLiveQueryRunning(false);
     }
   }
 
@@ -2058,7 +2058,7 @@ function WebSearchSettingsPage(props: {
   const queryDisabledReason = webSearchQueryDisabledReason({
     hasStoredKey,
     enabled: webSearch.enabled,
-    query: demoQuery,
+    query: liveQuery,
   });
   const checkedAtMs = tavily.credentialCheckedAt
     ? Date.parse(tavily.credentialCheckedAt)
@@ -2144,13 +2144,13 @@ function WebSearchSettingsPage(props: {
         <label>
           <span>查询</span>
           <input
-            value={demoQuery}
-            onChange={(event) => setDemoQuery(event.currentTarget.value)}
+            value={liveQuery}
+            onChange={(event) => setLiveQuery(event.currentTarget.value)}
             placeholder="例如：Electron safeStorage 最佳实践"
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && !demoRunning) {
+              if (event.key === 'Enter' && !liveQueryRunning) {
                 event.preventDefault();
-                void runDemo();
+                void runLiveQuery();
               }
             }}
           />
@@ -2160,21 +2160,21 @@ function WebSearchSettingsPage(props: {
         <button
           type="button"
           className="maka-button"
-          disabled={demoRunning || queryDisabledReason !== null}
-          onClick={() => void runDemo()}
+          disabled={liveQueryRunning || queryDisabledReason !== null}
+          onClick={() => void runLiveQuery()}
         >
-          {demoRunning ? '搜索中…' : '搜索'}
+          {liveQueryRunning ? '搜索中…' : '搜索'}
         </button>
-        {!demoRunning && queryDisabledReason && (
+        {!liveQueryRunning && queryDisabledReason && (
           <small style={{ marginLeft: 12, color: 'var(--foreground-50)' }}>
             {queryDisabledReason}
           </small>
         )}
       </div>
 
-      {demoError && (
+      {liveQueryError && (
         <div className="settingsConnectionMeta" role="alert">
-          <span>查询失败：{demoError}</span>
+          <span>查询失败：{liveQueryError}</span>
         </div>
       )}
       {(() => {
@@ -2185,8 +2185,8 @@ function WebSearchSettingsPage(props: {
         // non-http(s) / malformed rows and redact every text cell
         // before it reaches the DOM.
         const safeRows: ReadonlyArray<{ title: string; url: string; source: string; snippet: string }> | null =
-          demoResults
-            ? demoResults
+          liveQueryResults
+            ? liveQueryResults
                 .map((row) => {
                   const normalized = normalizeSearchUrl(row.url);
                   if (!normalized.ok) return null;
@@ -2204,7 +2204,7 @@ function WebSearchSettingsPage(props: {
                     row !== null,
                 )
             : null;
-        if (safeRows && safeRows.length === 0 && !demoError) {
+        if (safeRows && safeRows.length === 0 && !liveQueryError) {
           return <div className="settingsConnectionMeta">没有结果。</div>;
         }
         if (safeRows && safeRows.length > 0) {

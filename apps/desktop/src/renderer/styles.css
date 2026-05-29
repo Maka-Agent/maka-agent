@@ -8873,7 +8873,7 @@ button:active {
 
 /* ────────────────────────────────────────────────────────────────
    PR-CHAT-WEB-SEARCH-RENDER-0: chat-side WebSearch result preview.
-   Reuses the Settings demo card shape so manual try-out and the
+   Reuses the Settings live-query result card shape so manual verification and the
    agent-tool result look the same.
    ──────────────────────────────────────────────────────────────── */
 .maka-web-search-preview {
@@ -8953,7 +8953,7 @@ button:active {
 }
 
 /* ────────────────────────────────────────────────────────────────
-   PR-WEB-SEARCH-TAVILY-0: Settings → 联网搜索 demo result list.
+   PR-WEB-SEARCH-TAVILY-0: Settings → 联网搜索 live-query result list.
    Plain-text rows only (title + source + snippet); never markdown,
    never HTML.
    ──────────────────────────────────────────────────────────────── */
