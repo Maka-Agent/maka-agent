@@ -9,7 +9,9 @@ import {
   humanizeBotStatusReason,
   isPlaintextHelpCommand,
   isPlaintextResetCommand,
+  nonTextMessageAck,
   plaintextHelpReply,
+  type BotAttachmentKind,
   type BotMessageEvent,
 } from '../index.js';
 
@@ -186,5 +188,35 @@ describe('humanizeBotStatusReason', () => {
     assert.equal(humanizeBotStatusReason(''), undefined);
     assert.equal(humanizeBotStatusReason('   '), undefined);
     assert.equal(humanizeBotStatusReason('\t\n'), undefined);
+  });
+});
+
+// PR-BOT-NON-TEXT-MESSAGE-ACK-0
+describe('nonTextMessageAck', () => {
+  test('returns kind-appropriate copy for each attachment kind', () => {
+    assert.match(nonTextMessageAck('photo'), /caption/);
+    assert.match(nonTextMessageAck('voice'), /语音/);
+    assert.match(nonTextMessageAck('audio'), /语音/);
+    assert.match(nonTextMessageAck('sticker'), /贴纸/);
+    assert.match(nonTextMessageAck('video'), /视频/);
+    assert.match(nonTextMessageAck('animation'), /视频/);
+    assert.match(nonTextMessageAck('document'), /附件文件/);
+    assert.match(nonTextMessageAck('unknown'), /文字/);
+  });
+
+  test('all messages explain that Maka only handles text (consistent contract)', () => {
+    const kinds: BotAttachmentKind[] = [
+      'photo', 'voice', 'audio', 'sticker', 'video', 'animation', 'document', 'unknown',
+    ];
+    for (const kind of kinds) {
+      assert.match(nonTextMessageAck(kind), /Maka/, `${kind} ack should mention Maka by name`);
+      // Must not contain demo-stage or roadmap language — these are
+      // user-facing acks that should describe current product behavior.
+      assert.equal(
+        /即将|尚未|TODO|coming soon|后续版本/i.test(nonTextMessageAck(kind)),
+        false,
+        `${kind} ack must not use roadmap language`,
+      );
+    }
   });
 });

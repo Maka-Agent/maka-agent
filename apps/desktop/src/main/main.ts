@@ -24,6 +24,7 @@ import {
   isBotDeliveryProvider,
   isPlaintextHelpCommand,
   isPlaintextResetCommand,
+  nonTextMessageAck,
   plaintextHelpReply,
   formatBotMessageForSession,
   formatPlanReminderDeliveryMessage,
@@ -1943,6 +1944,22 @@ async function streamEvents(
 
 async function handleBotIncomingMessage(message: BotIncomingMessage): Promise<void> {
   const text = message.text.trim();
+  // PR-BOT-NON-TEXT-MESSAGE-ACK-0: previously a photo / voice / sticker
+  // with no caption was silently dropped — the user got zero response.
+  // If the inbound carried a non-text payload and there is no usable
+  // text, send a kind-aware ack so the user knows the bot received
+  // something but cannot process it. 5-minute TTL matches the other
+  // transient system notices.
+  if (!text && message.attachmentKind) {
+    const replyOptions = {
+      ...(message.sourceMessageId ? { replyToMessageId: message.sourceMessageId } : {}),
+      ephemeralTtlMs: 5 * 60 * 1_000,
+    };
+    await botRegistry
+      .sendMessage(message.platform, message.chatId, nonTextMessageAck(message.attachmentKind), replyOptions)
+      .catch(() => null);
+    return;
+  }
   if (!text) return;
   const key = botConversationKey(message);
   const current = botConversationQueues.get(key) ?? Promise.resolve();

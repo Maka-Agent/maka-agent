@@ -9,6 +9,27 @@ export interface BotAttachmentRef {
   mimeType?: string;
 }
 
+/**
+ * PR-BOT-NON-TEXT-MESSAGE-ACK-0 (Hermes deep-dive): the kind of non-text
+ * payload Telegram delivered alongside (or instead of) text. Used so
+ * the handler can send a helpful "Maka 现在只读文字" ack instead of
+ * silently dropping a photo / voice / sticker message. NOT a request
+ * to ingest the binary — Maka does not yet have multi-modal input.
+ *
+ * `unknown` covers Telegram message subtypes we did not enumerate
+ * (location, contact, poll, video_note, ...). Those still need an ack
+ * because the user typed nothing the bot can act on.
+ */
+export type BotAttachmentKind =
+  | 'photo'
+  | 'voice'
+  | 'sticker'
+  | 'document'
+  | 'video'
+  | 'audio'
+  | 'animation'
+  | 'unknown';
+
 export interface BotMessageEvent {
   platform: BotPlatform;
   userId: string;
@@ -19,6 +40,39 @@ export interface BotMessageEvent {
   sourceMessageId: string;
   receivedAt: number;
   attachments?: BotAttachmentRef[];
+  /**
+   * PR-BOT-NON-TEXT-MESSAGE-ACK-0: when the inbound message carried a
+   * non-text payload (photo / voice / etc.), this records the kind so
+   * the handler can decide whether to ack or drop. `undefined` means
+   * "text-only message" — the default and most common case.
+   */
+  attachmentKind?: BotAttachmentKind;
+}
+
+/**
+ * PR-BOT-NON-TEXT-MESSAGE-ACK-0: fixed copy for the "we only handle
+ * text" ack. Kind-aware so a voice message and a sticker get slightly
+ * different copy without diluting the core message. Exported so the
+ * handler can use it AND a contract test can pin it.
+ */
+export function nonTextMessageAck(kind: BotAttachmentKind): string {
+  switch (kind) {
+    case 'photo':
+      return 'Maka 目前只能读文字。如果想问关于这张图的问题，请把内容直接写出来（caption 里也可以）。';
+    case 'voice':
+    case 'audio':
+      return 'Maka 目前不能识别语音消息。请把要问的内容用文字发过来。';
+    case 'sticker':
+      return 'Maka 目前不会处理贴纸。如果有问题，请直接用文字描述。';
+    case 'video':
+    case 'animation':
+      return 'Maka 目前不会处理视频。如果想讨论视频内容，请把要点用文字写一下。';
+    case 'document':
+      return 'Maka 目前不能直接读取附件文件。如果文件里有问题，请把内容粘到消息里。';
+    case 'unknown':
+    default:
+      return 'Maka 目前只能处理文字消息。请把要问的内容用文字发过来。';
+  }
 }
 
 export function botDisplayLabel(platform: BotPlatform): string {
