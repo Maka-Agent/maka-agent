@@ -177,6 +177,7 @@ name: Existing
     await withWorkspace(async (workspaceRoot) => {
       const first = await ensureBundledOfficeSkills(workspaceRoot);
       assert.deepEqual(first.created.sort(), ['officecli-docx', 'officecli-pptx', 'officecli-xlsx']);
+      assert.deepEqual(first.updated, []);
       assert.deepEqual(first.skipped, []);
       assert.deepEqual(first.failed, []);
 
@@ -200,9 +201,32 @@ name: Existing
       await writeFile(docxPath, `${before}\n\n# User edit\n`, 'utf8');
       const second = await ensureBundledOfficeSkills(workspaceRoot);
       assert.deepEqual(second.created, []);
+      assert.deepEqual(second.updated, []);
       assert.deepEqual(second.skipped.sort(), ['officecli-docx', 'officecli-pptx', 'officecli-xlsx']);
       assert.deepEqual(second.failed, []);
       assert.match(await readFile(docxPath, 'utf8'), /# User edit/);
+    });
+  });
+
+  it('migrates unmodified legacy bundled OfficeCLI skills to tool-routed templates', async () => {
+    await withWorkspace(async (workspaceRoot) => {
+      const skillDir = join(workspaceRoot, 'skills', 'officecli-docx');
+      const skillPath = join(skillDir, 'SKILL.md');
+      await mkdir(skillDir, { recursive: true, mode: 0o700 });
+      await writeFile(skillPath, legacyOfficeCliDocxSkillTemplate(), { encoding: 'utf8', mode: 0o600 });
+
+      const result = await ensureBundledOfficeSkills(workspaceRoot);
+      assert.deepEqual(result.created.sort(), ['officecli-pptx', 'officecli-xlsx']);
+      assert.deepEqual(result.updated, ['officecli-docx']);
+      assert.deepEqual(result.skipped, []);
+      assert.deepEqual(result.failed, []);
+
+      const migrated = await readFile(skillPath, 'utf8');
+      assert.match(migrated, /Use `OfficeDocument` for read-only inspection/);
+      assert.match(migrated, /Use `OfficeDocumentEdit` only for supported writes/);
+      assert.doesNotMatch(migrated, /allowed-tools:\n  - Bash/);
+      assert.doesNotMatch(migrated, /officecli open/);
+      assert.doesNotMatch(migrated, /officecli view "\$FILE" html/);
     });
   });
 
@@ -214,6 +238,7 @@ name: Existing
         assert.deepEqual(await createStarterSkill(workspaceRoot), { ok: false, reason: 'blocked_path' });
         assert.deepEqual(await ensureBundledOfficeSkills(workspaceRoot), {
           created: [],
+          updated: [],
           skipped: [],
           failed: ['officecli-docx', 'officecli-xlsx', 'officecli-pptx'],
         });
@@ -309,6 +334,40 @@ body`).allowedTools,
     );
   });
 });
+
+function legacyOfficeCliDocxSkillTemplate(): string {
+  return [
+    '---',
+    'name: OfficeCLI DOCX',
+    'description: Use when a .docx, Word document, report, memo, proposal, letter, tracked changes, comments, header/footer, table of contents, or Word template is involved.',
+    'allowed-tools:',
+    '  - Bash',
+    '  - Read',
+    '---',
+    '',
+    '# OfficeCLI DOCX',
+    '',
+    "Use this skill for Word document work. It is adapted from an external OfficeCLI reference DOCX skill for Maka's permission model.",
+    '',
+    '## Boundary',
+    '',
+    '- Check `officecli --version` first. If missing, tell the user Office document automation is unavailable on this machine instead of parsing .docx as plain text.',
+    '- Prefer `officecli help docx` and `officecli help docx <element>` before guessing flags. Installed help is authoritative.',
+    '- Quote semantic paths: `"/body/p[1]"`, `"/footer[1]"`.',
+    '- Read-only inspection commands are safe: `view`, `get`, `query`, `validate`, `help`.',
+    '- Mutating commands such as `create`, `open`, `add`, `set`, `remove`, `batch`, and `close` require the normal shell permission flow.',
+    '',
+    '## Workflow',
+    '',
+    '1. Orient with `officecli view "$FILE" outline`, then `view text` or `get` the needed paths.',
+    '2. For edits, use resident mode: `officecli open "$FILE"`, make small incremental changes, verify each structural step with `get`, then `officecli close "$FILE"`.',
+    '3. For generated documents, build hierarchy first: Title, Heading 1, Heading 2, body; then tables/images/fields; then headers/footers.',
+    '4. Use explicit typography. Body 11-12pt; H1 at least 18pt; H2 around 14pt; spacing via paragraph properties, not blank paragraphs.',
+    '5. Add live page-number fields for documents longer than one page. Verify fields exist with `get "$FILE" "/footer[1]" --depth 3`.',
+    '6. Final QA: `officecli validate "$FILE"` and `officecli view "$FILE" html`. Fix placeholder tokens, clipped tables, empty-paragraph spacing, static page numbers, and missing TOC on heading-heavy documents before reporting done.',
+    '',
+  ].join('\n');
+}
 
 async function withWorkspace(fn: (workspaceRoot: string) => Promise<void>): Promise<void> {
   const workspaceRoot = await mkdtemp(join(tmpdir(), 'maka-skills-'));
