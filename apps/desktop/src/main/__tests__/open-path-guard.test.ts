@@ -9,12 +9,15 @@ describe('open path guard', () => {
   test('resolves known allowlisted keys inside workspace', async () => {
     await withWorkspace(async (workspaceRoot) => {
       await mkdir(join(workspaceRoot, 'skills'), { recursive: true });
+      await mkdir(join(workspaceRoot, 'memory'), { recursive: true });
 
       const workspace = await resolveOpenPath({ key: 'workspace', workspaceRoot });
       const skills = await resolveOpenPath({ key: 'skills', workspaceRoot });
+      const memory = await resolveOpenPath({ key: 'memory', workspaceRoot });
 
       assert.equal(workspace.ok, true);
       assert.equal(skills.ok, true);
+      assert.equal(memory.ok, true);
     });
   });
 
