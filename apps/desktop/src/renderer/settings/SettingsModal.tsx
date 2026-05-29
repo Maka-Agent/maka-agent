@@ -2288,6 +2288,13 @@ function MemorySettingsPage(props: {
     if (!result.ok) toast.error('打开失败', result.message);
   }
 
+  async function openFolder() {
+    const result = await window.maka.app.openPath('memory');
+    if (!result.ok) {
+      toast.error(`打开${openPathActionLabel('memory')}失败`, openPathFailureCopy(result.reason));
+    }
+  }
+
   async function copyPath() {
     if (!state?.path) return;
     try {
@@ -2368,6 +2375,9 @@ function MemorySettingsPage(props: {
         </button>
         <button type="button" className="maka-button maka-button-ghost" disabled={busy || !effective.enabled} onClick={() => void openFile()}>
           打开 MEMORY.md
+        </button>
+        <button type="button" className="maka-button maka-button-ghost" disabled={busy || !effective.enabled} onClick={() => void openFolder()}>
+          打开所在目录
         </button>
         <button type="button" className="maka-button maka-button-ghost" disabled={!effective.path} onClick={() => void copyPath()}>
           复制路径

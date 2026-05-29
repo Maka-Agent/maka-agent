@@ -437,7 +437,7 @@ contextBridge.exposeInMainWorld('maka', {
       return ipcRenderer.invoke('app:info');
     },
     openPath(
-      key: 'workspace' | 'skills',
+      key: 'workspace' | 'skills' | 'memory',
     ): Promise<
       | { ok: true; opened: string }
       | {

@@ -1,5 +1,5 @@
-import { chmod, copyFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { chmod, copyFile, mkdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/promises';
+import { dirname, join, relative, sep } from 'node:path';
 import {
   defaultLocalMemoryMarkdown,
   parseLocalMemoryMarkdown,
@@ -139,15 +139,60 @@ export class LocalMemoryService {
     return this.getState();
   }
 
+  async resolveFileForOpen(): Promise<
+    | { ok: true; path: string }
+    | { ok: false; reason: 'incognito_blocked' | 'disabled' | 'missing' | 'not-allowed' | 'not-a-file' }
+  > {
+    const settings = await this.deps.getSettings();
+    if ((await this.deps.getPrivacyContext()).incognitoActive) {
+      return { ok: false, reason: 'incognito_blocked' };
+    }
+    if (!settings.localMemory.enabled) return { ok: false, reason: 'disabled' };
+
+    await this.ensure();
+
+    let root: string;
+    let target: string;
+    try {
+      [root, target] = await Promise.all([
+        realpath(this.deps.workspaceRoot),
+        realpath(this.file),
+      ]);
+    } catch {
+      return { ok: false, reason: 'missing' };
+    }
+
+    if (!isInsideOrSamePath(root, target)) return { ok: false, reason: 'not-allowed' };
+
+    const targetStat = await stat(target).catch(() => null);
+    if (!targetStat) return { ok: false, reason: 'missing' };
+    if (!targetStat.isFile()) return { ok: false, reason: 'not-a-file' };
+
+    return { ok: true, path: target };
+  }
+
   private async ensure(): Promise<void> {
     await mkdir(this.dir, { recursive: true, mode: 0o700 });
-    await chmod(this.dir, 0o700);
+    const root = await realpath(this.deps.workspaceRoot);
+    const dir = await realpath(this.dir);
+    if (!isInsideOrSamePath(root, dir)) {
+      throw new Error('MEMORY.md directory is outside the workspace.');
+    }
+    await chmod(dir, 0o700);
     try {
       await stat(this.file);
     } catch {
       await writeFile(this.file, defaultLocalMemoryMarkdown(this.now()), { mode: 0o600 });
     }
-    await chmod(this.file, 0o600);
+    const file = await realpath(this.file);
+    if (!isInsideOrSamePath(root, file)) {
+      throw new Error('MEMORY.md file is outside the workspace.');
+    }
+    const fileStat = await stat(file);
+    if (!fileStat.isFile()) {
+      throw new Error('MEMORY.md is not a file.');
+    }
+    await chmod(file, 0o600);
   }
 
   private async backup(suffix: string): Promise<void> {
@@ -169,7 +214,12 @@ export class LocalMemoryService {
   }
 }
 
+function isInsideOrSamePath(root: string, target: string): boolean {
+  if (target === root) return true;
+  const rel = relative(root, target);
+  return rel !== '' && !rel.startsWith('..') && rel !== '..' && !rel.includes(`..${sep}`) && !rel.startsWith(sep);
+}
+
 export function localMemoryDirForWorkspace(workspaceRoot: string): string {
   return dirname(join(workspaceRoot, 'memory', 'MEMORY.md'));
 }
-

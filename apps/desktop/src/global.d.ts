@@ -238,7 +238,7 @@ declare global {
           buildCommit: string | null;
         }>;
         openPath(
-          key: 'workspace' | 'skills',
+          key: 'workspace' | 'skills' | 'memory',
         ): Promise<
           | { ok: true; opened: string }
           | {

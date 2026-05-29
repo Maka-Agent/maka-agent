@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { mkdtemp, readFile, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it } from 'node:test';
@@ -73,5 +73,44 @@ describe('LocalMemoryService', () => {
     });
     const state = await service.getState();
     assert.equal(state.status, 'incognito_blocked');
+  });
+
+  it('resolves MEMORY.md for opening only after the file is inside the workspace', async () => {
+    const { service } = await makeService()();
+    const result = await service.resolveFileForOpen();
+    assert.equal(result.ok, true);
+    if (result.ok) assert.match(result.path, /MEMORY\.md$/);
+  });
+
+  it('does not resolve MEMORY.md for opening in incognito mode', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'maka-memory-open-incognito-'));
+    const service = new LocalMemoryService({
+      workspaceRoot,
+      getSettings: async () => createDefaultSettings(),
+      updateSettings: async () => createDefaultSettings(),
+      getPrivacyContext: async () => ({ incognitoActive: true }),
+    });
+
+    assert.deepEqual(await service.resolveFileForOpen(), { ok: false, reason: 'incognito_blocked' });
+  });
+
+  it('rejects a symlinked MEMORY.md that escapes the workspace', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'maka-memory-symlink-workspace-'));
+    const outsideRoot = await mkdtemp(join(tmpdir(), 'maka-memory-symlink-outside-'));
+    await mkdir(join(workspaceRoot, 'memory'), { recursive: true });
+    const outsideFile = join(outsideRoot, 'MEMORY.md');
+    await writeFile(outsideFile, '# outside\n', 'utf8');
+    await symlink(outsideFile, join(workspaceRoot, 'memory', 'MEMORY.md'));
+    const service = new LocalMemoryService({
+      workspaceRoot,
+      getSettings: async () => createDefaultSettings(),
+      updateSettings: async () => createDefaultSettings(),
+      getPrivacyContext: async () => ({ incognitoActive: false }),
+    });
+
+    const state = await service.getState();
+
+    assert.equal(state.status, 'error');
+    assert.match(state.reason ?? '', /outside the workspace/);
   });
 });

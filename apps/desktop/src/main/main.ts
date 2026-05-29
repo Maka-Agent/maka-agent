@@ -648,6 +648,23 @@ function installApplicationMenu(): void {
   );
 }
 
+function localMemoryOpenFailureCopy(reason: string): string {
+  switch (reason) {
+    case 'incognito_blocked':
+      return '隐身模式下不能打开本地 MEMORY.md。';
+    case 'disabled':
+      return '本地记忆已关闭。';
+    case 'missing':
+      return 'MEMORY.md 不存在。';
+    case 'not-allowed':
+      return 'MEMORY.md 不在允许的工作区范围内。';
+    case 'not-a-file':
+      return 'MEMORY.md 不是普通文件。';
+    default:
+      return '无法打开 MEMORY.md。';
+  }
+}
+
 function registerIpc(): void {
   ipcMain.handle('app:info', () => ({
     appVersion: app.getVersion(),
@@ -681,8 +698,9 @@ function registerIpc(): void {
     localMemory.setAgentReadEnabled(enabled === true),
   );
   ipcMain.handle('memory:openFile', async (): Promise<{ ok: true } | { ok: false; message: string }> => {
-    await localMemory.getState();
-    const error = await shell.openPath(localMemory.file);
+    const resolved = await localMemory.resolveFileForOpen();
+    if (!resolved.ok) return { ok: false, message: localMemoryOpenFailureCopy(resolved.reason) };
+    const error = await shell.openPath(resolved.path);
     return error ? { ok: false, message: error } : { ok: true };
   });
   // Opens an artifact in Finder. Reuses the artifact-root realpath guard
