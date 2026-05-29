@@ -146,7 +146,7 @@ import { resolveBuildInfo } from './build-info.js';
 import { OpenGatewayService } from './open-gateway.js';
 import { LocalMemoryService } from './local-memory-service.js';
 import {
-  readFolderOutlineForPromptImport,
+  readFolderOutlinesForPromptImport,
   readTextFilesForPromptImport,
   type FolderOutlineImportFailureReason,
   type TextFileImportFailureReason,
@@ -731,6 +731,8 @@ function folderOutlineImportFailureCopy(reason: FolderOutlineImportFailureReason
       return '所选位置不存在或不是文件夹。';
     case 'read-failed':
       return '读取文件夹目录失败。';
+    case 'too-many-folders':
+      return '一次最多导入 3 个文件夹目录。';
     case 'empty':
       return '这个文件夹里没有可导入的文件目录。';
   }
@@ -827,23 +829,23 @@ function registerIpc(): void {
   ipcMain.handle(
     'context:importFolderOutline',
     async (): Promise<
-      | { ok: true; name: string; entries: number; truncated: boolean; prompt: string }
+      | { ok: true; name: string; folders: number; entries: number; truncated: boolean; prompt: string }
       | { ok: false; reason: 'cancelled'; message: string }
       | { ok: false; reason: FolderOutlineImportFailureReason; message: string }
     > => {
       const result = mainWindow
         ? await dialog.showOpenDialog(mainWindow, {
             title: '导入文件夹目录',
-            properties: ['openDirectory'],
+            properties: ['openDirectory', 'multiSelections'],
           })
         : await dialog.showOpenDialog({
             title: '导入文件夹目录',
-            properties: ['openDirectory'],
+            properties: ['openDirectory', 'multiSelections'],
           });
       if (result.canceled || !result.filePaths[0]) {
         return { ok: false, reason: 'cancelled', message: '已取消导入。' };
       }
-      const imported = await readFolderOutlineForPromptImport(result.filePaths[0]);
+      const imported = await readFolderOutlinesForPromptImport(result.filePaths);
       if (!imported.ok) {
         return { ...imported, message: folderOutlineImportFailureCopy(imported.reason) };
       }

@@ -6,6 +6,8 @@ export const MAX_IMPORTED_TEXT_FILE_CHARS = 20_000;
 export const MAX_IMPORTED_TEXT_FILE_COUNT = 5;
 export const MAX_IMPORTED_TEXT_FILES_CHARS = 40_000;
 export const MAX_IMPORTED_FOLDER_ENTRIES = 200;
+export const MAX_IMPORTED_FOLDER_COUNT = 3;
+export const MAX_IMPORTED_FOLDERS_ENTRIES = 300;
 export const MAX_IMPORTED_FOLDER_DEPTH = 4;
 
 const FOLDER_OUTLINE_SKIP_NAMES = new Set([
@@ -43,12 +45,14 @@ export type TextFileImportResult =
 export type FolderOutlineImportFailureReason =
   | 'missing'
   | 'read-failed'
+  | 'too-many-folders'
   | 'empty';
 
 export type FolderOutlineImportResult =
   | {
       ok: true;
       name: string;
+      folders: number;
       entries: number;
       truncated: boolean;
       prompt: string;
@@ -184,6 +188,76 @@ function formatImportedTextFileBlock(input: { name: string; text: string; trunca
 }
 
 export async function readFolderOutlineForPromptImport(folderPath: string): Promise<FolderOutlineImportResult> {
+  const loaded = await loadFolderOutlineForPromptImport(folderPath, MAX_IMPORTED_FOLDER_ENTRIES);
+  if (!loaded.ok) return loaded;
+  return {
+    ok: true,
+    name: loaded.name,
+    folders: 1,
+    entries: loaded.entries,
+    truncated: loaded.truncated,
+    prompt: formatImportedFolderOutlinePrompt({
+      name: loaded.name,
+      outline: loaded.outline,
+      truncated: loaded.truncated,
+    }),
+  };
+}
+
+export async function readFolderOutlinesForPromptImport(folderPaths: string[]): Promise<FolderOutlineImportResult> {
+  const selected = folderPaths.filter(Boolean);
+  if (selected.length === 0) return { ok: false, reason: 'missing' };
+  if (selected.length === 1) return readFolderOutlineForPromptImport(selected[0]);
+  if (selected.length > MAX_IMPORTED_FOLDER_COUNT) return { ok: false, reason: 'too-many-folders' };
+
+  let remainingEntries = MAX_IMPORTED_FOLDERS_ENTRIES;
+  let truncated = false;
+  let totalEntries = 0;
+  const blocks: string[] = [];
+  for (const folderPath of selected) {
+    const loaded = await loadFolderOutlineForPromptImport(folderPath, remainingEntries);
+    if (!loaded.ok) return loaded;
+    totalEntries += loaded.entries;
+    remainingEntries -= loaded.entries;
+    truncated = truncated || loaded.truncated || remainingEntries <= 0;
+    blocks.push(formatImportedFolderOutlineBlock({
+      name: loaded.name,
+      outline: loaded.outline,
+      truncated: loaded.truncated || remainingEntries <= 0,
+    }));
+    if (remainingEntries <= 0) break;
+  }
+
+  return {
+    ok: true,
+    name: `${selected.length} 个文件夹`,
+    folders: selected.length,
+    entries: totalEntries,
+    truncated,
+    prompt: formatImportedFolderOutlinesPrompt({
+      count: selected.length,
+      outlines: blocks.join('\n\n'),
+      truncated,
+    }),
+  };
+}
+
+async function loadFolderOutlineForPromptImport(
+  folderPath: string,
+  maxEntries: number,
+): Promise<
+  | {
+      ok: true;
+      name: string;
+      entries: number;
+      outline: string;
+      truncated: boolean;
+    }
+  | {
+      ok: false;
+      reason: FolderOutlineImportFailureReason;
+    }
+> {
   let rootStat;
   try {
     rootStat = await stat(folderPath);
@@ -201,6 +275,7 @@ export async function readFolderOutlineForPromptImport(folderPath: string): Prom
       dir: folderPath,
       depth: 0,
       lines,
+      maxEntries,
       markTruncated: () => { truncated = true; },
     });
   } catch {
@@ -213,8 +288,8 @@ export async function readFolderOutlineForPromptImport(folderPath: string): Prom
     ok: true,
     name,
     entries: lines.length,
+    outline: lines.join('\n'),
     truncated,
-    prompt: formatImportedFolderOutlinePrompt({ name, outline: lines.join('\n'), truncated }),
   };
 }
 
@@ -223,10 +298,25 @@ export function formatImportedFolderOutlinePrompt(input: { name: string; outline
     `请结合下面导入的本地文件夹目录 "${input.name}" 回答。`,
     input.truncated ? '目录较大，下面只包含前一部分。' : '',
     '',
-    `<local-folder-outline name="${escapeXmlAttr(input.name)}">`,
+    formatImportedFolderOutlineBlock(input),
+  ].filter(Boolean).join('\n');
+}
+
+export function formatImportedFolderOutlinesPrompt(input: { count: number; outlines: string; truncated: boolean }): string {
+  return [
+    `请结合下面导入的 ${input.count} 个本地文件夹目录回答。`,
+    input.truncated ? '目录较大，下面只包含前一部分。' : '',
+    '',
+    input.outlines,
+  ].filter(Boolean).join('\n');
+}
+
+function formatImportedFolderOutlineBlock(input: { name: string; outline: string; truncated: boolean }): string {
+  return [
+    `<local-folder-outline name="${escapeXmlAttr(input.name)}"${input.truncated ? ' truncated="true"' : ''}>`,
     input.outline,
     '</local-folder-outline>',
-  ].filter(Boolean).join('\n');
+  ].join('\n');
 }
 
 async function scanFolderOutline(input: {
@@ -234,9 +324,10 @@ async function scanFolderOutline(input: {
   dir: string;
   depth: number;
   lines: string[];
+  maxEntries: number;
   markTruncated: () => void;
 }): Promise<void> {
-  if (input.lines.length >= MAX_IMPORTED_FOLDER_ENTRIES || input.depth >= MAX_IMPORTED_FOLDER_DEPTH) {
+  if (input.lines.length >= input.maxEntries || input.depth >= MAX_IMPORTED_FOLDER_DEPTH) {
     input.markTruncated();
     return;
   }
@@ -250,7 +341,7 @@ async function scanFolderOutline(input: {
   });
 
   for (const entry of entries) {
-    if (input.lines.length >= MAX_IMPORTED_FOLDER_ENTRIES) {
+    if (input.lines.length >= input.maxEntries) {
       input.markTruncated();
       return;
     }
@@ -267,6 +358,7 @@ async function scanFolderOutline(input: {
         dir: absolute,
         depth: input.depth + 1,
         lines: input.lines,
+        maxEntries: input.maxEntries,
         markTruncated: input.markTruncated,
       });
     } else if (entry.isFile()) {

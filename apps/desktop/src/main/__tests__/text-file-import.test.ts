@@ -8,8 +8,11 @@ import {
   MAX_IMPORTED_TEXT_FILE_CHARS,
   MAX_IMPORTED_TEXT_FILE_COUNT,
   MAX_IMPORTED_TEXT_FILES_CHARS,
+  MAX_IMPORTED_FOLDER_COUNT,
+  MAX_IMPORTED_FOLDERS_ENTRIES,
   formatImportedTextFilePrompt,
   readFolderOutlineForPromptImport,
+  readFolderOutlinesForPromptImport,
   readTextFileForPromptImport,
   readTextFilesForPromptImport,
 } from '../text-file-import.js';
@@ -112,6 +115,7 @@ describe('text file context import', () => {
     assert.match(mainProcessSource, /properties: \['openFile', 'multiSelections'\]/);
     assert.match(mainSource, /onImportFolderOutline=\{importFolderOutlinePrompt\}/);
     assert.match(mainSource, /onImportFolderOutline=\{importFolderOutlineIntoComposer\}/);
+    assert.match(mainProcessSource, /properties: \['openDirectory', 'multiSelections'\]/);
     assert.match(onboardingSource, /导入文本文件/);
     assert.match(onboardingSource, /导入文件夹目录/);
     assert.match(uiSource, /aria-label="导入文本文件"/);
@@ -131,6 +135,7 @@ describe('text file context import', () => {
       assert.equal(result.ok, true);
       if (!result.ok) return;
       assert.equal(result.entries, 3);
+      assert.equal(result.folders, 1);
       assert.equal(result.truncated, false);
       assert.match(result.prompt, /<local-folder-outline name="maka-text-import-/);
       assert.match(result.prompt, /- src\//);
@@ -138,6 +143,62 @@ describe('text file context import', () => {
       assert.match(result.prompt, /- README\.md/);
       assert.doesNotMatch(result.prompt, /node_modules/);
       assert.doesNotMatch(result.prompt, new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    });
+  });
+
+  it('formats multiple selected folders into one bounded outline prompt', async () => {
+    await withTempDir(async (root) => {
+      const app = join(root, 'app');
+      const docs = join(root, 'docs');
+      await mkdir(app);
+      await mkdir(docs);
+      await writeFile(join(app, 'main.ts'), 'export {};\n', 'utf8');
+      await writeFile(join(docs, 'readme.md'), '# Readme\n', 'utf8');
+
+      const result = await readFolderOutlinesForPromptImport([app, docs]);
+
+      assert.equal(result.ok, true);
+      if (!result.ok) return;
+      assert.equal(result.name, '2 个文件夹');
+      assert.equal(result.folders, 2);
+      assert.equal(result.entries, 2);
+      assert.equal(result.truncated, false);
+      assert.match(result.prompt, /请结合下面导入的 2 个本地文件夹目录回答。/);
+      assert.match(result.prompt, /<local-folder-outline name="app">/);
+      assert.match(result.prompt, /<local-folder-outline name="docs">/);
+      assert.doesNotMatch(result.prompt, new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    });
+  });
+
+  it('caps multi-folder imports by folder count and aggregate entries', async () => {
+    await withTempDir(async (root) => {
+      const many = [];
+      for (let index = 0; index < MAX_IMPORTED_FOLDER_COUNT + 1; index += 1) {
+        const folder = join(root, `folder-${index}`);
+        many.push(folder);
+        await mkdir(folder);
+        await writeFile(join(folder, 'index.ts'), 'export {};\n', 'utf8');
+      }
+      assert.deepEqual(await readFolderOutlinesForPromptImport(many), { ok: false, reason: 'too-many-folders' });
+
+      const first = join(root, 'first');
+      const second = join(root, 'second');
+      await mkdir(first);
+      await mkdir(second);
+      for (let index = 0; index < MAX_IMPORTED_FOLDERS_ENTRIES - 1; index += 1) {
+        await writeFile(join(first, `file-${index}.txt`), 'x\n', 'utf8');
+      }
+      await writeFile(join(second, 'extra.txt'), 'x\n', 'utf8');
+      await writeFile(join(second, 'omitted.txt'), 'x\n', 'utf8');
+
+      const result = await readFolderOutlinesForPromptImport([first, second]);
+
+      assert.equal(result.ok, true);
+      if (!result.ok) return;
+      assert.equal(result.truncated, true);
+      assert.equal(result.entries, MAX_IMPORTED_FOLDERS_ENTRIES);
+      assert.match(result.prompt, /目录较大/);
+      assert.match(result.prompt, /<local-folder-outline name="second" truncated="true">/);
     });
   });
 });

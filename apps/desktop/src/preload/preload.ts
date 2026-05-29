@@ -113,8 +113,8 @@ export type TextFileImportResult =
   | { ok: false; reason: 'cancelled' | 'missing' | 'too-large' | 'binary' | 'too-many-files' | 'read-failed'; message: string };
 
 export type FolderOutlineImportResult =
-  | { ok: true; name: string; entries: number; truncated: boolean; prompt: string }
-  | { ok: false; reason: 'cancelled' | 'missing' | 'read-failed' | 'empty'; message: string };
+  | { ok: true; name: string; folders: number; entries: number; truncated: boolean; prompt: string }
+  | { ok: false; reason: 'cancelled' | 'missing' | 'read-failed' | 'too-many-folders' | 'empty'; message: string };
 
 contextBridge.exposeInMainWorld('maka', {
   sessions: {
