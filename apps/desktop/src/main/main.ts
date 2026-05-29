@@ -21,7 +21,9 @@ import {
   botConversationKey,
   botDisplayLabel,
   isBotDeliveryProvider,
+  isPlaintextHelpCommand,
   isPlaintextResetCommand,
+  plaintextHelpReply,
   formatBotMessageForSession,
   formatPlanReminderDeliveryMessage,
 } from '@maka/core';
@@ -1845,6 +1847,21 @@ async function processBotIncomingMessage(
   message: BotIncomingMessage,
   text: string,
 ): Promise<void> {
+  // PR-BOT-PLAINTEXT-HELP-COMMAND-0: DM-only quick "what can I do here?"
+  // hint. Lands BEFORE the reset path so a user typing "help" gets a
+  // capability list, not a (silent) reset.
+  if (isPlaintextHelpCommand({ text, isGroup: message.isGroup })) {
+    const replyOptions = message.sourceMessageId
+      ? { replyToMessageId: message.sourceMessageId }
+      : undefined;
+    await botRegistry.sendMessage(
+      message.platform,
+      message.chatId,
+      plaintextHelpReply(),
+      replyOptions,
+    ).catch(() => null);
+    return;
+  }
   // PR-BOT-PLAINTEXT-RESET-COMMAND-0 (Hermes deep-dive): in DMs, a bare
   // "restart" / "重置" / etc. drops the conversation/session binding so
   // the next message starts a fresh thread. DM-only because the
