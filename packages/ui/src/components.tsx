@@ -1814,7 +1814,7 @@ export function SearchModal(props: {
         setResults([]);
         setError({
           reason: 'provider_error',
-          message: err instanceof Error ? err.message : '搜索暂时不可用，请稍后重试。',
+          message: err instanceof Error ? err.message : '搜索服务需要刷新，请重试。',
         });
         setActiveResultIndex(-1);
       } finally {
