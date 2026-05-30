@@ -5502,6 +5502,9 @@ function ExploreAgentPreview(props: {
   const limitReasons = Array.isArray(result.limitReasons)
     ? result.limitReasons.map(presentExploreAgentLimitReason).filter(Boolean).join('、')
     : '';
+  const filesDiscovered = typeof result.filesDiscovered === 'number' && Number.isFinite(result.filesDiscovered)
+    ? Math.max(0, Math.floor(result.filesDiscovered))
+    : result.filesInspected;
   const skippedSummary = result.sensitiveFilesSkipped && result.sensitiveFilesSkipped > 0
     ? `跳过 ${result.filesSkipped} 个（含敏感 ${result.sensitiveFilesSkipped} 个）`
     : `跳过 ${result.filesSkipped} 个`;
@@ -5514,6 +5517,7 @@ function ExploreAgentPreview(props: {
       `摘要：${resultSummary}`,
       `范围：${roots}`,
       `查询：${queries}`,
+      `发现/读取：${filesDiscovered} / ${result.filesInspected} 个文件`,
       ignoredPaths ? `忽略：${ignoredPaths}` : '',
       stoppingCondition ? `停止条件：${stoppingCondition}` : '',
       limitReasons ? `预算边界：${limitReasons}` : '',
@@ -5587,7 +5591,7 @@ function ExploreAgentPreview(props: {
       <header className="maka-explore-agent-head">
         <strong>{redactSecrets(result.objective || '只读探索')}</strong>
         <small>
-          {status} · 读 {result.filesInspected} 个文件 · {skippedSummary} · {formatBytes(result.bytesRead)}
+          {status} · 发现/读 {filesDiscovered} / {result.filesInspected} 个文件 · {skippedSummary} · {formatBytes(result.bytesRead)}
           {limitReasons ? ' · 受预算限制' : ''}
           {duration ? ` · 耗时 ${duration}` : ''}
         </small>
@@ -5617,6 +5621,10 @@ function ExploreAgentPreview(props: {
         <div>
           <dt>终态</dt>
           <dd>{terminalStatus}</dd>
+        </div>
+        <div>
+          <dt>发现/读</dt>
+          <dd>{filesDiscovered} / {result.filesInspected} 个文件</dd>
         </div>
         <div>
           <dt>范围</dt>

@@ -193,6 +193,7 @@ export type ToolResultContent =
       ignoredPaths?: string[];
       stoppingCondition?: string;
       limitReasons?: ReadonlyArray<'candidate_budget' | 'file_budget' | 'match_budget' | 'byte_budget'>;
+      filesDiscovered?: number;
       filesInspected: number;
       filesSkipped: number;
       sensitiveFilesSkipped?: number;

@@ -137,6 +137,7 @@ export interface ExploreAgentResult {
   ignoredPaths: string[];
   stoppingCondition: string;
   limitReasons: ExploreAgentLimitReason[];
+  filesDiscovered: number;
   filesInspected: number;
   filesSkipped: number;
   sensitiveFilesSkipped: number;
@@ -355,6 +356,7 @@ export async function runReadOnlyExplore(input: {
         ignoredPaths,
         stoppingCondition,
         limitReasons,
+        filesDiscovered: files.length,
         filesInspected: inspected,
         filesSkipped,
         sensitiveFilesSkipped,
@@ -402,6 +404,7 @@ export async function runReadOnlyExplore(input: {
         ignoredPaths,
         stoppingCondition,
         limitReasons,
+        filesDiscovered: files.length,
         filesInspected: inspected,
         filesSkipped,
         sensitiveFilesSkipped,
@@ -458,6 +461,7 @@ export async function runReadOnlyExplore(input: {
   const completedAt = Date.now();
   const durationMs = Math.max(0, completedAt - startedAt);
   const summary = buildResultSummary({
+    filesDiscovered: files.length,
     filesInspected: inspected,
     matches: matches.length,
     evidence: evidence.length,
@@ -471,6 +475,7 @@ export async function runReadOnlyExplore(input: {
     queryTerms,
     stoppingCondition,
     limitReasons,
+    filesDiscovered: files.length,
     filesInspected: inspected,
     filesSkipped,
     sensitiveFilesSkipped,
@@ -494,6 +499,7 @@ export async function runReadOnlyExplore(input: {
     ignoredPaths,
     stoppingCondition,
     limitReasons,
+    filesDiscovered: files.length,
     filesInspected: inspected,
     filesSkipped,
     sensitiveFilesSkipped,
@@ -819,6 +825,7 @@ function buildResearchReport(input: {
   queryTerms: string[];
   stoppingCondition: string;
   limitReasons: ExploreAgentLimitReason[];
+  filesDiscovered: number;
   filesInspected: number;
   filesSkipped: number;
   sensitiveFilesSkipped: number;
@@ -836,7 +843,7 @@ function buildResearchReport(input: {
     `查询：${input.queryTerms.length > 0 ? input.queryTerms.join(', ') : '未指定'}`,
     ...(input.stoppingCondition ? [`停止条件：${input.stoppingCondition}`] : []),
     ...(input.limitReasons.length > 0 ? [`预算边界：${input.limitReasons.map(presentExploreAgentLimitReason).join('、')}`] : []),
-    `读取：${input.filesInspected} 个文件，跳过 ${input.filesSkipped} 个${input.sensitiveFilesSkipped > 0 ? `（含敏感 ${input.sensitiveFilesSkipped} 个）` : ''}，${formatReportBytes(input.bytesRead)}，耗时 ${formatReportDuration(input.durationMs)}`,
+    `发现/读取：${input.filesDiscovered} / ${input.filesInspected} 个文件，跳过 ${input.filesSkipped} 个${input.sensitiveFilesSkipped > 0 ? `（含敏感 ${input.sensitiveFilesSkipped} 个）` : ''}，${formatReportBytes(input.bytesRead)}，耗时 ${formatReportDuration(input.durationMs)}`,
   ];
 
   if (input.evidence.length > 0) {
@@ -886,6 +893,7 @@ function presentExploreAgentTerminalStatus(status: ExploreAgentTerminalStatus): 
 }
 
 function buildResultSummary(input: {
+  filesDiscovered: number;
   filesInspected: number;
   matches: number;
   evidence: number;
@@ -893,6 +901,7 @@ function buildResultSummary(input: {
   durationMs: number;
 }): string {
   return [
+    `发现 ${input.filesDiscovered} 个候选`,
     `读取 ${input.filesInspected} 个文件`,
     `命中 ${input.matches} 处`,
     `证据 ${input.evidence} 个`,
@@ -990,6 +999,7 @@ function failure(
     ignoredPaths,
     stoppingCondition,
     limitReasons: [],
+    filesDiscovered: 0,
     filesInspected: 0,
     filesSkipped: 0,
     sensitiveFilesSkipped: 0,
@@ -1017,6 +1027,7 @@ function partialAbortFailure(input: {
   ignoredPaths: string[];
   stoppingCondition: string;
   limitReasons: ExploreAgentLimitReason[];
+  filesDiscovered: number;
   filesInspected: number;
   filesSkipped: number;
   sensitiveFilesSkipped: number;
@@ -1052,6 +1063,7 @@ function partialAbortFailure(input: {
     '只读探索已取消；以下为取消前已读取的部分结果，不代表完整结论。',
   ];
   const summary = `已取消：${buildResultSummary({
+    filesDiscovered: input.filesDiscovered,
     filesInspected: input.filesInspected,
     matches: input.matches.length,
     evidence: evidence.length,
@@ -1064,6 +1076,7 @@ function partialAbortFailure(input: {
     roots: input.roots,
     queryTerms: input.queryTerms,
     stoppingCondition: input.stoppingCondition,
+    filesDiscovered: input.filesDiscovered,
     filesInspected: input.filesInspected,
     filesSkipped: input.filesSkipped,
     sensitiveFilesSkipped: input.sensitiveFilesSkipped,
@@ -1087,6 +1100,7 @@ function partialAbortFailure(input: {
     ignoredPaths: input.ignoredPaths,
     stoppingCondition: input.stoppingCondition,
     limitReasons: [...input.limitReasons],
+    filesDiscovered: input.filesDiscovered,
     filesInspected: input.filesInspected,
     filesSkipped: input.filesSkipped,
     sensitiveFilesSkipped: input.sensitiveFilesSkipped,

@@ -52,16 +52,18 @@ describe('ExploreAgent read-only worker', () => {
       assert.ok(result.completedAt >= result.startedAt);
       assert.ok(result.durationMs >= 0);
       assert.ok(result.filesInspected >= 2);
+      assert.ok(result.filesDiscovered >= result.filesInspected);
       assert.ok(result.matches.some((match) => match.path === 'src/permission.ts' && match.query === 'subagent'));
       assert.ok(result.candidateFiles.some((file) => file.path === 'src/permission.ts'));
       assert.equal(result.sensitiveFilesSkipped, 0);
       assert.ok(result.evidence.some((item) => item.type === 'match' && item.path === 'src/permission.ts' && item.line === 2));
-      assert.match(result.summary, /读取 \d+ 个文件 · 命中 \d+ 处 · 证据 \d+ 个 · 候选 \d+ 个 · 耗时 /);
+      assert.match(result.summary, /发现 \d+ 个候选 · 读取 \d+ 个文件 · 命中 \d+ 处 · 证据 \d+ 个 · 候选 \d+ 个 · 耗时 /);
       assert.ok(result.recentEvents.some((event) => event.type === 'started' && /准备范围/.test(event.message)));
       assert.ok(result.recentEvents.some((event) => event.type === 'completed' && /完成/.test(event.message)));
       assert.ok(result.recentEvents.every((event) => typeof event.at === 'number' && !JSON.stringify(event).includes(workspaceRoot)));
       assert.match(result.report, /目标：study permission policy/);
       assert.match(result.report, /状态：完成，已找到可交接证据。/);
+      assert.match(result.report, /发现\/读取：\d+ \/ \d+ 个文件/);
       assert.match(result.report, /证据锚点：/);
       assert.match(result.report, /src\/permission\.ts:2/);
       assert.match(result.report, /命中片段：/);
@@ -115,6 +117,7 @@ describe('ExploreAgent read-only worker', () => {
     assert.equal(result.ok, false);
     assert.equal(result.reason, 'invalid_root');
     assert.equal(result.terminalStatus, 'failed');
+    assert.equal(result.filesDiscovered, 0);
     assert.equal(result.message, '会话工作目录不可读取。');
     assert.equal(result.summary, '未完成：会话工作目录不可读取。');
     assert.ok(result.recentEvents.some((event) => event.type === 'failed' && /工作目录不可读取/.test(event.message)));
@@ -275,6 +278,7 @@ describe('ExploreAgent read-only worker', () => {
       assert.equal(result.ok, false);
       assert.equal(result.reason, 'aborted');
       assert.equal(result.terminalStatus, 'canceled');
+      assert.equal(result.filesDiscovered, 0);
       assert.equal(result.message, '只读探索已取消。');
       assert.ok(result.recentEvents.some((event) => event.type === 'aborted' && /已取消/.test(event.message)));
       assert.equal(result.filesInspected, 0);
@@ -312,9 +316,10 @@ describe('ExploreAgent read-only worker', () => {
       assert.equal(result.terminalStatus, 'canceled_partial');
       assert.equal(result.message, '只读探索已取消，已保留取消前的部分结果。');
       assert.equal(result.filesInspected, 10);
+      assert.ok(result.filesDiscovered >= result.filesInspected);
       assert.ok(result.matches.length > 0);
       assert.ok(result.evidence.length > 0);
-      assert.match(result.summary, /^已取消：读取 10 个文件/);
+      assert.match(result.summary, /^已取消：发现 \d+ 个候选 · 读取 10 个文件/);
       assert.match(result.report, /状态：已取消，以下为取消前部分结果。/);
       assert.match(result.report, /命中片段：/);
       assert.ok(result.notes.some((note) => /取消前已读取的部分结果/.test(note)));
@@ -476,6 +481,7 @@ describe('ExploreAgent read-only worker', () => {
     assert.match(events, /kind: 'explore_agent'/);
     assert.match(events, /partial\?: boolean/);
     assert.match(events, /terminalStatus\?: 'completed'/);
+    assert.match(events, /filesDiscovered\?: number/);
     assert.match(events, /ignoredPaths\?: string/);
     assert.match(events, /stoppingCondition\?: string/);
     assert.match(events, /limitReasons\?: ReadonlyArray/);
@@ -499,6 +505,9 @@ describe('ExploreAgent read-only worker', () => {
     assert.match(previewBlock, /terminalStatus/);
     assert.match(previewBlock, /终态：/);
     assert.match(previewBlock, /完成，无证据/);
+    assert.match(previewBlock, /filesDiscovered/);
+    assert.match(previewBlock, /发现\/读取：/);
+    assert.match(previewBlock, /发现\/读/);
     assert.match(previewBlock, /summaryText/);
     assert.match(previewBlock, /范围：/);
     assert.match(previewBlock, /查询：/);
