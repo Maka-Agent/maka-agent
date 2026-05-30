@@ -107,7 +107,7 @@ export interface WorkspaceInstructionsState {
 
 export type TextFileImportResult =
   | { ok: true; name: string; bytes: number; files: number; truncated: boolean; prompt: string }
-  | { ok: false; reason: 'cancelled' | 'missing' | 'too-large' | 'binary' | 'too-many-files' | 'unsupported-type' | 'read-failed'; message: string };
+  | { ok: false; reason: 'cancelled' | 'missing' | 'too-large' | 'binary' | 'too-many-files' | 'office-file' | 'unsupported-type' | 'read-failed' | 'officecli_missing' | 'officecli_timeout' | 'officecli_failed'; message: string };
 
 export type FolderOutlineImportResult =
   | { ok: true; name: string; folders: number; entries: number; truncated: boolean; prompt: string }

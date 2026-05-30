@@ -37,7 +37,15 @@ describe('dropped text file import preflight', () => {
     );
     assert.deepEqual(
       preflightDroppedTextFilesForPromptImport([{ name: 'sheet.xlsx', size: 128 }]),
-      { ok: false, reason: 'unsupported-type' },
+      { ok: false, reason: 'office-file' },
+    );
+    assert.deepEqual(
+      preflightDroppedTextFilesForPromptImport([{
+        name: 'unknown',
+        type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        size: 128,
+      }]),
+      { ok: false, reason: 'office-file' },
     );
   });
 

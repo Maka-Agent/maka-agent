@@ -12,6 +12,7 @@ export type TextFileImportPreflightFailureReason =
   | 'missing'
   | 'too-large'
   | 'too-many-files'
+  | 'office-file'
   | 'unsupported-type';
 
 export type TextFileImportPreflightResult =
@@ -32,29 +33,35 @@ export function preflightDroppedTextFilesForPromptImport(files: readonly Dropped
   for (const file of files) {
     const size = Number.isFinite(file.size) ? Math.max(0, Math.floor(file.size)) : 0;
     if (size > MAX_IMPORTED_TEXT_FILE_BYTES) return { ok: false, reason: 'too-large' };
-    if (!isDroppedTextFileImportCompatible(file)) return { ok: false, reason: 'unsupported-type' };
+    const incompatibleReason = droppedTextFileIncompatibleReason(file);
+    if (incompatibleReason) return { ok: false, reason: incompatibleReason };
   }
 
   return { ok: true };
 }
 
 export function isDroppedTextFileImportCompatible(file: DroppedTextFilePreflightInput): boolean {
+  return droppedTextFileIncompatibleReason(file) === null;
+}
+
+function droppedTextFileIncompatibleReason(file: DroppedTextFilePreflightInput): TextFileImportPreflightFailureReason | null {
   const mime = normalizeMime(file.type);
   const suffix = fileSuffix(file.name);
   const basename = fileBasename(file.name);
 
-  if (isTextMime(mime)) return true;
-  if (isKnownBinaryMime(mime)) return false;
-  if (TEXT_FILE_SUFFIXES.has(suffix) || TEXT_FILE_BASENAMES.has(basename)) return true;
-  if (BINARY_FILE_SUFFIXES.has(suffix)) return false;
+  if (isTextMime(mime)) return null;
+  if (OFFICE_FILE_SUFFIXES.has(suffix) || isOfficeMime(mime)) return 'office-file';
+  if (isKnownBinaryMime(mime)) return 'unsupported-type';
+  if (TEXT_FILE_SUFFIXES.has(suffix) || TEXT_FILE_BASENAMES.has(basename)) return null;
+  if (BINARY_FILE_SUFFIXES.has(suffix)) return 'unsupported-type';
 
   if (file.sampleBytes && file.sampleBytes.length > 0) {
-    return looksTextLike(file.sampleBytes);
+    return looksTextLike(file.sampleBytes) ? null : 'unsupported-type';
   }
 
   // Keep extensionless / unknown files importable from explicit picker paths;
   // the main process still performs full binary sniffing after reading.
-  return true;
+  return null;
 }
 
 function normalizeMime(value: string | undefined): string {
@@ -72,6 +79,10 @@ function isKnownBinaryMime(mime: string): boolean {
   if (!mime || mime === 'application/octet-stream') return false;
   if (mime.startsWith('image/') || mime.startsWith('audio/') || mime.startsWith('video/')) return true;
   return BINARY_MIME_TYPES.has(mime);
+}
+
+function isOfficeMime(mime: string): boolean {
+  return OFFICE_MIME_TYPES.has(mime);
 }
 
 function fileBasename(name: string | undefined): string {
@@ -114,6 +125,15 @@ const BINARY_MIME_TYPES = new Set([
   'application/x-gzip',
   'application/gzip',
   'application/x-rar-compressed',
+  'application/vnd.ms-excel',
+  'application/vnd.ms-powerpoint',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+]);
+
+const OFFICE_MIME_TYPES = new Set([
   'application/vnd.ms-excel',
   'application/vnd.ms-powerpoint',
   'application/msword',
@@ -212,4 +232,13 @@ const BINARY_FILE_SUFFIXES = new Set([
   'xls',
   'xlsx',
   'zip',
+]);
+
+const OFFICE_FILE_SUFFIXES = new Set([
+  'doc',
+  'docx',
+  'ppt',
+  'pptx',
+  'xls',
+  'xlsx',
 ]);

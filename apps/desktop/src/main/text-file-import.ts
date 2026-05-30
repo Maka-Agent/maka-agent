@@ -49,6 +49,7 @@ export type TextFileImportFailureReason =
   | 'too-large'
   | 'binary'
   | 'too-many-files'
+  | 'office-file'
   | 'unsupported-type'
   | 'read-failed'
   | 'officecli_missing'

@@ -243,6 +243,10 @@ describe('text file context import', () => {
       readDroppedTextFilesForPromptImport([{ name: 'photo.png', size: 8, type: 'image/png', text: 'PNG' }]),
       { ok: false, reason: 'unsupported-type' },
     );
+    assert.deepEqual(
+      readDroppedTextFilesForPromptImport([{ name: 'deck.pptx', size: 8, text: 'not really a deck' }]),
+      { ok: false, reason: 'office-file' },
+    );
   });
 
   it('rejects oversize and binary-looking files', async () => {
@@ -273,6 +277,8 @@ describe('text file context import', () => {
     assert.match(main, /\{ name: 'Office', extensions: \['docx', 'xlsx', 'pptx'\] \}/);
     assert.match(importer, /local-office-document/);
     assert.match(importer, /\['view', filePath, 'text'\]/);
+    assert.match(main, /拖放或粘贴拿不到可授权的本地路径/);
+    assert.match(renderer, /拖放或粘贴拿不到可授权的本地路径/);
     assert.match(main, /Office 文档工具或对应技能/);
     assert.match(renderer, /Office 文档工具或对应技能/);
     assert.doesNotMatch(main, /Office 文件请先转成文本/);
