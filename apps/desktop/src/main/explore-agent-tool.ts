@@ -129,6 +129,7 @@ export interface ExploreAgentResult {
   kind: 'explore_agent';
   ok: boolean;
   partial: boolean;
+  terminalStatus: ExploreAgentTerminalStatus;
   mode: 'read_only';
   objective: string;
   roots: string[];
@@ -155,6 +156,7 @@ export interface ExploreAgentResult {
   message?: string;
 }
 
+type ExploreAgentTerminalStatus = 'completed' | 'completed_empty' | 'failed' | 'canceled' | 'canceled_partial';
 type ExploreAgentLimitReason = 'candidate_budget' | 'file_budget' | 'match_budget' | 'byte_budget';
 
 export interface ExploreAgentEvent {
@@ -441,6 +443,7 @@ export async function runReadOnlyExplore(input: {
     .slice(0, 20);
 
   const evidence = buildEvidenceAnchors(matches, candidateFiles);
+  const terminalStatus: ExploreAgentTerminalStatus = evidence.length > 0 ? 'completed' : 'completed_empty';
   if (matches.length === 0) notes.push('没有找到内容命中；候选文件可作为下一步阅读清单。');
   if (sensitiveFilesSkipped > 0) notes.push(`已跳过 ${sensitiveFilesSkipped} 个疑似本地凭据/密钥文件，只报告数量不读取内容。`);
   if (matches.length >= maxMatches) {
@@ -462,6 +465,7 @@ export async function runReadOnlyExplore(input: {
     durationMs,
   });
   const report = buildResearchReport({
+    statusLine: presentExploreAgentTerminalStatus(terminalStatus),
     objective,
     roots: resolvedRoots.map((root) => root.rel),
     queryTerms,
@@ -482,6 +486,7 @@ export async function runReadOnlyExplore(input: {
     kind: 'explore_agent',
     ok: true,
     partial: false,
+    terminalStatus,
     mode: 'read_only',
     objective,
     roots: resolvedRoots.map((root) => root.rel),
@@ -865,6 +870,21 @@ function buildResearchReport(input: {
   return capReport(lines.join('\n'));
 }
 
+function presentExploreAgentTerminalStatus(status: ExploreAgentTerminalStatus): string {
+  switch (status) {
+    case 'completed':
+      return '完成，已找到可交接证据。';
+    case 'completed_empty':
+      return '完成，但没有找到可交接证据。';
+    case 'failed':
+      return '失败，未产生结果。';
+    case 'canceled':
+      return '已取消，未产生结果。';
+    case 'canceled_partial':
+      return '已取消，以下为取消前部分结果。';
+  }
+}
+
 function buildResultSummary(input: {
   filesInspected: number;
   matches: number;
@@ -962,6 +982,7 @@ function failure(
     kind: 'explore_agent',
     ok: false,
     partial: false,
+    terminalStatus: reason === 'aborted' ? 'canceled' : 'failed',
     mode: 'read_only',
     objective,
     roots,
@@ -1024,6 +1045,7 @@ function partialAbortFailure(input: {
     .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
     .slice(0, 20);
   const evidence = buildEvidenceAnchors(input.matches, candidateFiles);
+  const terminalStatus: ExploreAgentTerminalStatus = 'canceled_partial';
   const durationMs = Math.max(0, completedAt - input.startedAt);
   const notes = [
     ...input.notes,
@@ -1037,7 +1059,7 @@ function partialAbortFailure(input: {
     durationMs,
   })}`;
   const report = buildResearchReport({
-    statusLine: '已取消，以下为取消前部分结果。',
+    statusLine: presentExploreAgentTerminalStatus(terminalStatus),
     objective: input.objective,
     roots: input.roots,
     queryTerms: input.queryTerms,
@@ -1057,6 +1079,7 @@ function partialAbortFailure(input: {
     kind: 'explore_agent',
     ok: false,
     partial: true,
+    terminalStatus,
     mode: 'read_only',
     objective: input.objective,
     roots: input.roots,

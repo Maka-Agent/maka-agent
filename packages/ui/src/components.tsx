@@ -5483,6 +5483,7 @@ function ExploreAgentPreview(props: {
   const evidence = (result.evidence ?? []).slice(0, 6);
   const resultSummary = typeof result.summary === 'string' ? result.summary.trim() : '';
   const reportText = typeof result.report === 'string' ? result.report.trim() : '';
+  const terminalStatus = presentExploreAgentTerminalStatus(result.terminalStatus, result.ok, result.partial === true, result.reason);
   const status = result.ok
     ? '已完成'
     : result.reason === 'aborted' && result.partial === true
@@ -5508,6 +5509,7 @@ function ExploreAgentPreview(props: {
   const summaryText = resultSummary.length > 0
     ? [
       `状态：${status}`,
+      `终态：${terminalStatus}`,
       `目标：${result.objective || '只读探索'}`,
       `摘要：${resultSummary}`,
       `范围：${roots}`,
@@ -5525,6 +5527,7 @@ function ExploreAgentPreview(props: {
   const evidenceText = evidence.length > 0
     ? [
       `状态：${status}`,
+      `终态：${terminalStatus}`,
       `目标：${result.objective || '只读探索'}`,
       `证据：${evidence.length}`,
       ...evidence.map((item) => [
@@ -5611,6 +5614,10 @@ function ExploreAgentPreview(props: {
         </div>
       )}
       <dl className="maka-explore-agent-meta">
+        <div>
+          <dt>终态</dt>
+          <dd>{terminalStatus}</dd>
+        </div>
         <div>
           <dt>范围</dt>
           <dd>{redactSecrets(roots)}</dd>
@@ -5764,6 +5771,33 @@ function ExploreAgentPreview(props: {
       )}
     </div>
   );
+}
+
+function presentExploreAgentTerminalStatus(
+  terminalStatus: Extract<ToolResultContent, { kind: 'explore_agent' }>['terminalStatus'],
+  ok: boolean,
+  partial: boolean,
+  reason: Extract<ToolResultContent, { kind: 'explore_agent' }>['reason'],
+): string {
+  switch (terminalStatus) {
+    case 'completed':
+      return '完成，有证据';
+    case 'completed_empty':
+      return '完成，无证据';
+    case 'failed':
+      return '失败';
+    case 'canceled':
+      return '已取消';
+    case 'canceled_partial':
+      return '已取消，有部分结果';
+    case undefined:
+      if (reason === 'aborted' && partial) return '已取消，有部分结果';
+      if (reason === 'aborted') return '已取消';
+      if (!ok) return '失败';
+      return '完成';
+    default:
+      return '未知终态';
+  }
 }
 
 function presentExploreAgentReason(

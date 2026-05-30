@@ -41,6 +41,7 @@ describe('ExploreAgent read-only worker', () => {
       assert.equal(result.ok, true);
       assert.equal(result.kind, 'explore_agent');
       assert.equal(result.mode, 'read_only');
+      assert.equal(result.terminalStatus, 'completed');
       assert.deepEqual(result.roots, ['.']);
       assert.deepEqual(result.ignoredPaths, []);
       assert.equal(result.stoppingCondition, '');
@@ -60,6 +61,7 @@ describe('ExploreAgent read-only worker', () => {
       assert.ok(result.recentEvents.some((event) => event.type === 'completed' && /完成/.test(event.message)));
       assert.ok(result.recentEvents.every((event) => typeof event.at === 'number' && !JSON.stringify(event).includes(workspaceRoot)));
       assert.match(result.report, /目标：study permission policy/);
+      assert.match(result.report, /状态：完成，已找到可交接证据。/);
       assert.match(result.report, /证据锚点：/);
       assert.match(result.report, /src\/permission\.ts:2/);
       assert.match(result.report, /命中片段：/);
@@ -112,6 +114,7 @@ describe('ExploreAgent read-only worker', () => {
 
     assert.equal(result.ok, false);
     assert.equal(result.reason, 'invalid_root');
+    assert.equal(result.terminalStatus, 'failed');
     assert.equal(result.message, '会话工作目录不可读取。');
     assert.equal(result.summary, '未完成：会话工作目录不可读取。');
     assert.ok(result.recentEvents.some((event) => event.type === 'failed' && /工作目录不可读取/.test(event.message)));
@@ -271,6 +274,7 @@ describe('ExploreAgent read-only worker', () => {
 
       assert.equal(result.ok, false);
       assert.equal(result.reason, 'aborted');
+      assert.equal(result.terminalStatus, 'canceled');
       assert.equal(result.message, '只读探索已取消。');
       assert.ok(result.recentEvents.some((event) => event.type === 'aborted' && /已取消/.test(event.message)));
       assert.equal(result.filesInspected, 0);
@@ -305,6 +309,7 @@ describe('ExploreAgent read-only worker', () => {
       assert.equal(result.ok, false);
       assert.equal(result.reason, 'aborted');
       assert.equal(result.partial, true);
+      assert.equal(result.terminalStatus, 'canceled_partial');
       assert.equal(result.message, '只读探索已取消，已保留取消前的部分结果。');
       assert.equal(result.filesInspected, 10);
       assert.ok(result.matches.length > 0);
@@ -421,7 +426,9 @@ describe('ExploreAgent read-only worker', () => {
       });
 
       assert.equal(result.ok, true);
+      assert.equal(result.terminalStatus, 'completed_empty');
       assert.ok(result.notes.some((note) => /没有找到内容命中/.test(note)));
+      assert.match(result.report, /状态：完成，但没有找到可交接证据。/);
       assert.equal(
         result.notes.some((note) => /Read-only worker|Search budget|No content matches|Candidate discovery|Project landmark|Total byte budget|Scope /.test(note)),
         false,
@@ -468,6 +475,7 @@ describe('ExploreAgent read-only worker', () => {
 
     assert.match(events, /kind: 'explore_agent'/);
     assert.match(events, /partial\?: boolean/);
+    assert.match(events, /terminalStatus\?: 'completed'/);
     assert.match(events, /ignoredPaths\?: string/);
     assert.match(events, /stoppingCondition\?: string/);
     assert.match(events, /limitReasons\?: ReadonlyArray/);
@@ -488,6 +496,9 @@ describe('ExploreAgent read-only worker', () => {
     assert.match(previewBlock, /研究报告/);
     assert.match(previewBlock, /耗时/);
     assert.match(previewBlock, /resultSummary/);
+    assert.match(previewBlock, /terminalStatus/);
+    assert.match(previewBlock, /终态：/);
+    assert.match(previewBlock, /完成，无证据/);
     assert.match(previewBlock, /summaryText/);
     assert.match(previewBlock, /范围：/);
     assert.match(previewBlock, /查询：/);

@@ -185,6 +185,7 @@ export type ToolResultContent =
       kind: 'explore_agent';
       ok: boolean;
       partial?: boolean;
+      terminalStatus?: 'completed' | 'completed_empty' | 'failed' | 'canceled' | 'canceled_partial';
       mode: 'read_only';
       objective: string;
       roots: string[];
