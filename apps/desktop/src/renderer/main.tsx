@@ -2432,7 +2432,7 @@ function AppShell() {
               try {
                 const summary = await dailyReviewBridge.fetchDay(0, 1);
                 const markdown = formatDailyReviewMarkdown(summary, '今天');
-                composerRef.current?.setText(markdown);
+                composerRef.current?.appendText(markdown);
               } catch (err) {
                 toastApi.error(
                   '粘贴失败',

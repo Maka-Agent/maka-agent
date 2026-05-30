@@ -18,4 +18,13 @@ describe('Daily Review copy feedback contract', () => {
     assert.match(main, /toastApi\.success\(\s*`已复制\$\{label\}回顾`/);
     assert.match(main, /toastApi\.error\('复制失败'/);
   });
+
+  it('appends Daily Review markdown to the composer instead of replacing the existing draft', async () => {
+    const main = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/renderer/main.tsx'), 'utf8');
+    const handlerBlock = main.match(/onPasteTodayDailyReviewIntoComposer:\s*async \(\) => \{[\s\S]*?^\s*},/m)?.[0] ?? '';
+
+    assert.match(handlerBlock, /formatDailyReviewMarkdown\(summary,\s*['"]今天['"]\)/);
+    assert.match(handlerBlock, /composerRef\.current\?\.appendText\(markdown\)/);
+    assert.doesNotMatch(handlerBlock, /composerRef\.current\?\.setText\(markdown\)/);
+  });
 });
