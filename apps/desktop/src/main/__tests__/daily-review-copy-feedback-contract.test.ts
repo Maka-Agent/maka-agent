@@ -25,6 +25,7 @@ describe('Daily Review copy feedback contract', () => {
 
     assert.match(handlerBlock, /formatDailyReviewMarkdown\(summary,\s*['"]今天['"]\)/);
     assert.match(handlerBlock, /composerRef\.current\?\.appendText\(markdown\)/);
+    assert.match(handlerBlock, /toastApi\.success\(\s*['"]已追加今日回顾到输入框['"]/);
     assert.doesNotMatch(handlerBlock, /composerRef\.current\?\.setText\(markdown\)/);
   });
 });
