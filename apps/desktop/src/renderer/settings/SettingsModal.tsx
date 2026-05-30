@@ -1861,6 +1861,18 @@ const PALETTE_HELP: Record<ThemePalette, string> = {
   'mono': '纯灰阶，无彩色干扰',
 };
 
+/**
+ * PR-PALETTE-PICKER-GROUPS-0: 11 palettes need grouping so the
+ * picker scans cleanly. `default` + the 4 community editor themes
+ * land in 编辑器主题; the 6 color-family product accents land in
+ * 产品色调. Order within each group is preserved for stable
+ * keyboard navigation.
+ */
+const PALETTE_GROUPS: ReadonlyArray<{ id: string; label: string; palettes: ReadonlyArray<ThemePalette> }> = [
+  { id: 'editor', label: '编辑器主题', palettes: ['default', 'onedark', 'catppuccin-mocha', 'tokyo-night', 'nord'] },
+  { id: 'product', label: '产品色调', palettes: ['coral', 'azure', 'forest', 'dusk', 'sand', 'mono'] },
+];
+
 function ThemeSettingsPage(props: {
   themePref: ThemePreference;
   density: UiDensity;
@@ -1921,26 +1933,36 @@ function ThemeSettingsPage(props: {
       </div>
 
       <h3 className="settingsSubheading">调色板</h3>
-      <div className="settingsThemeOptions settingsPaletteOptions" role="radiogroup" aria-label="调色板">
-        {THEME_PALETTES.map((palette) => (
-          <button
-            key={palette}
-            type="button"
-            role="radio"
-            aria-checked={currentPalette === palette}
-            data-active={currentPalette === palette}
-            data-palette={palette}
-            className="settingsThemeOption settingsPaletteOption"
-            onClick={() => void setPalette(palette)}
-          >
-            <span className={`settingsPaletteSwatch settingsPaletteSwatch-${palette}`} aria-hidden="true" />
-            <span className="settingsThemeLabel">
-              <strong>{PALETTE_LABEL[palette]}</strong>
-              <small>{PALETTE_HELP[palette]}</small>
-            </span>
-          </button>
-        ))}
-      </div>
+      {/* PR-PALETTE-PICKER-GROUPS-0: 11 palettes in a flat grid is
+          cramped. Split into 编辑器主题 (default + 4 community editor
+          themes) and 产品色调 (6 product accents) so the picker is
+          easier to scan. Each subgroup is its own radiogroup so
+          arrow-key navigation stays scoped. */}
+      {PALETTE_GROUPS.map((group) => (
+        <div key={group.id} className="settingsPaletteGroup">
+          <h4 className="settingsPaletteGroupHeading">{group.label}</h4>
+          <div className="settingsThemeOptions settingsPaletteOptions" role="radiogroup" aria-label={group.label}>
+            {group.palettes.map((palette) => (
+              <button
+                key={palette}
+                type="button"
+                role="radio"
+                aria-checked={currentPalette === palette}
+                data-active={currentPalette === palette}
+                data-palette={palette}
+                className="settingsThemeOption settingsPaletteOption"
+                onClick={() => void setPalette(palette)}
+              >
+                <span className={`settingsPaletteSwatch settingsPaletteSwatch-${palette}`} aria-hidden="true" />
+                <span className="settingsThemeLabel">
+                  <strong>{PALETTE_LABEL[palette]}</strong>
+                  <small>{PALETTE_HELP[palette]}</small>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
 
       <h3 className="settingsSubheading">界面密度</h3>
       <div className="settingsThemeOptions settingsDensityOptions" role="radiogroup" aria-label="界面密度">

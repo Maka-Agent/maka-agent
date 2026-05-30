@@ -5370,6 +5370,26 @@ button:active {
 .settingsPaletteSwatch-sand { background: oklch(0.62 0.14 55); }
 .settingsPaletteSwatch-mono { background: oklch(0.30 0 0); }
 
+/* PR-PALETTE-PICKER-GROUPS-0: subgroup container that gathers a small
+   heading (编辑器主题 / 产品色调) above its own grid. Spacing matches
+   the existing settingsSubheading rhythm so the page reads as one
+   continuous picker, just structured. */
+.settingsPaletteGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settingsPaletteGroup + .settingsPaletteGroup {
+  margin-top: 14px;
+}
+.settingsPaletteGroupHeading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--foreground-55);
+  letter-spacing: 0.02em;
+}
+
 /* PR-BOT-SETTINGS-PASSWORD-EYE-0 (WAWQAQ msg `51c7b4ff` screenshots):
    <input type=password> + trailing Eye / EyeOff toggle, matching the
    reference design's "Bot Token …………… 👁" affordance. The toggle is
