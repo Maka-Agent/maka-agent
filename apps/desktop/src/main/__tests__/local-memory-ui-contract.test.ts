@@ -189,6 +189,19 @@ describe('local MEMORY.md Settings UI contract', () => {
     assert.match(css, /\.settingsMemoryDraftWarning/);
   });
 
+  it('summarizes parsed memory entry counts after save', async () => {
+    const src = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
+    const saveBlock = src.match(/async function save\(\) \{[\s\S]*?\n  \}\n\n  async function reset/)?.[0] ?? '';
+
+    assert.match(src, /function formatLocalMemorySaveSummary\(state: LocalMemoryState\)/);
+    assert.match(src, /state\.activeEntryCount/);
+    assert.match(src, /state\.archivedEntryCount > 0/);
+    assert.match(src, /当前 \$\{state\.activeEntryCount\} 条生效/);
+    assert.match(src, /已保留上一版备份/);
+    assert.match(saveBlock, /formatLocalMemorySaveSummary\(next\)/);
+    assert.match(saveBlock, /已保存并遮蔽敏感字段/);
+  });
+
   it('shows whether the visible MEMORY.md draft has unsaved changes', async () => {
     const src = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
     const css = await readRepo('apps/desktop/src/renderer/styles.css');
