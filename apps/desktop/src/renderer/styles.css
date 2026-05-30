@@ -9693,6 +9693,28 @@ button:active {
   word-break: break-word;
 }
 
+.maka-web-search-error {
+  border-color: color-mix(in oklab, var(--destructive-text) 32%, var(--foreground-10));
+  background: color-mix(in oklab, var(--destructive-text) 8%, var(--foreground-3));
+}
+
+.maka-web-search-error-message,
+.maka-web-search-error-repair {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.maka-web-search-error-message {
+  color: var(--destructive-text);
+}
+
+.maka-web-search-error-repair {
+  color: var(--foreground-70);
+}
+
 /* ────────────────────────────────────────────────────────────────
    PR-WEB-SEARCH-TAVILY-0: Settings → 联网搜索 live-query result list.
    Plain-text rows only (title + source + snippet); never markdown,

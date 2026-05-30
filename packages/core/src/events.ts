@@ -170,6 +170,15 @@ export type ToolResultContent =
       }>;
     }
   | {
+      kind: 'web_search_error';
+      ok: false;
+      provider: string;
+      query?: string;
+      reason: string;
+      message: string;
+      credentialSource?: string;
+    }
+  | {
       kind: 'office_document';
       ok: boolean;
       operation?: string;

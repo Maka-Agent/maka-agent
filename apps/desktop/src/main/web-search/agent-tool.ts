@@ -25,15 +25,33 @@ import {
   normalizeWebSearchLimit,
   normalizeWebSearchQuery,
   validateWorkspacePrivacyContext,
-  type WebSearchResponse,
+  type WebSearchCredentialSource,
+  type WebSearchErrorReason,
 } from '@maka/core';
 import { defaultWorkspacePrivacyContext } from '@maka/core/incognito';
 import type { MakaTool } from '@maka/runtime';
 import { queryTavily } from './tavily.js';
 import type { SettingsStore } from '@maka/storage';
-import { resolveTavilyApiKey } from './credentials.js';
+import { getTavilyCredentialSource, resolveTavilyApiKey } from './credentials.js';
 
 export const WEB_SEARCH_TOOL_NAME = 'WebSearch';
+
+function webSearchErrorContent(input: {
+  reason: WebSearchErrorReason;
+  message: string;
+  query?: string;
+  credentialSource?: WebSearchCredentialSource;
+}) {
+  return {
+    kind: 'web_search_error' as const,
+    ok: false as const,
+    provider: 'tavily',
+    ...(input.query ? { query: input.query } : {}),
+    reason: input.reason,
+    message: input.message,
+    ...(input.credentialSource ? { credentialSource: input.credentialSource } : {}),
+  };
+}
 
 export function buildWebSearchAgentTool(deps: {
   settingsStore: SettingsStore;
@@ -66,55 +84,59 @@ export function buildWebSearchAgentTool(deps: {
     impl: async ({ query, limit }) => {
       const normalizedQuery = normalizeWebSearchQuery(query);
       if (normalizedQuery === null) {
-        const response: WebSearchResponse = {
-          ok: false,
+        return webSearchErrorContent({
           reason: 'invalid_query',
           message: '联网搜索请求未提供有效查询。',
-        };
-        return response;
+        });
       }
       const privacyPayload = await (deps.getPrivacyContext?.() ?? defaultWorkspacePrivacyContext());
       const privacy = validateWorkspacePrivacyContext(privacyPayload);
       if (!privacy.ok) {
-        const response: WebSearchResponse = {
-          ok: false,
+        return webSearchErrorContent({
           reason: 'incognito_active',
           message: '联网搜索已关闭，因为工作区隐私状态无法确认。',
-        };
-        return response;
+          query: normalizedQuery,
+        });
       }
       if (privacy.value.incognitoActive) {
-        const response: WebSearchResponse = {
-          ok: false,
+        return webSearchErrorContent({
           reason: 'incognito_active',
           message: '隐身模式下禁用联网搜索。',
-        };
-        return response;
+          query: normalizedQuery,
+        });
       }
       const settings = await deps.settingsStore.get();
+      const credentialSource = getTavilyCredentialSource(settings);
       if (!settings.webSearch.enabled) {
-        const response: WebSearchResponse = {
-          ok: false,
+        return webSearchErrorContent({
           reason: 'not_configured',
           message: '请先在 设置 · 联网搜索 中启用 Tavily 后再让 Maka 调用联网搜索工具。',
-        };
-        return response;
+          query: normalizedQuery,
+          credentialSource,
+        });
       }
       const apiKey = resolveTavilyApiKey({ settings });
       if (apiKey.length === 0) {
-        const response: WebSearchResponse = {
-          ok: false,
+        return webSearchErrorContent({
           reason: 'not_configured',
           message: '请先在 设置 · 联网搜索 中保存 Tavily API key。',
-        };
-        return response;
+          query: normalizedQuery,
+          credentialSource,
+        });
       }
       const tavilyResponse = await queryTavily({
         apiKey,
         query: normalizedQuery,
         limit: normalizeWebSearchLimit(limit),
       });
-      if (!tavilyResponse.ok) return tavilyResponse;
+      if (!tavilyResponse.ok) {
+        return webSearchErrorContent({
+          reason: tavilyResponse.reason,
+          message: tavilyResponse.message,
+          query: normalizedQuery,
+          credentialSource,
+        });
+      }
       // PR-CHAT-WEB-SEARCH-RENDER-0: wrap the success result as
       // `kind: 'web_search'` so the chat-side OverlayPreview can
       // render plain-text cards instead of dumping JSON. The LLM

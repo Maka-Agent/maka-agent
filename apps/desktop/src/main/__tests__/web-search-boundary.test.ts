@@ -198,4 +198,23 @@ describe('web-search renderer boundary (PR-WEB-SEARCH-TAVILY-0)', () => {
     assert.doesNotMatch(webSearchPreview![0], /试一下|demo|manual try-out/i);
     assert.doesNotMatch(webSearchContent![0], /试一下|demo|manual try-out/i);
   });
+
+  it('WebSearch agent errors render as repair-oriented cards, not raw JSON', async () => {
+    const ui = await readFile(join(REPO_ROOT, 'packages/ui/src/components.tsx'), 'utf8');
+    const runtime = await readFile(join(REPO_ROOT, 'packages/runtime/src/ai-sdk-backend.ts'), 'utf8');
+    const agentTool = await readFile(join(REPO_ROOT, 'apps/desktop/src/main/web-search/agent-tool.ts'), 'utf8');
+    const coreEvents = await readFile(join(REPO_ROOT, 'packages/core/src/events.ts'), 'utf8');
+    const overlay = ui.match(/function OverlayPreview[\s\S]*?if \(content\.kind === 'json'\)/);
+    const errorPreview = ui.match(/function WebSearchErrorPreview[\s\S]*?function FileDiffPreview/);
+
+    assert.match(coreEvents, /kind:\s*'web_search_error'/);
+    assert.match(agentTool, /kind:\s*'web_search_error'/);
+    assert.match(runtime, /content\.kind === 'web_search_error'\) return 'error'/);
+    assert.ok(overlay, 'OverlayPreview block must exist');
+    assert.match(overlay![0], /content\.kind === 'web_search_error'/);
+    assert.ok(errorPreview, 'WebSearchErrorPreview block must exist');
+    assert.match(errorPreview![0], /环境变量/);
+    assert.match(errorPreview![0], /设置 · 联网搜索/);
+    assert.doesNotMatch(errorPreview![0], /JSON\.stringify|<pre/);
+  });
 });

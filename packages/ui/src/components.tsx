@@ -5414,6 +5414,18 @@ function OverlayPreview(props: { content: ToolResultContent }) {
     );
   }
 
+  if (content.kind === 'web_search_error') {
+    return (
+      <WebSearchErrorPreview
+        query={content.query}
+        provider={content.provider}
+        reason={content.reason}
+        message={content.message}
+        credentialSource={content.credentialSource}
+      />
+    );
+  }
+
   if (content.kind === 'terminal') {
     return (
       <TerminalPreview
@@ -6104,6 +6116,47 @@ function WebSearchPreview(props: {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function WebSearchErrorPreview(props: {
+  query?: string;
+  provider: string;
+  reason: string;
+  message: string;
+  credentialSource?: string;
+}) {
+  const sourceCopy =
+    props.credentialSource === 'env'
+      ? '环境变量'
+      : props.credentialSource === 'saved'
+        ? '本机已保存 key'
+        : props.credentialSource === 'none'
+          ? '未配置'
+          : '来源未知';
+  const repairCopy =
+    props.reason === 'invalid_credentials' && props.credentialSource === 'env'
+      ? '请检查 TAVILY_API_KEY / MAKA_TAVILY_API_KEY 后重启。'
+      : props.reason === 'invalid_credentials'
+        ? '请在 设置 · 联网搜索 中更新 Tavily key。'
+        : props.reason === 'rate_limited'
+          ? 'Tavily 当前限流，请稍后重试或更换可用凭据。'
+          : props.reason === 'not_configured'
+            ? '请先完成联网搜索配置后再重试。'
+            : props.reason === 'timeout'
+              ? '请求超时，请稍后重试。'
+              : props.reason === 'incognito_active'
+                ? '隐私模式下不会发起联网搜索。'
+                : '请检查网络或稍后重试。';
+  return (
+    <div className="maka-overlay-preview maka-web-search-preview maka-web-search-error" data-kind="web_search_error">
+      <header>
+        <strong>{redactSecrets(props.query ?? '联网搜索')}</strong>
+        <small>{redactSecrets(props.provider)} · 搜索失败 · {sourceCopy}</small>
+      </header>
+      <p className="maka-web-search-error-message">{redactSecrets(props.message)}</p>
+      <p className="maka-web-search-error-repair">{repairCopy}</p>
     </div>
   );
 }

@@ -74,9 +74,11 @@ describe('WebSearch agent tool (PR-AGENT-WEB-SEARCH-TOOL-0)', () => {
       },
     }));
     const out1 = (await runTool(store, { query: '' })) as { ok: boolean; reason?: string };
+    assert.equal((out1 as { kind?: string }).kind, 'web_search_error');
     assert.equal(out1.ok, false);
     assert.equal(out1.reason, 'invalid_query');
     const out2 = (await runTool(store, { query: '    ' })) as { ok: boolean; reason?: string };
+    assert.equal((out2 as { kind?: string }).kind, 'web_search_error');
     assert.equal(out2.ok, false);
     assert.equal(out2.reason, 'invalid_query');
   });
@@ -91,8 +93,10 @@ describe('WebSearch agent tool (PR-AGENT-WEB-SEARCH-TOOL-0)', () => {
       },
     }));
     const out = (await runTool(store)) as { ok: boolean; reason?: string };
+    assert.equal((out as { kind?: string; credentialSource?: string }).kind, 'web_search_error');
     assert.equal(out.ok, false);
     assert.equal(out.reason, 'not_configured');
+    assert.equal((out as { credentialSource?: string }).credentialSource, 'saved');
   });
 
   it('fails closed before reading settings when incognito is active', async () => {
@@ -107,6 +111,7 @@ describe('WebSearch agent tool (PR-AGENT-WEB-SEARCH-TOOL-0)', () => {
     const out = (await runTool(store, { query: 'latest ai news' }, {
       getPrivacyContext: async () => ({ incognitoActive: true }),
     })) as { ok: boolean; reason?: string; message?: string };
+    assert.equal((out as { kind?: string }).kind, 'web_search_error');
     assert.equal(out.ok, false);
     assert.equal(out.reason, 'incognito_active');
     assert.match(out.message ?? '', /隐身模式/);
@@ -125,6 +130,7 @@ describe('WebSearch agent tool (PR-AGENT-WEB-SEARCH-TOOL-0)', () => {
     const out = (await runTool(store, { query: 'latest ai news' }, {
       getPrivacyContext: async () => ({}),
     })) as { ok: boolean; reason?: string; message?: string };
+    assert.equal((out as { kind?: string }).kind, 'web_search_error');
     assert.equal(out.ok, false);
     assert.equal(out.reason, 'incognito_active');
     assert.match(out.message ?? '', /隐私状态无法确认/);
@@ -141,8 +147,10 @@ describe('WebSearch agent tool (PR-AGENT-WEB-SEARCH-TOOL-0)', () => {
       },
     }));
     const out = (await runTool(store)) as { ok: boolean; reason?: string; message?: string };
+    assert.equal((out as { kind?: string; credentialSource?: string }).kind, 'web_search_error');
     assert.equal(out.ok, false);
     assert.equal(out.reason, 'not_configured');
+    assert.equal((out as { credentialSource?: string }).credentialSource, 'none');
     // Generalized copy — never leaks the empty-key fact as a raw code.
     assert.match(out.message ?? '', /Tavily/);
   });
