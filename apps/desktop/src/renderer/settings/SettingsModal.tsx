@@ -2909,64 +2909,77 @@ function MemoryEntryList(props: {
         <p className="settingsMemoryEntryEmpty">{props.filtered ? '无匹配条目。' : '暂无条目。'}</p>
       ) : (
         <div className="settingsMemoryEntryList">
-          {props.entries.map((entry) => (
-            <article className="settingsMemoryEntryCard" key={entry.id}>
-              <strong>{entry.title}</strong>
-              <small className="settingsMemoryEntryMeta">
-                {memoryOriginLabel(entry.origin)}
-                {entry.tags.length > 0 ? ` · ${entry.tags.join(' / ')}` : ''}
-              </small>
-              <small className="settingsMemoryEntryFacts">
-                <span>ID {entry.id}</span>
-                {entry.createdAt !== undefined && (
-                  <span>
-                    创建 <RelativeTime ts={entry.createdAt} className="settingsHelpInlineTime" />
-                  </span>
+          {props.entries.map((entry) => {
+            const statusActionLabel = props.draftDirty
+              ? props.archived
+                ? '恢复到草稿'
+                : '归档到草稿'
+              : props.archived
+                ? '恢复'
+                : '归档';
+            const statusActionAriaLabel = props.draftDirty
+              ? `${statusActionLabel}，保存前不会写入 MEMORY.md`
+              : undefined;
+            return (
+              <article className="settingsMemoryEntryCard" key={entry.id}>
+                <strong>{entry.title}</strong>
+                <small className="settingsMemoryEntryMeta">
+                  {memoryOriginLabel(entry.origin)}
+                  {entry.tags.length > 0 ? ` · ${entry.tags.join(' / ')}` : ''}
+                </small>
+                <small className="settingsMemoryEntryFacts">
+                  <span>ID {entry.id}</span>
+                  {entry.createdAt !== undefined && (
+                    <span>
+                      创建 <RelativeTime ts={entry.createdAt} className="settingsHelpInlineTime" />
+                    </span>
+                  )}
+                  {entry.updatedAt !== undefined && (
+                    <span>
+                      更新 <RelativeTime ts={entry.updatedAt} className="settingsHelpInlineTime" />
+                    </span>
+                  )}
+                </small>
+                <span className="settingsMemoryPromptScope" data-active={props.archived ? 'false' : 'true'}>
+                  {props.archived ? '已归档，不进入 prompt' : '生效条目，会进入本地记忆 prompt'}
+                </span>
+                <p>{entry.content}</p>
+                {(props.onCopyReference || props.onFocusDraft || props.onStatusChange) && (
+                  <div className="settingsMemoryEntryActions">
+                    {props.onCopyReference && (
+                      <button
+                        type="button"
+                        className="settingsInlineTextButton"
+                        onClick={() => void props.onCopyReference?.(entry)}
+                      >
+                        复制引用
+                      </button>
+                    )}
+                    {props.onFocusDraft && (
+                      <button
+                        type="button"
+                        className="settingsInlineTextButton"
+                        onClick={() => void props.onFocusDraft?.(entry)}
+                      >
+                        定位草稿
+                      </button>
+                    )}
+                    {props.onStatusChange && (
+                      <button
+                        type="button"
+                        className="settingsInlineTextButton"
+                        aria-label={statusActionAriaLabel}
+                        disabled={props.busy}
+                        onClick={() => void props.onStatusChange?.(entry, props.archived ? 'active' : 'archived')}
+                      >
+                        {statusActionLabel}
+                      </button>
+                    )}
+                  </div>
                 )}
-                {entry.updatedAt !== undefined && (
-                  <span>
-                    更新 <RelativeTime ts={entry.updatedAt} className="settingsHelpInlineTime" />
-                  </span>
-                )}
-              </small>
-              <span className="settingsMemoryPromptScope" data-active={props.archived ? 'false' : 'true'}>
-                {props.archived ? '已归档，不进入 prompt' : '生效条目，会进入本地记忆 prompt'}
-              </span>
-              <p>{entry.content}</p>
-              {(props.onCopyReference || props.onFocusDraft || props.onStatusChange) && (
-                <div className="settingsMemoryEntryActions">
-                  {props.onCopyReference && (
-                    <button
-                      type="button"
-                      className="settingsInlineTextButton"
-                      onClick={() => void props.onCopyReference?.(entry)}
-                    >
-                      复制引用
-                    </button>
-                  )}
-                  {props.onFocusDraft && (
-                    <button
-                      type="button"
-                      className="settingsInlineTextButton"
-                      onClick={() => void props.onFocusDraft?.(entry)}
-                    >
-                      定位草稿
-                    </button>
-                  )}
-                  {props.onStatusChange && (
-                    <button
-                      type="button"
-                      className="settingsInlineTextButton"
-                      disabled={props.busy}
-                      onClick={() => void props.onStatusChange?.(entry, props.archived ? 'active' : 'archived')}
-                    >
-                      {props.draftDirty ? (props.archived ? '恢复到草稿' : '归档到草稿') : (props.archived ? '恢复' : '归档')}
-                    </button>
-                  )}
-                </div>
-              )}
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       )}
     </section>

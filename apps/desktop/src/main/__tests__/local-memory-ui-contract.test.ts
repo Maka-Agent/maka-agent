@@ -161,7 +161,8 @@ describe('local MEMORY.md Settings UI contract', () => {
 
     assert.match(src, /setLocalMemoryEntryStatusDraft\(draft/);
     assert.match(src, /onStatusChange=\{updateMemoryEntryStatus\}/);
-    assert.match(src, /props\.archived \? '恢复' : '归档'/);
+    assert.match(src, /const statusActionLabel = props\.draftDirty/);
+    assert.match(src, /:\s*props\.archived\s*\?\s*'恢复'\s*:\s*'归档';/);
     assert.match(src, /window\.maka\.memory\.save\(result\.draft\)/);
   });
 
@@ -179,7 +180,12 @@ describe('local MEMORY.md Settings UI contract', () => {
     assert.match(updateBlock, /window\.maka\.memory\.save\(result\.draft\)/);
     assert.match(src, /draftDirty=\{memoryDraftDirty\}/);
     assert.match(listBlock, /draftDirty\?: boolean/);
-    assert.match(listBlock, /props\.draftDirty \? \(props\.archived \? '恢复到草稿' : '归档到草稿'\)/);
+    assert.match(listBlock, /const statusActionLabel = props\.draftDirty/);
+    assert.match(listBlock, /'恢复到草稿'/);
+    assert.match(listBlock, /'归档到草稿'/);
+    assert.match(listBlock, /const statusActionAriaLabel = props\.draftDirty/);
+    assert.match(listBlock, /保存前不会写入 MEMORY\.md/);
+    assert.match(listBlock, /aria-label=\{statusActionAriaLabel\}/);
   });
 
   it('uses stopped-update copy for invalid memory entry ids instead of raw missing-field wording', async () => {
