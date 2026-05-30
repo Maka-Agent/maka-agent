@@ -3,6 +3,7 @@ import { dirname, join, relative, sep } from 'node:path';
 import {
   defaultLocalMemoryMarkdown,
   parseLocalMemoryMarkdown,
+  redactSecrets,
   type AppSettings,
   type LocalMemoryState,
 } from '@maka/core';
@@ -117,14 +118,15 @@ export class LocalMemoryService {
     if ((await this.deps.getPrivacyContext()).incognitoActive) {
       return this.getState();
     }
-    const parsed = parseLocalMemoryMarkdown(content);
+    const redactedContent = redactSecrets(content);
+    const parsed = parseLocalMemoryMarkdown(redactedContent);
     if (parsed.safeMode) {
       return {
         path: this.file,
         enabled: true,
         agentReadEnabled: (await this.deps.getSettings()).localMemory.agentReadEnabled,
         status: 'safe_mode',
-        content,
+        content: redactedContent,
         entryCount: 0,
         activeEntryCount: 0,
         archivedEntryCount: 0,
@@ -138,7 +140,7 @@ export class LocalMemoryService {
       await this.ensure();
       await this.backup('bak');
       const tmp = `${this.file}.${this.now()}.tmp`;
-      await writeFile(tmp, content, { mode: 0o600 });
+      await writeFile(tmp, redactedContent, { mode: 0o600 });
       await rename(tmp, this.file);
       await chmod(this.file, 0o600);
     });

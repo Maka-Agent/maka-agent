@@ -60,6 +60,29 @@ describe('LocalMemoryService', () => {
     assert.match(await readFile(`${service.file}.bak`, 'utf8'), /示例/);
   });
 
+  it('redacts secrets before writing durable MEMORY.md content', async () => {
+    const { service } = await makeService()();
+    await service.getState();
+    const state = await service.save([
+      '# Maka Memory',
+      '',
+      '## Provider token',
+      '<!-- maka-memory: id=secret origin=manual createdAt=1700000000000 -->',
+      'Authorization: Bearer sk-ant-api03-abc123def456ghi789jkl0mn1opq',
+      'URL: https://api.example.test/models?api_key=raw-secret-value&timeout=30',
+    ].join('\n'));
+
+    assert.equal(state.status, 'ok');
+    assert.doesNotMatch(state.content, /sk-ant-api03|raw-secret-value/);
+    assert.match(state.content, /Authorization: Bearer \[redacted\]/);
+    assert.match(state.content, /api_key=\[redacted\]/);
+
+    const persisted = await readFile(service.file, 'utf8');
+    assert.doesNotMatch(persisted, /sk-ant-api03|raw-secret-value/);
+    assert.match(persisted, /Authorization: Bearer \[redacted\]/);
+    assert.match(persisted, /api_key=\[redacted\]/);
+  });
+
   it('counts archived entries but previews the latest active entry', async () => {
     const { service } = await makeService()();
     const state = await service.save([
