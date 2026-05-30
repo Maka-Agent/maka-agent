@@ -10056,7 +10056,8 @@ button:active {
   outline-offset: 2px;
 }
 
-.settingsMemoryFilterEmpty {
+.settingsMemoryFilterEmpty,
+.settingsMemoryListEmpty {
   display: grid;
   gap: 4px;
   padding: 10px 12px;
@@ -10065,12 +10066,14 @@ button:active {
   background: var(--foreground-3);
 }
 
-.settingsMemoryFilterEmpty strong {
+.settingsMemoryFilterEmpty strong,
+.settingsMemoryListEmpty strong {
   color: var(--foreground);
   font-size: 13px;
 }
 
-.settingsMemoryFilterEmpty small {
+.settingsMemoryFilterEmpty small,
+.settingsMemoryListEmpty small {
   color: var(--foreground-60);
   font-size: 12px;
   line-height: 1.45;

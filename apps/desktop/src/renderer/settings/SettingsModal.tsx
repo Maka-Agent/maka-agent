@@ -2903,6 +2903,13 @@ function MemorySettingsPage(props: {
         </>
       )}
 
+      {visibleMemoryEntries.entries.length === 0 && !memoryEntryPreviewBlockedReason && (
+        <div className="settingsMemoryListEmpty" role="status">
+          <strong>还没有可预览的记忆条目</strong>
+          <small>手动添加会先进入下方草稿；保存后才会写入 MEMORY.md。</small>
+        </div>
+      )}
+
       <div className="settingsMemoryManualAdd" aria-label="手动添加本地记忆">
         <div className="settingsMemoryManualAddHeader">
           <strong>手动添加记忆</strong>
