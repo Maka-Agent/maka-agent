@@ -79,6 +79,10 @@ describe('local MEMORY.md Settings UI contract', () => {
     assert.match(pageBlock, /已归档条目不会注入/);
     assert.match(pageBlock, /疑似密钥会遮蔽/);
     assert.match(pageBlock, /<pre>\{localMemoryPromptPreview\}<\/pre>/);
+    assert.match(pageBlock, /async function copyLocalMemoryPromptPreview/);
+    assert.match(pageBlock, /navigator\.clipboard\.writeText\(localMemoryPromptPreview\)/);
+    assert.match(pageBlock, /已复制模型上下文预览/);
+    assert.match(pageBlock, /复制上下文/);
     assert.match(css, /\.settingsMemoryPromptPreview/);
   });
 

@@ -2582,6 +2582,16 @@ function MemorySettingsPage(props: {
   const promptPreviewBlockedReason = localMemoryPromptPreviewBlockedReason(effective);
   const promptPreviewWillInject = localMemoryPromptPreview.length > 0 && !promptPreviewBlockedReason;
 
+  async function copyLocalMemoryPromptPreview() {
+    if (!localMemoryPromptPreview) return;
+    try {
+      await navigator.clipboard.writeText(localMemoryPromptPreview);
+      toast.success('已复制模型上下文预览', '使用同一条 prompt 预览和遮蔽路径。');
+    } catch {
+      toast.error('复制失败', '剪贴板不可用。');
+    }
+  }
+
   return (
     <div className="settingsStructuredPage">
       <div className="settingsFormRow">
@@ -2665,7 +2675,17 @@ function MemorySettingsPage(props: {
       <div className="settingsMemoryPromptPreview" data-active={promptPreviewWillInject ? 'true' : 'false'}>
         <div className="settingsMemoryPromptPreviewHeader">
           <strong>模型上下文预览</strong>
-          <span>{promptPreviewWillInject ? '发送时会注入' : '当前不会注入'}</span>
+          <div>
+            <span>{promptPreviewWillInject ? '发送时会注入' : '当前不会注入'}</span>
+            <button
+              type="button"
+              className="settingsInlineTextButton"
+              disabled={!localMemoryPromptPreview}
+              onClick={() => void copyLocalMemoryPromptPreview()}
+            >
+              复制上下文
+            </button>
+          </div>
         </div>
         <small>只展示生效记忆会进入 prompt 的内容；已归档条目不会注入，疑似密钥会遮蔽。</small>
         {localMemoryPromptPreview ? (
