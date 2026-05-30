@@ -4994,6 +4994,14 @@ function extractErrorText(result: ToolActivityItem['result']): string {
   }
 }
 
+export function formatRedactedJson(value: unknown): string {
+  try {
+    return redactSecrets(JSON.stringify(value, null, 2));
+  } catch {
+    return redactSecrets(String(value));
+  }
+}
+
 function formatDuration(ms: number | undefined): string | null {
   if (ms === undefined || ms < 0) return null;
   if (ms < 1000) return `${ms} ms`;
@@ -5032,7 +5040,7 @@ export function ToolActivity(props: { items: ToolActivityItem[] }) {
               {errored && <ToolErrorBanner result={item.result} />}
               {item.intent && <p className="maka-tool-intent">{item.intent}</p>}
               {item.args !== undefined && (
-                <pre className="maka-code toolArgs">{JSON.stringify(item.args, null, 2)}</pre>
+                <pre className="maka-code toolArgs">{formatRedactedJson(item.args)}</pre>
               )}
               {item.outputChunks && item.outputChunks.length > 0 && (
                 <ToolOutputStream
@@ -5304,7 +5312,7 @@ export function PermissionDialog(props: {
           )}
           <details className="maka-permission-raw">
             <summary>查看完整参数</summary>
-            <pre className="maka-code">{JSON.stringify(props.request.args, null, 2)}</pre>
+            <pre className="maka-code">{formatRedactedJson(props.request.args)}</pre>
           </details>
           <label className="permissionRemember">
             <input
