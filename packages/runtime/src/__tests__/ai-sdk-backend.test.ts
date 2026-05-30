@@ -90,6 +90,64 @@ describe('AiSdkBackend error surfaces', () => {
     assert.deepEqual(messages[0]?.content, events.find((event) => event.type === 'tool_result')?.content);
   });
 
+  test('failed Bash results preserve terminal stdout and stderr as an error card', async () => {
+    const messages: ToolResultMessage[] = [];
+    const events: SessionEvent[] = [];
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header(),
+      appendMessage: async (message) => {
+        if (message.type === 'tool_result') messages.push(message);
+      },
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'claude-sonnet-4-5-20250929',
+      permissionEngine: new PermissionEngine({ newId: () => 'permission-id', now: () => 1 }),
+      modelFactory: () => ({}),
+      tools: [],
+      newId: idGenerator(),
+      now: () => 1,
+    });
+    const tool: MakaTool = {
+      name: 'Bash',
+      description: 'shell',
+      parameters: {},
+      permissionRequired: false,
+      impl: async () => {
+        throw Object.assign(new Error('Command failed with exit code 2'), {
+          code: 2,
+          stdout: 'stdout before failure\nAuthorization: Bearer sk-live-secret-token-value',
+          stderr: 'stderr before failure',
+        });
+      },
+    };
+
+    const execute = (backend as unknown as {
+      wrapToolExecute(
+        tool: MakaTool,
+        turnId: string,
+        queue: { push(event: SessionEvent): void },
+      ): (args: unknown, ctx: { toolCallId: string; abortSignal: AbortSignal }) => Promise<unknown>;
+    }).wrapToolExecute(tool, 'turn-1', { push: (event) => events.push(event) });
+
+    const result = await execute(
+      { command: 'printf out; printf err >&2; exit 2' },
+      { toolCallId: 'tool-1', abortSignal: new AbortController().signal },
+    );
+
+    assert.deepEqual(result, { error: '命令退出码 2' });
+    assert.equal(messages[0]?.isError, true);
+    assert.deepEqual(messages[0]?.content, events.find((event) => event.type === 'tool_result')?.content);
+    assert.deepEqual(messages[0]?.content, {
+      kind: 'terminal',
+      cwd: '/tmp/maka',
+      cmd: 'printf out; printf err >&2; exit 2',
+      exitCode: 2,
+      stdout: 'stdout before failure\nAuthorization: Bearer [redacted]',
+      stderr: 'stderr before failure',
+    });
+  });
+
   test('model stream timeout errors carry a stable reason for turn-history UI', () => {
     const backend = new AiSdkBackend({
       sessionId: 'session-1',

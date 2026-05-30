@@ -726,6 +726,47 @@ export class AiSdkBackend implements AgentBackend {
         return result;
       } catch (err) {
         output.flush();
+        const terminalFailure = this.coerceTerminalFailure(tool, args, err);
+        if (terminalFailure) {
+          const durationMs = Math.max(0, this.now() - startedAt);
+          const resultMsg: ToolResultMessage = {
+            type: 'tool_result',
+            id: this.newId(),
+            turnId,
+            ts: this.now(),
+            toolUseId,
+            isError: true,
+            content: terminalFailure.content,
+            durationMs,
+          };
+          await this.input.appendMessage(resultMsg);
+          queue.push({
+            type: 'tool_result',
+            id: this.newId(),
+            turnId,
+            ts: this.now(),
+            toolUseId,
+            isError: true,
+            content: terminalFailure.content,
+            durationMs,
+          } satisfies ToolResultEvent);
+          this.input.recordToolInvocation?.({
+            sessionId: this.sessionId,
+            turnId,
+            toolCallId: toolUseId,
+            toolName: tool.name,
+            providerId: this.input.connection.providerType,
+            modelId: this.input.modelId,
+            durationMs,
+            status: 'error',
+            errorClass: classifyError(err),
+            argsSummary: summarizeArgs(args),
+            bytesIn: byteLength(args),
+            bytesOut: byteLength(terminalFailure.content),
+            startedAt,
+          });
+          return this.errorReturn(terminalFailure.message);
+        }
         const msg = formatSyntheticToolErrorText(err);
         await this.writeSyntheticToolResult(toolUseId, turnId, msg, queue);
         this.input.recordToolInvocation?.({
@@ -883,6 +924,30 @@ export class AiSdkBackend implements AgentBackend {
       return { kind: 'json', value: raw };
     }
     return { kind: 'text', text: String(raw ?? '') };
+  }
+
+  private coerceTerminalFailure(
+    tool: MakaTool,
+    args: unknown,
+    err: unknown,
+  ): { content: Extract<ToolResultContent, { kind: 'terminal' }>; message: string } | null {
+    if (tool.name !== 'Bash' || !err || typeof err !== 'object') return null;
+    const error = err as { code?: unknown; stdout?: unknown; stderr?: unknown };
+    if (typeof error.code !== 'number') return null;
+    const command = args && typeof args === 'object' && typeof (args as { command?: unknown }).command === 'string'
+      ? (args as { command: string }).command
+      : '';
+    return {
+      content: {
+        kind: 'terminal',
+        cwd: this.input.header.cwd,
+        cmd: redactSecrets(command),
+        exitCode: error.code,
+        stdout: redactSecrets(String(error.stdout ?? '')),
+        stderr: redactSecrets(String(error.stderr ?? '')),
+      },
+      message: `命令退出码 ${error.code}`,
+    };
   }
 
   private reserveSubagentSlot(tool: MakaTool): boolean {
