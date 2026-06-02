@@ -379,6 +379,28 @@ describe('SessionManager permission mode updates', () => {
     expect(abortNote.data).toEqual({ source: 'renderer.stop_button' });
   });
 
+  test('stopSession keeps aborted state even if the backend emits a late completion', async () => {
+    const store = new MemorySessionStore();
+    const backends = new BackendRegistry();
+    const gate = makeGate();
+    backends.register('fake', (ctx) => new TestBackend(ctx, gate));
+    const manager = new SessionManager({ store, backends, newId: nextId(), now: nextNow(12_700) });
+    const session = await manager.createSession(makeInput());
+
+    const iterator = manager.sendMessage(session.id, { turnId: 'turn-1', text: 'hello' })[Symbol.asyncIterator]();
+    await iterator.next();
+    await manager.stopSession(session.id, { source: 'stop_button' });
+
+    gate.release();
+    await iterator.next();
+    await iterator.next();
+
+    expect((await store.readHeader(session.id)).status).toBe('aborted');
+    const [turn] = await store.listTurns(session.id);
+    expect(turn?.status).toBe('aborted');
+    expect(turn?.abortSource).toBe('renderer.stop_button');
+  });
+
   test('retry creates a new sibling turn and does not rewrite the aborted source turn', async () => {
     const store = new MemorySessionStore();
     const backends = new BackendRegistry();

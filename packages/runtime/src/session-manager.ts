@@ -123,6 +123,7 @@ interface ActiveSession {
   activeStreams: number;
   activeTurnIds: Set<string>;
   activeTurnLineage: Map<string, Partial<Pick<UserMessageInput, 'parentTurnId' | 'retriedFromTurnId' | 'regeneratedFromTurnId' | 'branchOfTurnId' | 'parentSessionId'>>>;
+  stoppedTurnIds: Set<string>;
 }
 
 export class SessionManager {
@@ -324,14 +325,17 @@ export class SessionManager {
       })) {
         lastTs = ev.ts;
         const transition = statusFromEvent(ev);
-        if (transition) {
+        const stoppedDuringTurn = active.stoppedTurnIds.has(input.turnId);
+        if (transition && !stoppedDuringTurn) {
           await this.updateStatus(sessionId, transition.status, transition.blockedReason, ev.ts);
         }
         if (ev.type === 'complete' || ev.type === 'abort') {
           sawCompletion = true;
-          finalStatus = transition ?? { status: 'active' };
+          finalStatus = stoppedDuringTurn
+            ? { status: 'aborted' }
+            : (transition ?? { status: 'active' });
           const turnStatus = turnStatusFromEvent(ev);
-          if (turnStatus) {
+          if (turnStatus && !stoppedDuringTurn) {
             await this.appendTurnState(sessionId, input.turnId, turnStatus.status, input, {
               ts: ev.ts,
               errorClass: turnStatus.errorClass,
@@ -355,9 +359,14 @@ export class SessionManager {
       throw error;
     } finally {
       if (active && activeStreamTracked) {
+        const stoppedDuringTurn = active.stoppedTurnIds.has(input.turnId);
         active.activeStreams = Math.max(0, active.activeStreams - 1);
         active.activeTurnIds.delete(input.turnId);
         active.activeTurnLineage.delete(input.turnId);
+        active.stoppedTurnIds.delete(input.turnId);
+        if (stoppedDuringTurn) {
+          finalStatus = { status: 'aborted' };
+        }
       }
       const nextStatus = active && active.activeStreams > 0
         ? { status: 'running' as const }
@@ -393,6 +402,9 @@ export class SessionManager {
     if (!active) return;
     const abortSource = normalizeStopSessionSource(input.source);
     await active.backend.stop('user_stop');
+    for (const turnId of active.activeTurnIds) {
+      active.stoppedTurnIds.add(turnId);
+    }
     await this.updateStatus(sessionId, 'aborted');
     for (const turnId of active.activeTurnIds) {
       await this.appendTurnState(
@@ -509,6 +521,7 @@ export class SessionManager {
       activeStreams: 0,
       activeTurnIds: new Set(),
       activeTurnLineage: new Map(),
+      stoppedTurnIds: new Set(),
     };
     this.active.set(sessionId, entry);
     return entry;
