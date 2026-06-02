@@ -25,6 +25,7 @@ const REPORT_DIR = join(DESKTOP_DIR, 'tests', 'real-window-smoke');
 const DEFAULT_SCENARIO = 'sidebar-search-modal-open';
 const DEFAULT_WINDOW_WIDTH = 1280;
 const DEFAULT_WINDOW_HEIGHT = 840;
+const DEFAULT_DIAGNOSTIC_WAIT_MS = 3500;
 
 export const PROGRAMMATIC_SMOKE_CHECKS = [
   {
@@ -45,7 +46,7 @@ export const PROGRAMMATIC_SMOKE_CHECKS = [
   },
   {
     id: 'programmatic-focus-target',
-    prompt: 'Search modal close button receives focus after modal open.',
+    prompt: 'Search modal receives focus on an interactive control after modal open.',
   },
   {
     id: 'programmatic-no-error-boundary',
@@ -114,7 +115,7 @@ function parseArgs(argv) {
     assumeYes: false,
     failNote: null,
     unverifiedNote: null,
-    diagnosticWaitMs: 1500,
+    diagnosticWaitMs: DEFAULT_DIAGNOSTIC_WAIT_MS,
     programmaticOnly: false,
     help: false,
   };
@@ -382,8 +383,14 @@ function buildProgrammaticResults(args, diagnostics) {
     {
       check: PROGRAMMATIC_SMOKE_CHECKS[4],
       ok:
-        renderer.activeElement?.tagName === 'BUTTON' &&
-        renderer.activeElement?.className?.includes('maka-search-modal-close'),
+        (
+          renderer.activeElement?.tagName === 'INPUT' &&
+          renderer.activeElement?.className?.includes('maka-search-modal-input')
+        ) ||
+        (
+          renderer.activeElement?.tagName === 'BUTTON' &&
+          renderer.activeElement?.className?.includes('maka-search-modal-close')
+        ),
       note: `activeElement=${JSON.stringify(renderer.activeElement ?? null)}`,
     },
     {

@@ -11,9 +11,11 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
 const manifestPath = join(repoRoot, 'apps', 'desktop', 'bundled-tools.json');
 const toolsDir = join(repoRoot, 'apps', 'desktop', 'resources', 'tools');
+const DEFAULT_FETCH_TIMEOUT_MS = 300_000;
 
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 const officeCli = manifest.officecli;
+const FETCH_TIMEOUT_MS = readPositiveIntEnv('MAKA_OFFICECLI_FETCH_TIMEOUT_MS', DEFAULT_FETCH_TIMEOUT_MS);
 
 export function officeCliTargetFor(platform, arch) {
   return officeCli.assets[`${platform}-${arch}`] ? { platform, arch } : null;
@@ -55,16 +57,58 @@ export function officeCliVersionMatches(stdout, expectedVersion) {
   return new RegExp(`\\b${normalized}\\b`).test(stdout);
 }
 
+function readPositiveIntEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer timeout in milliseconds`);
+  }
+  return parsed;
+}
+
+function isTimeoutError(error) {
+  return Boolean(error && typeof error === 'object' && (
+    error.name === 'AbortError' ||
+    error.name === 'TimeoutError'
+  ));
+}
+
+function officeCliTimeoutError(url) {
+  return new Error(`Timed out downloading ${url} after ${FETCH_TIMEOUT_MS}ms`);
+}
+
+async function fetchWithTimeout(url) {
+  try {
+    return await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  } catch (error) {
+    if (isTimeoutError(error)) {
+      throw officeCliTimeoutError(url);
+    }
+    throw error;
+  }
+}
+
 async function fetchBytes(url) {
-  const response = await fetch(url, { redirect: 'follow' });
+  const response = await fetchWithTimeout(url);
   if (!response.ok) throw new Error(`Failed to download ${url}: HTTP ${response.status}`);
-  return response.arrayBuffer();
+  try {
+    return await response.arrayBuffer();
+  } catch (error) {
+    if (isTimeoutError(error)) throw officeCliTimeoutError(url);
+    throw error;
+  }
 }
 
 async function fetchText(url) {
-  const response = await fetch(url, { redirect: 'follow' });
+  const response = await fetchWithTimeout(url);
   if (!response.ok) throw new Error(`Failed to download ${url}: HTTP ${response.status}`);
-  return response.text();
+  try {
+    return await response.text();
+  } catch (error) {
+    if (isTimeoutError(error)) throw officeCliTimeoutError(url);
+    throw error;
+  }
 }
 
 async function verifyOfficeCliVersion(binaryPath, expectedVersion) {

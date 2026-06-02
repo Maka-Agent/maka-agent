@@ -74,6 +74,16 @@ describe('real Electron window smoke gate (PR-DESKTOP-SMOKE-0)', () => {
     assert.match(src, /UNVERIFIED/, 'real-window smoke must distinguish environment/accessibility unverifiable runs from product failures');
     assert.match(src, /--fail-note/, 'real-window smoke must support durable fail reports when the live window cannot be verified');
     assert.match(src, /--diagnostic-wait-ms/, 'real-window smoke must wait briefly for settled BrowserWindow diagnostics');
+    assert.match(
+      src,
+      /DEFAULT_DIAGNOSTIC_WAIT_MS\s*=\s*3500/,
+      'programmatic smoke must wait long enough to capture the settled renderer diagnostic, not only after-load',
+    );
+    assert.match(
+      src,
+      /maka-search-modal-input/,
+      'programmatic focus check must accept the actual search input focus target, not only the close button',
+    );
     assert.match(src, /Window diagnostics/, 'real-window smoke report must include BrowserWindow/renderer diagnostics when available');
     assert.match(src, /PROGRAMMATIC_SMOKE_CHECKS/, 'real-window smoke must include an accessibility-independent programmatic BrowserWindow/renderer layer');
     assert.match(src, /os-hit-test/, 'real-window smoke must keep OS hit-test checks distinct from programmatic checks');

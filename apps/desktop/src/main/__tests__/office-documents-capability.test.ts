@@ -90,6 +90,11 @@ describe('Office document capability contract', () => {
     assert.match(manifest, /darwin-arm64/);
     assert.match(manifest, /win32-x64/);
     assert.match(prepareScript, /SHA256SUMS/);
+    assert.match(prepareScript, /DEFAULT_FETCH_TIMEOUT_MS\s*=\s*300_000/);
+    assert.match(prepareScript, /MAKA_OFFICECLI_FETCH_TIMEOUT_MS/);
+    assert.match(prepareScript, /FETCH_TIMEOUT_MS/);
+    assert.match(prepareScript, /AbortSignal\.timeout\(FETCH_TIMEOUT_MS\)/);
+    assert.match(prepareScript, /Timed out downloading/);
     assert.match(prepareScript, /Checksum mismatch/);
     assert.match(prepareScript, /resources', 'tools'/);
     assert.match(checkScript, /OfficeCLI bundle missing/);

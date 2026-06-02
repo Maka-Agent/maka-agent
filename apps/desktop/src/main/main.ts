@@ -2062,12 +2062,6 @@ function registerIpc(): void {
       return botRegistry.getStatus(provider);
     }, 'BOTS_RESTART_FAILED'),
   );
-  ipcMain.handle('settings:bots:test', (_event, provider: BotProvider) =>
-    tryResult(async () => {
-      const settings = await settingsStore.get();
-      return testRuntimeBotChannel(provider, settings.botChat.channels[provider]);
-    }, 'BOTS_TEST_FAILED'),
-  );
 
   // PR-BOT-WECHAT-QR-MODAL-0 (WAWQAQ msg `10ec1fbe`): WeChat ClawBot
   // scan-login. Renderer triggers the QR fetch from the modal, then
@@ -2208,28 +2202,6 @@ function registerIpc(): void {
     }, 'USAGE_PRICING_RESET_FAILED'),
   );
 
-  ipcMain.handle('settings:network:get', async (): Promise<Result<ContractNetworkSettings>> =>
-    tryResult(async () => maskNetworkSettings(toContractNetworkSettings((await settingsStore.get()).network)), 'NETWORK_GET_FAILED'),
-  );
-  ipcMain.handle('settings:network:put', async (_event, patch: Partial<ContractNetworkSettings>): Promise<Result<ContractNetworkSettings>> =>
-    tryResult(async () => {
-      const current = await settingsStore.get();
-      const nextNetwork = applyNetworkPatch(toContractNetworkSettings(current.network), patch);
-      const next = await settingsStore.update({ network: toAppNetworkPatch(nextNetwork) });
-      const masked = maskNetworkSettings(toContractNetworkSettings(next.network));
-      await applySettingsRuntimeEffects(next, { network: {} });
-      return masked;
-    }, 'NETWORK_PUT_FAILED'),
-  );
-  ipcMain.handle('settings:network:test', async (_event, input: TestProxyInput = {}): Promise<Result<Awaited<ReturnType<typeof testProxyConnection>>>> =>
-    tryResult(async () => {
-      const stored = toContractNetworkSettings((await settingsStore.get()).network).proxy;
-      const proxy = input.proxy?.password === SENSITIVE_PLACEHOLDER
-        ? { ...input.proxy, password: stored.password }
-        : input.proxy;
-      return testProxyConnection({ ...input, proxy }, stored);
-    }, 'NETWORK_TEST_FAILED'),
-  );
 }
 
 function canCreateFakeSessionFromRenderer(): boolean {
