@@ -39,10 +39,7 @@ import type {
   ConnectionEvent,
   CreateConnectionInput,
   CreateSessionInput,
-  BranchFromTurnInput,
   DailyReviewSummary,
-  RegenerateTurnInput,
-  RetryTurnInput,
   SessionCommand,
   SessionChangedEvent,
   SessionChangedReason,
@@ -75,7 +72,12 @@ import { queryTavily, TAVILY_TEST_QUERY, TAVILY_TEST_LIMIT } from './web-search/
 import { buildWebSearchAgentTool, WEB_SEARCH_TOOL_NAME } from './web-search/agent-tool.js';
 import { resolveTavilyApiKey } from './web-search/credentials.js';
 import { runThreadSearch } from './search/thread-search.js';
-import { normalizePermissionResponse } from './permission-response-guard.js';
+import {
+  normalizeBranchFromTurnInput,
+  normalizePermissionResponse,
+  normalizeRegenerateTurnInput,
+  normalizeRetryTurnInput,
+} from './permission-response-guard.js';
 import {
   ClaudeSubscriptionService,
   isSubscriptionExperimentalEnabled,
@@ -1762,18 +1764,20 @@ function registerIpc(): void {
     });
     void streamEvents(sessionId, iterator, turnId);
   });
-  ipcMain.handle('sessions:retryTurn', async (_event, sessionId: string, input: RetryTurnInput) => {
+  ipcMain.handle('sessions:retryTurn', async (_event, sessionId: string, input: unknown) => {
     await ensureSessionCanSend(sessionId);
-    const turnId = input.turnId ?? randomUUID();
-    void streamEvents(sessionId, runtime.retryTurn(sessionId, { ...input, turnId }), turnId);
+    const normalized = normalizeRetryTurnInput(input);
+    const turnId = normalized.turnId ?? randomUUID();
+    void streamEvents(sessionId, runtime.retryTurn(sessionId, { ...normalized, turnId }), turnId);
   });
-  ipcMain.handle('sessions:regenerateTurn', async (_event, sessionId: string, input: RegenerateTurnInput) => {
+  ipcMain.handle('sessions:regenerateTurn', async (_event, sessionId: string, input: unknown) => {
     await ensureSessionCanSend(sessionId);
-    const turnId = input.turnId ?? randomUUID();
-    void streamEvents(sessionId, runtime.regenerateTurn(sessionId, { ...input, turnId }), turnId);
+    const normalized = normalizeRegenerateTurnInput(input);
+    const turnId = normalized.turnId ?? randomUUID();
+    void streamEvents(sessionId, runtime.regenerateTurn(sessionId, { ...normalized, turnId }), turnId);
   });
-  ipcMain.handle('sessions:branchFromTurn', async (_event, sessionId: string, input: BranchFromTurnInput) => {
-    const session = await runtime.branchFromTurn(sessionId, input);
+  ipcMain.handle('sessions:branchFromTurn', async (_event, sessionId: string, input: unknown) => {
+    const session = await runtime.branchFromTurn(sessionId, normalizeBranchFromTurnInput(input));
     emitSessionsChanged('created', session.id);
     return session;
   });
