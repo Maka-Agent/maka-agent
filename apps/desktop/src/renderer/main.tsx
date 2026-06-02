@@ -1626,6 +1626,13 @@ function AppShell() {
       case 'complete':
         if (event.stopReason !== 'permission_handoff') {
           clearStreaming(sessionId);
+          // PR-PERMISSION-UI-CLEANUP-0: parallel the `abort` branch
+          // above — drop any stranded permission request for this
+          // session when it completes for non-permission-handoff
+          // reasons. Without this, a session that finishes while a
+          // permission overlay was mounted would leave the overlay
+          // stuck on screen until the user manually switches away.
+          setPermissionBySession((current) => ({ ...current, [sessionId]: undefined }));
         }
         void refreshSessions();
         void refreshMessages(sessionId);

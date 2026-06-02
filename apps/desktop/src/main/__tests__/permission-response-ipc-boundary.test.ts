@@ -161,6 +161,49 @@ describe('permission response IPC boundary', () => {
     assert.match(respond[0], /catch \(error\)[\s\S]*?toastApi\.error\(['"]响应失败['"]/);
   });
 
+  it('renderer clears permission overlay when a session completes (PR-PERMISSION-UI-CLEANUP-0)', async () => {
+    // Without this, a session that finishes for a reason other than
+    // permission_handoff would leave a stranded permission entry in
+    // `permissionBySession[sessionId]`, keeping the overlay visible
+    // and blocking the session UI until the user manually navigates
+    // away. Mirrors the existing `abort` cleanup.
+    const rendererPath = fileURLToPath(new URL('../../../src/renderer/main.tsx', import.meta.url));
+    const renderer = await readFile(rendererPath, 'utf8');
+    // Find the 'complete' case in handleSessionEvent — the body must
+    // null out permissionBySession[sessionId] when stopReason is
+    // not permission_handoff.
+    const completeCase = renderer.match(/case 'complete':[\s\S]*?break;/);
+    assert.ok(completeCase, "'complete' case must exist in renderer event handler");
+    assert.match(
+      completeCase[0],
+      /setPermissionBySession\(\(current\) => \(\{\s*\.\.\.current,\s*\[sessionId\]:\s*undefined\s*\}\)\)/,
+      "'complete' case must clear permissionBySession for the session — mirrors the abort handler",
+    );
+  });
+
+  it('PermissionDialog submit() awaits onRespond and resets pending in finally (PR-PERMISSION-UI-CLEANUP-0)', async () => {
+    // Critical interaction with PR-STOP-ERROR-SURFACE-0: the parent
+    // respondToPermission now swallows IPC errors via toast. If
+    // submit() doesn't reset pending on resolve OR catch, the
+    // dialog buttons lock up forever after a failed IPC.
+    const componentsPath = fileURLToPath(new URL('../../../../../packages/ui/src/components.tsx', import.meta.url));
+    const components = await readFile(componentsPath, 'utf8');
+    const submit = components.match(/async function submit\(decision:[\s\S]*?\n  \}/);
+    assert.ok(submit, 'PermissionDialog submit() must be async');
+    assert.match(submit[0], /await props\.onRespond\(/);
+    assert.match(submit[0], /\}\s*finally\s*\{[\s\S]*?responsePendingRef\.current\s*=\s*false[\s\S]*?setResponsePending\(false\)/);
+  });
+
+  it('toast items carry role="alert" so screen readers announce them (PR-PERMISSION-UI-CLEANUP-0)', async () => {
+    const toastPath = fileURLToPath(new URL('../../../../../packages/ui/src/toast.tsx', import.meta.url));
+    const toast = await readFile(toastPath, 'utf8');
+    assert.match(
+      toast,
+      /<li[^>]*role="alert"/,
+      'each toast <li> must declare role="alert" — the parent aria-live region alone is unreliable on macOS VoiceOver / NVDA',
+    );
+  });
+
   it('refreshes active messages when a sessions:changed message-appended event arrives', async () => {
     const rendererPath = fileURLToPath(new URL('../../../src/renderer/main.tsx', import.meta.url));
     const renderer = await readFile(rendererPath, 'utf8');

@@ -172,7 +172,12 @@ function ToastViewport(props: { toasts: InternalToast[]; onDismiss(id: string): 
       aria-label="通知"
     >
       {props.toasts.map((entry) => (
-        <li key={entry.id} className="maka-toast" data-variant={entry.variant}>
+        // role="alert" lets screen readers announce each toast even
+        // though the parent <ol> already has aria-live="polite" —
+        // browsers / AT pairings handle the live region announce
+        // better when the live items themselves carry an alert
+        // role rather than relying on the region inheritance.
+        <li key={entry.id} className="maka-toast" data-variant={entry.variant} role="alert">
           <span className="maka-toast-icon" aria-hidden="true">{VARIANT_ICON[entry.variant]}</span>
           <div className="maka-toast-copy">
             <strong>{entry.title}</strong>

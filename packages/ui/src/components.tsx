@@ -5253,7 +5253,12 @@ const REASON_PRESETS: Record<ReasonKind, ReasonPreset> = {
 
 export function PermissionDialog(props: {
   request: PermissionRequestEvent;
-  onRespond(response: PermissionResponse): void;
+  // Accept Promise-returning impls so the dialog can await the IPC
+  // and reset its own pending state when it resolves OR rejects.
+  // The renderer's `respondToPermission` is async but was typed as
+  // void by the legacy signature, which made `submit()` strand
+  // `responsePending=true` if the IPC failed silently.
+  onRespond(response: PermissionResponse): void | Promise<void>;
 }) {
   const [rememberForTurn, setRememberForTurn] = useState(false);
   const [responsePending, setResponsePending] = useState(false);
@@ -5276,20 +5281,26 @@ export function PermissionDialog(props: {
     return () => window.clearInterval(interval);
   }, [props.request.requestId]);
 
-  function submit(decision: PermissionResponse['decision']) {
+  async function submit(decision: PermissionResponse['decision']) {
     if (responsePendingRef.current) return;
     responsePendingRef.current = true;
     setResponsePending(true);
     try {
-      props.onRespond({
+      // PR-PERMISSION-UI-CLEANUP-0: await so the pending state
+      // resets when the IPC settles. Previously a Promise-returning
+      // onRespond would let the try/catch miss async rejections,
+      // and on success the parent normally unmounts us — but if the
+      // parent's own try/catch swallows the IPC error (PR-STOP-
+      // ERROR-SURFACE-0 does exactly this), we'd stay mounted with
+      // `responsePending=true` and the buttons would lock up.
+      await props.onRespond({
         requestId: props.request.requestId,
         decision,
         rememberForTurn: decision === 'allow' ? rememberForTurn : false,
       });
-    } catch (error) {
+    } finally {
       responsePendingRef.current = false;
       setResponsePending(false);
-      throw error;
     }
   }
 

@@ -7,14 +7,23 @@ describe('permission dialog response guard', () => {
   it('keeps allow/deny decisions single-flight for a request id', async () => {
     const source = await readFile(join(process.cwd(), '../../packages/ui/src/components.tsx'), 'utf8');
     const dialog = source.match(/export function PermissionDialog[\s\S]*?function renderPermissionSummary/)?.[0] ?? '';
-    const submit = dialog.match(/function submit\(decision: PermissionResponse\['decision'\]\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
+    // PR-PERMISSION-UI-CLEANUP-0: submit() became async + try/finally
+    // (was try/catch+throw). The single-flight contract is unchanged;
+    // only the reset path moved from catch to finally so the pending
+    // state clears on success too — necessary because the parent's
+    // `respondToPermission` now swallows IPC errors via toast
+    // (PR-STOP-ERROR-SURFACE-0).
+    const submit = dialog.match(/async function submit\(decision: PermissionResponse\['decision'\]\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
 
     assert.match(dialog, /const \[responsePending, setResponsePending\] = useState\(false\);/);
     assert.match(dialog, /const responsePendingRef = useRef\(false\);/);
     assert.match(dialog, /responsePendingRef\.current = false;[\s\S]*setNow\(Date\.now\(\)\);/, 'new permission request must clear stale pending state');
     assert.match(submit, /if \(responsePendingRef\.current\) return;/, 'same request must ignore duplicate allow\/deny clicks');
     assert.match(submit, /responsePendingRef\.current = true;[\s\S]*setResponsePending\(true\);/);
-    assert.match(submit, /catch \(error\) \{[\s\S]*responsePendingRef\.current = false;[\s\S]*setResponsePending\(false\);[\s\S]*throw error;[\s\S]*\}/);
+    // submit() now awaits onRespond and resets pending in finally so
+    // both success and async rejection paths clear the lock.
+    assert.match(submit, /await props\.onRespond\(/);
+    assert.match(submit, /\}\s*finally\s*\{[\s\S]*responsePendingRef\.current = false;[\s\S]*setResponsePending\(false\);[\s\S]*\}/);
     assert.match(dialog, /disabled=\{responsePending\}[\s\S]*onClick=\{\(\) => submit\('deny'\)\}/);
     assert.match(dialog, /disabled=\{responsePending\}[\s\S]*onClick=\{\(\) => submit\('allow'\)\}/);
     assert.match(dialog, /responsePending \? '正在提交…'/);
