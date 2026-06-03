@@ -251,7 +251,7 @@ describe('experimental kill-switch (kenji 1da909d5 + 45b31e16)', () => {
     );
   });
 
-  it('ProvidersPanel does not surface OAuth subscription roadmap tiles in the model catalog', async () => {
+  it('ProvidersPanel keeps OAuth login out of CATALOG_PROVIDER_TYPES but surfaces it as a real tab', async () => {
     const [src, core] = await Promise.all([
       readFile(PROVIDERS_PANEL_SOURCE, 'utf8'),
       readFile(resolve(REPO_ROOT, 'packages', 'core', 'src', 'llm-connections.ts'), 'utf8'),
@@ -266,11 +266,35 @@ describe('experimental kill-switch (kenji 1da909d5 + 45b31e16)', () => {
         `${provider} must stay out of the visible model provider catalog until its send path is actually open`,
       );
     }
-    assert.doesNotMatch(src, /\{\s*id:\s*'oauth'/, 'model provider catalog must not show an empty OAuth tab');
+    assert.match(src, /\{\s*id:\s*'oauth'[\s\S]*label:\s*'OAuth'/, 'model provider catalog must show OAuth as a peer tab');
+    assert.match(
+      src,
+      /catalogTab === 'oauth'\s*\?\s*\(\s*<ModelOAuthSection\s*\/>/,
+      'OAuth tab must render the real login cards, not an empty roadmap tile',
+    );
     assert.doesNotMatch(
       src,
       /即将支持的 OAuth 订阅登录/,
       'provider header must not advertise future OAuth subscription login as a visible model-provider affordance',
+    );
+  });
+});
+
+describe('Claude OAuth authorize URL compatibility', () => {
+  it('uses the Alma / upstream shape: code=true and state equals PKCE verifier', async () => {
+    const [service, core] = await Promise.all([
+      readFile(SERVICE_SOURCE, 'utf8'),
+      readFile(CORE_TYPES_SOURCE, 'utf8'),
+    ]);
+    assert.match(
+      core,
+      /url\.searchParams\.set\('code',\s*'true'\)/,
+      'Claude authorize URL must include code=true like Alma / Claude Code',
+    );
+    assert.match(
+      service,
+      /const verifier = base64urlEncode\(randomBytes\(PKCE_VERIFIER_LENGTH_BYTES\)\);\s*[\s\S]*?const state = verifier;/,
+      'Claude authorize state must equal the PKCE verifier; Anthropic rejects the shorter unrelated state with Invalid request format',
     );
   });
 });

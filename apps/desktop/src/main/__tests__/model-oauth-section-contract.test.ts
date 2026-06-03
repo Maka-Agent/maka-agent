@@ -1,5 +1,5 @@
 /**
- * Static-analysis contract for `ModelOAuthSection` in
+ * Static-analysis contract for the OAuth model-provider catalog in
  * `apps/desktop/src/renderer/settings/ProvidersPanel.tsx`
  * (PR-MODEL-OAUTH-ALL-0).
  *
@@ -30,7 +30,24 @@ const PROVIDERS_PANEL_SOURCE = resolve(
 );
 const PRELOAD_SOURCE = resolve(REPO_ROOT, 'apps', 'desktop', 'src', 'preload', 'preload.ts');
 
-describe('ModelOAuthSection card contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MOVE-0)', () => {
+describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MOVE-0)', () => {
+  it('renders OAuth as a catalog tab peer, not a standalone section above the market', async () => {
+    const src = await readFile(PROVIDERS_PANEL_SOURCE, 'utf8');
+    const tabs = src.match(/const CATALOG_TABS:[\s\S]*?\];/);
+    assert.ok(tabs, 'CATALOG_TABS literal must exist');
+    assert.match(tabs[0], /id:\s*'oauth'[\s\S]*label:\s*'OAuth'/, 'OAuth must be a catalog tab');
+    assert.match(
+      src,
+      /catalogTab === 'oauth'\s*\?\s*\(\s*<ModelOAuthSection\s*\/>/,
+      'OAuth login UI must render from the tab content branch',
+    );
+    const marketStart = src.indexOf('<section className="providerMarket">');
+    const firstOAuthRender = src.indexOf('<ModelOAuthSection />');
+    assert.ok(marketStart !== -1, 'provider market section must exist');
+    assert.ok(firstOAuthRender > marketStart, 'ModelOAuthSection must not be pinned above providerMarket');
+    assert.doesNotMatch(src, /providerOAuthHeader/, 'OAuth tab must not carry a second standalone section header');
+  });
+
   it('exposes exactly three button cards: codex, antigravity, cursor', async () => {
     // PR-CLAUDE-CARD-MOVE-0 (WAWQAQ msg ddecd729): Claude is no
     // longer a button card — the full ClaudeSubscriptionCard with
@@ -63,7 +80,7 @@ describe('ModelOAuthSection card contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD
 
   it('claude renders as the full inline card above the grid, not as a cross-section jump', async () => {
     const src = await readFile(PROVIDERS_PANEL_SOURCE, 'utf8');
-    // Claude is now an inline component within ModelOAuthSection,
+    // Claude is an inline component within the OAuth catalog tab,
     // not a button card that dispatches a cross-section jump.
     assert.match(
       src,

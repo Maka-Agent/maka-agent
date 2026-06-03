@@ -30,12 +30,13 @@ export interface ConnectionsBridge {
   hasSecret(slug: string): Promise<boolean>;
 }
 
-type CatalogTab = Extract<ProviderCategory, 'domestic' | 'overseas' | 'local'>;
+type CatalogTab = Extract<ProviderCategory, 'domestic' | 'overseas' | 'local' | 'oauth'>;
 
 const CATALOG_TABS: Array<{ id: CatalogTab; label: string }> = [
   { id: 'domestic', label: '国内' },
   { id: 'overseas', label: '海外' },
   { id: 'local', label: '本地' },
+  { id: 'oauth', label: 'OAuth' },
 ];
 
 /**
@@ -133,7 +134,6 @@ function chipTitle(connection: LlmConnection): string {
 
   return (
     <div className="providersPanel providersMarketPanel">
-      <ModelOAuthSection />
       <section className="providerMarket">
         <div className="enabledStrip" aria-label="已启用的模型供应商">
           <div className="enabledStripHeader">
@@ -173,7 +173,7 @@ function chipTitle(connection: LlmConnection): string {
         <div className="providerMarketHeader">
           <div>
             <h3>模型供应商</h3>
-            <p>选择 API Key 服务、本地模型，或自定义 OpenAI-compatible endpoint。</p>
+            <p>选择 API Key 服务、本地模型、OAuth 账号登录，或自定义 OpenAI-compatible endpoint。</p>
           </div>
           <button className="maka-button" type="button" onClick={() => startAdd('openai-compatible')}>
             自定义
@@ -195,16 +195,20 @@ function chipTitle(connection: LlmConnection): string {
           ))}
         </div>
 
-        <div className="catalogGrid providerMarketGrid">
-          {catalogProviders.map((type) => (
-            <ProviderCatalogCard
-              key={type}
-              type={type}
-              count={configuredByType(type)}
-              onSelect={() => startAdd(type)}
-            />
-          ))}
-        </div>
+        {catalogTab === 'oauth' ? (
+          <ModelOAuthSection />
+        ) : (
+          <div className="catalogGrid providerMarketGrid">
+            {catalogProviders.map((type) => (
+              <ProviderCatalogCard
+                key={type}
+                type={type}
+                count={configuredByType(type)}
+                onSelect={() => startAdd(type)}
+              />
+            ))}
+          </div>
+        )}
 
         <div className="customProviderEntry">
           <div>
@@ -365,12 +369,10 @@ export function ProviderLogo(props: { type: ProviderType; compact?: boolean }) {
 /**
  * PR-MODEL-OAUTH-SECTION-0 / PR-MODEL-OAUTH-ALL-0 / PR-CLAUDE-CARD-MOVE-0:
  *
- * Dedicated OAuth login section pinned to the top of Settings → 模型.
- * Claude lives here as the full inline card (with quota meter +
- * login/logout actions) — it was previously housed in Settings → 账号
- * but WAWQAQ called that placement out (msg ddecd729) since OAuth
- * subscriptions are conceptually a model-side concern, not an
- * account-identity concern.
+ * OAuth login catalog for Settings → 模型. It is rendered by the
+ * same tab switcher as 国内 / 海外 / 本地, not as a standalone section
+ * pinned above the provider market. Claude lives here as the full
+ * inline card (with quota meter + login/logout actions).
  *
  * Codex / Cursor / Antigravity each render as a button card below;
  * clicking opens an inline modal that drives the corresponding
@@ -456,11 +458,7 @@ function ModelOAuthSection() {
   }, []);
 
   return (
-    <section className="providerOAuthSection" aria-label="OAuth 登录">
-      <div className="providerOAuthHeader">
-        <h3>OAuth 登录</h3>
-        <p>用账号订阅替代 API key —— 不需要拷贝 token，登录后直接用模型。</p>
-      </div>
+    <div className="providerOAuthCatalog" aria-label="OAuth 登录" data-provider-category="oauth">
       {/* Claude renders as the full inline card with quota meter
           and login/logout. The other 3 providers render as button
           cards because their account state is simpler (no quota
@@ -504,7 +502,7 @@ function ModelOAuthSection() {
           }}
         />
       )}
-    </section>
+    </div>
   );
 }
 
@@ -1688,5 +1686,4 @@ function presentSubscriptionState(state: SubscriptionAccountState): Subscription
       return { label: '未知状态', tone: 'muted', detail: '' };
   }
 }
-
 

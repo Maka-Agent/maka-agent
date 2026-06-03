@@ -180,7 +180,11 @@ export class ClaudeSubscriptionService {
   async getAuthorizationUrl(): Promise<AuthorizationUrlPayload> {
     this.pruneExpiredPending();
     const verifier = base64urlEncode(randomBytes(PKCE_VERIFIER_LENGTH_BYTES));
-    const state = base64urlEncode(randomBytes(16));
+    // Alma / upstream Claude Code uses the PKCE verifier as the OAuth
+    // state value. Anthropic's authorize page rejects shorter, unrelated
+    // state strings with "Invalid request format", so keep this flow
+    // source-compatible while still validating the pasted state strictly.
+    const state = verifier;
     const authRequestId = randomUUID();
     const url = buildClaudeAuthorizationUrl(
       {

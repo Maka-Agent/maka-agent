@@ -7687,28 +7687,16 @@ button:active {
   gap: 14px;
 }
 
-/* PR-MODEL-OAUTH-SECTION-0 (WAWQAQ msg `ac1bdf15`): account-bound OAuth
-   providers pinned to the top of Settings → 模型 so they get visual
-   priority over the API-key catalog. Each card uses its brand accent
-   color via the inline `--oauth-accent` custom property. */
-.providerOAuthSection {
-  display: flex;
-  flex-direction: column;
+/* Account-bound OAuth providers live under the OAuth catalog tab, as
+   a peer of 国内 / 海外 / 本地 instead of a pinned standalone section.
+   Each card uses its brand accent color via the inline
+   `--oauth-accent` custom property. */
+.providerOAuthCatalog {
+  min-height: 0;
+  display: grid;
   gap: 12px;
-  padding-bottom: 16px;
-  margin-bottom: 18px;
-  border-bottom: 1px solid var(--border);
-}
-.providerOAuthHeader h3 {
-  margin: 0 0 4px;
-  font-size: 14px;
-  font-weight: 600;
-}
-.providerOAuthHeader p {
-  margin: 0;
-  font-size: 12px;
-  color: var(--foreground-55);
-  line-height: 1.5;
+  overflow: auto;
+  padding-right: 4px;
 }
 .providerOAuthGrid {
   display: grid;
