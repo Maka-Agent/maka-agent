@@ -2091,8 +2091,8 @@ function AppShell() {
             onOpenUpdate={() => openSettingsSection('about')}
             onNew={createSession}
             onOpenSearchModal={() => setSearchModalOpen(true)}
-            onCreatePlanReminder={(input) => void createPlanReminder(input)}
-            onUpdatePlanReminder={(id, patch) => void updatePlanReminder(id, patch)}
+            onCreatePlanReminder={(input) => createPlanReminder(input)}
+            onUpdatePlanReminder={(id, patch) => updatePlanReminder(id, patch)}
             onTogglePlanReminder={(id, enabled) => void togglePlanReminder(id, enabled)}
             onTriggerPlanReminderNow={(id) => void triggerPlanReminderNow(id)}
             onSnoozePlanReminder={(id) => void snoozePlanReminder(id)}
@@ -2174,8 +2174,8 @@ function AppShell() {
                 onCreateSkillTemplate={() => void createSkillTemplate()}
                 onOpenSkill={(skillId) => void openSkill(skillId)}
                 planReminders={planReminders}
-                onCreatePlanReminder={(input) => void createPlanReminder(input)}
-                onUpdatePlanReminder={(id, patch) => void updatePlanReminder(id, patch)}
+                onCreatePlanReminder={(input) => createPlanReminder(input)}
+                onUpdatePlanReminder={(id, patch) => updatePlanReminder(id, patch)}
                 onTogglePlanReminder={(id, enabled) => void togglePlanReminder(id, enabled)}
                 onTriggerPlanReminderNow={(id) => void triggerPlanReminderNow(id)}
                 onSnoozePlanReminder={(id) => void snoozePlanReminder(id)}

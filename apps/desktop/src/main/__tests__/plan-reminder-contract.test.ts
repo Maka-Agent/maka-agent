@@ -107,6 +107,10 @@ describe('Plan reminder MVP contract', () => {
     assert.doesNotMatch(panelBlock, /props\.onCreate\?\([\s\S]*?\);\s*}\s*resetForm\(\)/, 'plan form must not clear fields immediately after firing create');
     assert.match(renderer, /toastApi\.success\('已创建计划提醒'[\s\S]*return true;[\s\S]*toastApi\.error\('创建计划失败'[\s\S]*return false;/, 'createPlanReminder must report success/failure to the form');
     assert.match(renderer, /toastApi\.success\('已保存计划提醒'[\s\S]*return true;[\s\S]*toastApi\.error\('保存计划失败'[\s\S]*return false;/, 'updatePlanReminder must report success/failure to the form');
+    assert.match(renderer, /onCreatePlanReminder=\{\(input\) => createPlanReminder\(input\)\}/, 'ChatView must receive the create outcome instead of a voided fire-and-forget wrapper');
+    assert.match(renderer, /onUpdatePlanReminder=\{\(id, patch\) => updatePlanReminder\(id, patch\)\}/, 'ChatView must receive the update outcome instead of a voided fire-and-forget wrapper');
+    assert.doesNotMatch(renderer, /onCreatePlanReminder=\{\(input\) => void createPlanReminder\(input\)\}/, 'renderer must not discard createPlanReminder failure');
+    assert.doesNotMatch(renderer, /onUpdatePlanReminder=\{\(id, patch\) => void updatePlanReminder\(id, patch\)\}/, 'renderer must not discard updatePlanReminder failure');
   });
 
   it('scheduler records trigger outcomes and emits due events', async () => {
