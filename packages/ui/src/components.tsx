@@ -4728,6 +4728,7 @@ export const Composer = forwardRef<
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [sendPending, setSendPending] = useState(false);
+  const [hasDraftText, setHasDraftText] = useState(false);
   const draftStoreRef = useRef<Map<string, string>>(new Map());
   const activeDraftKeyRef = useRef<string | undefined>(props.draftKey);
   const sendPendingRef = useRef(false);
@@ -4753,7 +4754,9 @@ export const Composer = forwardRef<
   }
 
   function saveCurrentDraft(value?: string) {
-    rememberComposerDraft(draftStoreRef.current, activeDraftKeyRef.current, value ?? textareaRef.current?.value ?? '');
+    const nextValue = value ?? textareaRef.current?.value ?? '';
+    rememberComposerDraft(draftStoreRef.current, activeDraftKeyRef.current, nextValue);
+    setHasDraftText(Boolean(nextValue.trim()));
   }
 
   function resetPromptHistoryNavigation() {
@@ -4774,7 +4777,9 @@ export const Composer = forwardRef<
       activeDraftKeyRef.current = nextKey;
       resetPromptHistoryNavigation();
       if (el) {
-        el.value = readComposerDraft(draftStoreRef.current, nextKey);
+        const nextDraft = readComposerDraft(draftStoreRef.current, nextKey);
+        el.value = nextDraft;
+        setHasDraftText(Boolean(nextDraft.trim()));
         autoResize();
         const length = el.value.length;
         el.setSelectionRange(length, length);
@@ -4953,6 +4958,7 @@ export const Composer = forwardRef<
   }, [dragActive]);
 
   if (props.hidden) return null;
+  const sendDisabled = props.disabled || sendPending || !hasDraftText;
 
   return (
     <form
@@ -5023,7 +5029,7 @@ export const Composer = forwardRef<
                 {buttonCopy.stopLabel}
               </button>
             ) : (
-              <button className="maka-button" data-variant="primary" type="submit" disabled={props.disabled || sendPending}>
+              <button className="maka-button" data-variant="primary" type="submit" disabled={sendDisabled}>
                 {buttonCopy.sendLabel}
               </button>
             )}
