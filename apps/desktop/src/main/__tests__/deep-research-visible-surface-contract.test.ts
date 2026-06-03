@@ -40,7 +40,7 @@ describe('deep research visible surface contract', () => {
     );
     assert.match(ui, /DEEP_RESEARCH_STARTER_PROMPTS\.map/);
     assert.doesNotMatch(ui, /DEEP_RESEARCH_PROMPT_SUGGESTIONS/);
-    assert.match(ui, /固定在 Explore 权限/);
+    assert.match(ui, /固定在只读权限/);
     assert.match(ui, /DEEP_RESEARCH_WORKFLOW_STEPS\.map/);
     assert.match(ui, /aria-label="深度研究流程"/);
     assert.match(ui, /DEEP_RESEARCH_REPORT_SECTIONS\.map/);

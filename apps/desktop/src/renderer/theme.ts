@@ -100,8 +100,8 @@ export function applyThemePalette(palette: ThemePalette): void {
 /**
  * PR-LANG-PREF-0: apply persisted UI locale preference to `<html>`.
  *
- * - `'auto'`  → remove `data-maka-locale` so `detectUiLocale()` falls
- *               through to `navigator.language`.
+ * - `'auto'`  → remove `data-maka-locale`; UI components fall back to
+ *               the Chinese-first product default.
  * - `'zh'` / `'en'` → set `data-maka-locale=<value>` so
  *               `detectUiLocale()` returns the user choice synchronously
  *               on every read.
@@ -117,13 +117,9 @@ export function applyUiLocale(preference: UiLocalePreference): void {
   const root = document.documentElement;
   if (preference === 'auto') {
     root.removeAttribute('data-maka-locale');
-    // Restore the lang attribute to a best-effort fallback from
-    // navigator. Don't blank it out — empty `<html lang>` is worse
-    // for assistive tech than a slightly stale value.
-    const fallback = typeof navigator !== 'undefined' && navigator.language
-      ? (navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en')
-      : 'zh';
-    root.setAttribute('lang', fallback);
+    // Keep the default shell coherent for assistive tech. Explicit
+    // English still sets both `data-maka-locale` and `lang` below.
+    root.setAttribute('lang', 'zh');
   } else {
     root.setAttribute('data-maka-locale', preference);
     root.setAttribute('lang', preference);

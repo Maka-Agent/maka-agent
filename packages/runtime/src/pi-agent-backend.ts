@@ -342,7 +342,7 @@ export class PiAgentBackend implements AgentBackend {
 
     if (response.decision === 'deny') {
       this.suppressedToolUseIds.add(frame.toolUseId);
-      const content: ToolResultContent = { kind: 'text', text: 'User denied permission' };
+      const content: ToolResultContent = { kind: 'text', text: '用户已拒绝权限请求' };
       await this.appendToolResult(turnId, frame.toolUseId, true, content);
       yield this.toolResultEvent(turnId, frame.toolUseId, true, content);
     }

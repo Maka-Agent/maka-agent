@@ -27,8 +27,15 @@ let cachedAbsoluteFormat: Intl.DateTimeFormat | null = null;
 let cachedLocale: string | null = null;
 
 function resolveLocale(): string {
-  if (typeof navigator !== 'undefined' && navigator.language) return navigator.language;
-  return 'en';
+  if (typeof document !== 'undefined') {
+    const explicit = document.documentElement.getAttribute('data-maka-locale');
+    if (explicit === 'en') return 'en';
+    if (explicit === 'zh') return 'zh-CN';
+    const smoke = document.documentElement.getAttribute('data-maka-visual-smoke-locale');
+    if (smoke === 'en') return 'en';
+    if (smoke === 'zh') return 'zh-CN';
+  }
+  return 'zh-CN';
 }
 
 function getRelativeFormat(): Intl.RelativeTimeFormat {

@@ -764,6 +764,7 @@ function SkillLibraryPanel(props: {
       {props.skills.map((skill) => {
         const tools = skill.declaredTools ?? [];
         const toolsLabel = tools.length > 0 ? tools.join(', ') : '';
+        const description = formatSkillLibraryDescription(skill);
         const hoverText = tools.length > 0
           ? `${skill.path}\n\n声明工具：${toolsLabel}\n权限仍按当前会话策略判断；这里不是授权。`
           : skill.path;
@@ -776,8 +777,8 @@ function SkillLibraryPanel(props: {
             title={hoverText}
           >
             <span className="maka-skill-library-name">{skill.name}</span>
-            {skill.description && (
-              <span className="maka-skill-library-description">{skill.description}</span>
+            {description && (
+              <span className="maka-skill-library-description">{description}</span>
             )}
             <span className="maka-skill-library-meta">
               <span>{skill.id}</span>
@@ -793,6 +794,33 @@ function SkillLibraryPanel(props: {
       })}
     </div>
   );
+}
+
+function formatSkillLibraryDescription(skill: SkillEntry): string | undefined {
+  const raw = skill.description?.trim();
+  if (!raw) return undefined;
+  if (/[\u3400-\u9fff]/.test(raw)) return raw;
+
+  const source = `${skill.id} ${skill.name} ${raw}`.toLowerCase();
+  if (source.includes('docx') || source.includes('word') || source.includes('google docs')) {
+    return '创建、编辑、检查文档内容。';
+  }
+  if (source.includes('ppt') || source.includes('powerpoint') || source.includes('slide') || source.includes('presentation')) {
+    return '创建、编辑、检查演示文稿。';
+  }
+  if (source.includes('spreadsheet') || source.includes('excel') || source.includes('csv') || source.includes('xlsx')) {
+    return '创建、编辑、分析表格数据。';
+  }
+  if (source.includes('image') || source.includes('photo') || source.includes('bitmap')) {
+    return '生成或编辑图片素材。';
+  }
+  if (source.includes('browser') || source.includes('chrome') || source.includes('web target')) {
+    return '打开、检查、操作网页界面。';
+  }
+  if (source.includes('macos') || source.includes('swiftui') || source.includes('appkit')) {
+    return '辅助构建和调试 macOS 应用。';
+  }
+  return '打开技能文件查看适用场景。';
 }
 
 /**
@@ -2383,15 +2411,15 @@ const PROMPT_SUGGESTIONS_BY_LOCALE: Record<PromptSuggestionLocale, PromptSuggest
     { label: '读一份长文', prompt: '我贴一篇文章/文档过来，请帮我提炼核心观点、列出关键事实、找出我可能漏看的地方：\n\n' },
     { label: '翻译并润色', prompt: '把下面这段翻译成英文，保持原意，语气专业自然：\n\n' },
     { label: '起草一条消息', prompt: '帮我起草一条 ____ 风格的消息，对象是 ____，目的是 ____：\n\n要点：\n- \n- ' },
-    { label: 'Code review', prompt: '请帮我 review 这段代码，重点关注可读性、错误处理和潜在性能问题：\n\n```\n\n```' },
+    { label: '代码审查', prompt: '请帮我审查这段代码，重点关注可读性、错误处理和潜在性能问题：\n\n```\n\n```' },
   ],
   en: [
-    { label: 'Summarize this codebase', prompt: 'Help me map this codebase: directory layout, key modules, and how they fit together.' },
-    { label: 'Explain this code', prompt: 'Paste a snippet — explain it line by line and flag any pitfalls:\n\n```\n\n```' },
-    { label: 'Read this for me', prompt: 'Here\'s an article or doc — pull out the core argument, list the key facts, and tell me what I might be missing:\n\n' },
+    { label: 'Summarize codebase', prompt: 'Help me map this codebase: directory layout, key modules, and how they fit together.' },
+    { label: 'Explain code', prompt: 'Paste a snippet — explain it line by line and flag any pitfalls:\n\n```\n\n```' },
+    { label: 'Read a long doc', prompt: 'Here\'s an article or doc — pull out the core argument, list the key facts, and tell me what I might be missing:\n\n' },
     { label: 'Translate & polish', prompt: 'Translate the text below into Chinese; keep the meaning, tone should stay natural and professional:\n\n' },
-    { label: 'Draft a message', prompt: 'Help me draft a ____ message to ____, with the goal of ____:\n\nPoints to cover:\n- \n- ' },
-    { label: 'Code review', prompt: 'Please review this code — readability, error handling, performance concerns:\n\n```\n\n```' },
+    { label: 'Draft message', prompt: 'Help me draft a ____ message to ____, with the goal of ____:\n\nPoints to cover:\n- \n- ' },
+    { label: 'Review code', prompt: 'Please review this code — readability, error handling, performance concerns:\n\n```\n\n```' },
   ],
 };
 
@@ -2414,20 +2442,18 @@ export function detectUiLocale(): UiLocale {
     //      to `<html>` on mount and on every settings save so we
     //      can read it synchronously here without an async
     //      settings round-trip.
-    //   3. `navigator.language` (today's behavior).
+    //   3. Chinese-first product fallback. Most app chrome is already
+    //      Chinese, and Electron's `navigator.language` can be `en-US`
+    //      on this dev machine, which produced a visibly mixed shell.
     //
-    // Real users with `uiLocale === 'auto'` produce no
-    // `data-maka-locale` attribute, so this helper falls through
-    // to `navigator.language` exactly as before — backward
-    // compatible.
+    // Real users can still choose English explicitly in Settings; `auto`
+    // should not make the default Chinese shell read half-English.
     const smokeOverride = document.documentElement.dataset.makaVisualSmokeLocale;
     if (smokeOverride === 'zh' || smokeOverride === 'en') return smokeOverride;
     const userPref = document.documentElement.dataset.makaLocale;
     if (userPref === 'zh' || userPref === 'en') return userPref;
   }
-  if (typeof navigator === 'undefined') return 'zh';
-  const lang = navigator.language?.toLowerCase() ?? '';
-  return lang.startsWith('zh') ? 'zh' : 'en';
+  return 'zh';
 }
 
 // Back-compat alias for the helper introduced in PR-UI-14.
@@ -2621,9 +2647,9 @@ function SessionRow(props: {
               stopPropagation(event);
               actions.onToggleFlag(session.id, !session.isFlagged);
             }}
-            aria-label={session.isFlagged ? 'Unpin chat' : 'Pin chat'}
+            aria-label={session.isFlagged ? '取消置顶对话' : '置顶对话'}
             data-active={session.isFlagged}
-            title={session.isFlagged ? 'Unpin chat' : 'Pin chat'}
+            title={session.isFlagged ? '取消置顶对话' : '置顶对话'}
           >
             {session.isFlagged
               ? <PinOff size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -2677,17 +2703,17 @@ interface PermissionModeMeta {
 
 const PERMISSION_MODE_META: Record<PermissionMode, PermissionModeMeta> = {
   explore: {
-    label: 'Explore',
-    hint: '只读模式：read/list/grep 直通，写入或网络仍需明确确认。',
+    label: '只读',
+    hint: '只读模式：读取、列表、搜索直通，写入或网络仍需明确确认。',
     tone: 'info',
   },
   ask: {
-    label: 'Ask',
-    hint: '平衡模式：敏感工具调用前必须 allow / deny。',
+    label: '确认',
+    hint: '平衡模式：敏感工具调用前必须允许或拒绝。',
     tone: 'accent',
   },
   execute: {
-    label: 'Execute',
+    label: '执行',
     hint: '执行模式：信任的工具调用直通；破坏性操作仍会拦截。',
     tone: 'caution',
   },
@@ -3632,7 +3658,7 @@ function DeepResearchEmptyHero(props: { onPromptSuggestion?(prompt: string): voi
         </span>
         <h1>先把项目读透，再决定怎么改。</h1>
         <p>
-          这个会话固定在 Explore 权限：优先阅读、搜索和分析代码；需要动手实现时，先输出文件、风险和验证命令。
+          这个会话固定在只读权限：优先阅读、搜索和分析代码；需要动手实现时，先输出文件、风险和验证命令。
         </p>
       </header>
       <ol className="maka-deep-research-workflow" aria-label="深度研究流程">
@@ -3774,18 +3800,18 @@ function PermissionModeSwitcher(props: {
   );
 }
 
-const absoluteTimeFormat = (() => {
+function createAbsoluteTimeFormat(): Intl.DateTimeFormat {
   if (typeof Intl === 'undefined' || typeof Intl.DateTimeFormat !== 'function') {
     return { format: (d: Date) => d.toISOString() } as unknown as Intl.DateTimeFormat;
   }
   return new Intl.DateTimeFormat(
-    typeof navigator !== 'undefined' ? navigator.language : 'en',
+    detectUiLocale() === 'en' ? 'en' : 'zh-CN',
     { dateStyle: 'medium', timeStyle: 'short' },
   );
-})();
+}
 
 function formatAbsoluteTimestamp(ts: number): string {
-  return absoluteTimeFormat.format(new Date(ts));
+  return createAbsoluteTimeFormat().format(new Date(ts));
 }
 
 /**
@@ -4516,6 +4542,7 @@ const COMPOSER_MAX_HEIGHT = 240;
  */
 const COMPOSER_COPY_BY_LOCALE: Record<UiLocale, {
   placeholder: string;
+  textareaAriaLabel: string;
   awaitingPermission: string;
   sending: string;
   streamingHintPrefix: string;
@@ -4524,6 +4551,7 @@ const COMPOSER_COPY_BY_LOCALE: Record<UiLocale, {
 }> = {
   zh: {
     placeholder: '给 Maka 发消息…',
+    textareaAriaLabel: '消息输入框',
     awaitingPermission: '等待你确认权限…',
     sending: '正在发送…',
     // PR-UX-POLISH-1 (yuejing UX audit msg `9c779b56`): composer streaming
@@ -4532,11 +4560,12 @@ const COMPOSER_COPY_BY_LOCALE: Record<UiLocale, {
     // extended-thinking stream). Composer = output-streaming;
     // ReasoningPanel = reasoning-streaming; distinct signals, distinct copy.
     streamingHintPrefix: 'Maka 正在回答…',
-    streamingHintInterrupt: '或点 Stop 中断',
+    streamingHintInterrupt: '或点停止中断',
     enterHint: { send: '发送', newline: '换行' },
   },
   en: {
     placeholder: 'Message Maka…',
+    textareaAriaLabel: 'Message input',
     awaitingPermission: 'Waiting for your permission decision…',
     sending: 'Sending…',
     // PR-UX-POLISH-1: parallel en-locale fix — `is responding` instead of
@@ -4888,6 +4917,19 @@ export const Composer = forwardRef<
     void props.onImportDroppedTextFiles?.(files);
   }
 
+  useEffect(() => {
+    if (!dragActive) return undefined;
+    const clearDragActive = () => setDragActive(false);
+    window.addEventListener('blur', clearDragActive);
+    window.addEventListener('dragend', clearDragActive);
+    window.addEventListener('drop', clearDragActive);
+    return () => {
+      window.removeEventListener('blur', clearDragActive);
+      window.removeEventListener('dragend', clearDragActive);
+      window.removeEventListener('drop', clearDragActive);
+    };
+  }, [dragActive]);
+
   if (props.hidden) return null;
 
   return (
@@ -4905,6 +4947,7 @@ export const Composer = forwardRef<
           ref={textareaRef}
           name="text"
           placeholder={copy.placeholder}
+          aria-label={copy.textareaAriaLabel}
           disabled={props.disabled}
           onKeyDown={onTextareaKeyDown}
           onPaste={onTextareaPaste}
@@ -5010,6 +5053,14 @@ function extractErrorText(result: ToolActivityItem['result']): string {
   }
 }
 
+function formatUserVisibleToolText(text: string): string {
+  return text.replace(/\bUser denied permission\b/g, '用户已拒绝权限请求');
+}
+
+function isPermissionDeniedToolResult(result: ToolActivityItem['result']): boolean {
+  return result?.kind === 'text' && formatUserVisibleToolText(result.text).trim() === '用户已拒绝权限请求';
+}
+
 export function formatRedactedJson(value: unknown): string {
   try {
     return redactSecrets(JSON.stringify(value, null, 2));
@@ -5042,6 +5093,7 @@ export function ToolActivity(props: { items: ToolActivityItem[] }) {
       {props.items.map((item) => {
         const duration = formatDuration(item.durationMs);
         const errored = item.status === 'errored';
+        const permissionDenied = isPermissionDeniedToolResult(item.result);
         return (
           <details
             key={item.toolUseId}
@@ -5059,8 +5111,8 @@ export function ToolActivity(props: { items: ToolActivityItem[] }) {
             </summary>
             <div className="maka-tool-body">
               {errored && <ToolErrorBanner result={item.result} />}
-              {item.intent && <p className="maka-tool-intent">{formatToolIntent(item.intent)}</p>}
-              {item.args !== undefined && (
+              {item.intent && !permissionDenied && <p className="maka-tool-intent">{formatToolIntent(item.intent)}</p>}
+              {item.args !== undefined && !permissionDenied && (
                 <pre className="maka-code toolArgs">{formatRedactedJson(item.args)}</pre>
               )}
               {item.outputChunks && item.outputChunks.length > 0 && (
@@ -5071,7 +5123,7 @@ export function ToolActivity(props: { items: ToolActivityItem[] }) {
                   truncated={item.outputTruncated === true}
                 />
               )}
-              {item.result && <OverlayPreview content={item.result} />}
+              {item.result && !permissionDenied && <OverlayPreview content={item.result} />}
             </div>
           </details>
         );
@@ -5179,7 +5231,7 @@ function ToolErrorBanner(props: { result: ToolActivityItem['result'] }) {
   // bearer tokens, or API keys through main-side redaction. Apply a
   // defensive UI-level mask before display *and* before clipboard copy so
   // the user can't accidentally paste a credential into a bug report.
-  const errorText = redactSecrets(extractErrorText(props.result));
+  const errorText = formatUserVisibleToolText(redactSecrets(extractErrorText(props.result)));
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -5581,11 +5633,11 @@ function OverlayPreview(props: { content: ToolResultContent }) {
     // JSON shouldn't contain secrets persisted by Maka (settings + telemetry
     // are sanitized at write-time), but apply the renderer redactor as a
     // second-layer defense in case a tool returned raw provider response.
-    return <pre className="maka-overlay-preview" data-kind="json">{redactSecrets(body)}</pre>;
+    return <pre className="maka-overlay-preview" data-kind="json">{formatUserVisibleToolText(redactSecrets(body))}</pre>;
   }
 
   if (content.kind === 'text') {
-    const { body, capped } = capLines(redactSecrets(content.text));
+    const { body, capped } = capLines(formatUserVisibleToolText(redactSecrets(content.text)));
     return (
       <pre className="maka-overlay-preview" data-kind="text">
         {body}
@@ -6536,10 +6588,7 @@ function mergeTools(stored: ToolActivityItem[], live: ToolActivityItem[]): ToolA
   return [...byId.values()];
 }
 
-const noMessagesYet =
-  typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('zh')
-    ? '暂无消息'
-    : 'No messages yet';
+const noMessagesYet = '暂无消息';
 
 interface SessionGroup {
   label: string;

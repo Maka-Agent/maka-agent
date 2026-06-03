@@ -627,7 +627,7 @@ export class AiSdkBackend implements AgentBackend {
         });
 
         if (response.decision === 'deny') {
-          const reason = 'User denied permission';
+          const reason = '用户已拒绝权限请求';
           await this.writeSyntheticToolResult(toolUseId, turnId, reason, queue);
           return this.errorReturn(reason);
         }

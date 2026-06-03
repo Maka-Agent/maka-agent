@@ -58,7 +58,7 @@ const READY_HERO_COPY_BY_LOCALE: Record<UiLocale, {
     headline: '你已经配置好了 —— 直接说说你想做什么。',
     intro: '下面这个输入框会用默认模型开新会话；空提交也会打开一个空会话，方便你之后再输入。',
     quickChatPlaceholder: '给 Maka 发消息…',
-    quickChatAria: 'Quick Chat 输入框',
+    quickChatAria: '快速对话输入框',
     quickChatExample: '例如：帮我读一下这个项目的目录结构，告诉我入口在哪里。',
     submitIdleLabel: '开始对话',
     submitPendingLabel: '正在创建…',

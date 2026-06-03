@@ -641,8 +641,8 @@ function AppShell() {
       const name = next.personalization?.displayName ?? '';
       // PR-LANG-PREF-0: apply persisted UI locale preference to
       // `<html data-maka-locale>` BEFORE first paint of any
-      // locale-aware surface. `'auto'` clears the attribute so
-      // `detectUiLocale()` falls through to `navigator.language`.
+      // locale-aware surface. `'auto'` clears the explicit attribute
+      // and uses the Chinese-first product fallback.
       const uiLocale = next.personalization?.uiLocale ?? 'auto';
       applyUiLocale(uiLocale);
       setThemePref(pref);
@@ -2570,7 +2570,7 @@ function AppShell() {
 
 const modeDescriptions: Record<PermissionMode, string> = {
   explore: '只读工具直通，写入或网络仍需确认。',
-  ask: '所有敏感工具调用前都会停下来征求 allow / deny。',
+  ask: '所有敏感工具调用前都会停下来征求允许或拒绝。',
   execute: '常见工具直通；只有破坏性操作仍然拦截。',
 };
 

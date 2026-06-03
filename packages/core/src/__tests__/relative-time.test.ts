@@ -16,6 +16,12 @@ beforeEach(() => {
 describe('formatRelativeTimestamp', () => {
   const NOW = Date.parse('2026-05-29T12:00:00Z');
 
+  it('defaults to Chinese instead of the host navigator locale', () => {
+    const out = formatRelativeTimestamp(NOW - 8_000, NOW);
+    assert.match(out, /秒/);
+    assert.doesNotMatch(out, /seconds?\s+ago/i);
+  });
+
   it('clamps sub-second ages to >=1s so we never see "0 seconds ago"', () => {
     const out = formatRelativeTimestamp(NOW - 100, NOW);
     assert.match(out, /1.*second|秒|now|刚刚/i);

@@ -456,9 +456,9 @@ export function buildCommandList(args: {
     const setMode = args.onSetPermissionMode;
     const current = args.activePermissionMode;
     const modes: Array<{ id: 'explore' | 'ask' | 'execute'; label: string; hintCopy: string }> = [
-      { id: 'explore', label: '权限 · 探索', hintCopy: 'explore · 只读 / 安全 shell' },
-      { id: 'ask', label: '权限 · 问我', hintCopy: 'ask · 每条工具确认（默认）' },
-      { id: 'execute', label: '权限 · 自动', hintCopy: 'execute · 不可逆仍提示' },
+      { id: 'explore', label: '权限 · 只读', hintCopy: '读取和搜索直通，写入仍确认' },
+      { id: 'ask', label: '权限 · 确认', hintCopy: '每条敏感工具都先确认（默认）' },
+      { id: 'execute', label: '权限 · 执行', hintCopy: '可信工具直通，不可逆仍提示' },
     ];
     for (const entry of modes) {
       cmds.push({

@@ -1,0 +1,94 @@
+import { strict as assert } from 'node:assert';
+import { readFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { describe, it } from 'node:test';
+
+describe('localized main shell contract', () => {
+  it('keeps the default app shell Chinese unless the user explicitly chooses English', async () => {
+    const components = await readFile(resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'components.tsx'), 'utf8');
+    const theme = await readFile(join(process.cwd(), 'src', 'renderer', 'theme.ts'), 'utf8');
+
+    assert.match(components, /export function detectUiLocale\(\): UiLocale \{[\s\S]*return 'zh';\n\}/);
+    assert.match(theme, /if \(preference === 'auto'\) \{[\s\S]*root\.setAttribute\('lang', 'zh'\);/);
+    assert.doesNotMatch(components, /navigator\.language[\s\S]{0,160}startsWith\('zh'\)[\s\S]{0,80}\?\s*'zh'\s*:\s*'en'/);
+  });
+
+  it('does not leak English utility labels into the default chat accessibility tree', async () => {
+    const components = await readFile(resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'components.tsx'), 'utf8');
+    const relativeTime = await readFile(resolve(process.cwd(), '..', '..', 'packages', 'core', 'src', 'relative-time.ts'), 'utf8');
+    const main = await readFile(join(process.cwd(), 'src', 'renderer', 'main.tsx'), 'utf8');
+    const settings = await readFile(join(process.cwd(), 'src', 'renderer', 'settings', 'SettingsModal.tsx'), 'utf8');
+    const commandPalette = await readFile(join(process.cwd(), 'src', 'renderer', 'command-palette.tsx'), 'utf8');
+    const zhComposerBlock = components.match(/zh: \{\n\s*placeholder: '给 Maka 发消息…'[\s\S]*?\n\s*\},\n\s*en:/)?.[0] ?? '';
+
+    assert.match(components, /aria-label=\{session\.isFlagged \? '取消置顶对话' : '置顶对话'\}/);
+    assert.doesNotMatch(components, /aria-label=\{session\.isFlagged \? 'Unpin chat' : 'Pin chat'\}/);
+    assert.match(components, /const noMessagesYet = '暂无消息';/);
+    assert.match(components, /label: '只读'[\s\S]*label: '确认'[\s\S]*label: '执行'/);
+    assert.match(components, /label: '代码审查'/);
+    assert.match(zhComposerBlock, /textareaAriaLabel: '消息输入框'/);
+    assert.match(zhComposerBlock, /streamingHintInterrupt: '或点停止中断'/);
+    assert.match(components, /detectUiLocale\(\) === 'en' \? 'en' : 'zh-CN'/);
+    assert.match(relativeTime, /return 'zh-CN';/);
+    assert.doesNotMatch(relativeTime, /navigator\.language/);
+    assert.match(main, /ask: '所有敏感工具调用前都会停下来征求允许或拒绝。'/);
+    assert.match(settings, /新会话默认从确认模式开始；可在对话顶部切到只读或执行。/);
+    assert.match(settings, /SettingRow title="启动"[\s\S]*value="已启用"/);
+    assert.match(settings, /SettingRow title="新对话模式"[\s\S]*value="确认"/);
+    assert.match(settings, /props\.defaultSlug \?\? '未设置'/);
+    assert.match(commandPalette, /权限 · 只读[\s\S]*权限 · 确认[\s\S]*权限 · 执行/);
+  });
+
+  it('clears drag-active composer state when the drag leaves the window', async () => {
+    const components = await readFile(resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'components.tsx'), 'utf8');
+    const composerBlock = components.match(/export const Composer[\s\S]*?if \(props\.hidden\) return null;/)?.[0] ?? '';
+
+    assert.match(composerBlock, /window\.addEventListener\('blur', clearDragActive\)/);
+    assert.match(composerBlock, /window\.addEventListener\('dragend', clearDragActive\)/);
+    assert.match(composerBlock, /window\.addEventListener\('drop', clearDragActive\)/);
+    assert.match(composerBlock, /window\.removeEventListener\('blur', clearDragActive\)/);
+  });
+
+  it('does not force Daily Review Chinese labels into uppercase tracking', async () => {
+    const styles = await readFile(join(process.cwd(), 'src', 'renderer', 'styles.css'), 'utf8');
+    const totalsLabel = styles.match(/\.maka-daily-review-totals-label\s*\{[\s\S]*?\}/)?.[0] ?? '';
+    const sectionTitle = styles.match(/\.maka-daily-review-section-title\s*\{[\s\S]*?\}/)?.[0] ?? '';
+
+    assert.match(totalsLabel, /text-transform:\s*none;/);
+    assert.match(totalsLabel, /letter-spacing:\s*0;/);
+    assert.match(sectionTitle, /text-transform:\s*none;/);
+    assert.match(sectionTitle, /letter-spacing:\s*0;/);
+  });
+
+  it('keeps English skill metadata out of the visible skills list copy', async () => {
+    const components = await readFile(resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'components.tsx'), 'utf8');
+    const skillPanel = components.match(/function SkillLibraryPanel[\s\S]*?function formatSkillLibraryDescription/)?.[0] ?? '';
+    const formatter = components.match(/function formatSkillLibraryDescription[\s\S]*?\n\}/)?.[0] ?? '';
+
+    assert.match(skillPanel, /const description = formatSkillLibraryDescription\(skill\);/);
+    assert.doesNotMatch(skillPanel, /maka-skill-library-description">\{skill\.description\}/);
+    assert.match(formatter, /if \(!raw\) return undefined;/);
+    assert.match(formatter, /if \(\/\[\\u3400-\\u9fff\]\/\.test\(raw\)\) return raw;/);
+    assert.match(formatter, /创建、编辑、检查文档内容。/);
+    assert.match(formatter, /创建、编辑、检查演示文稿。/);
+    assert.match(formatter, /创建、编辑、分析表格数据。/);
+    assert.match(formatter, /打开技能文件查看适用场景。/);
+  });
+
+  it('surfaces permission denial in Chinese instead of raw English backend text', async () => {
+    const components = await readFile(resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'components.tsx'), 'utf8');
+    const aiSdk = await readFile(resolve(process.cwd(), '..', '..', 'packages', 'runtime', 'src', 'ai-sdk-backend.ts'), 'utf8');
+    const piAgent = await readFile(resolve(process.cwd(), '..', '..', 'packages', 'runtime', 'src', 'pi-agent-backend.ts'), 'utf8');
+
+    assert.match(components, /formatUserVisibleToolText\(text: string\)[\s\S]*User denied permission[\s\S]*用户已拒绝权限请求/);
+    assert.match(components, /function isPermissionDeniedToolResult\(result: ToolActivityItem\['result'\]\): boolean/);
+    assert.match(components, /item\.intent && !permissionDenied/);
+    assert.match(components, /item\.args !== undefined && !permissionDenied/);
+    assert.match(components, /item\.result && !permissionDenied/);
+    assert.match(components, /formatUserVisibleToolText\(redactSecrets\(extractErrorText\(props\.result\)\)\)/);
+    assert.match(components, /capLines\(formatUserVisibleToolText\(redactSecrets\(content\.text\)\)\)/);
+    assert.match(aiSdk, /const reason = '用户已拒绝权限请求';/);
+    assert.match(piAgent, /text: '用户已拒绝权限请求'/);
+    assert.doesNotMatch(`${aiSdk}\n${piAgent}`, /User denied permission/);
+  });
+});

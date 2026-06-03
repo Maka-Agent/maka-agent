@@ -10776,8 +10776,8 @@ button:active {
 
 .maka-daily-review-totals-label {
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--foreground-50);
 }
 
@@ -10788,8 +10788,8 @@ button:active {
 
 .maka-daily-review-section-title {
   font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--foreground-50);
   margin: 0;
 }
