@@ -5,7 +5,7 @@ import type {
   UpdateAppSettingsInput,
   UpdateAppSettingsResult,
 } from '@maka/core';
-import { generalizedErrorMessage } from '@maka/core';
+import { botDisplayLabel, generalizedErrorMessageChinese, redactSecrets } from '@maka/core';
 import { SENSITIVE_PLACEHOLDER, maskSensitive } from '@maka/core/settings/network-settings';
 import type { BotTestResult } from '@maka/runtime';
 import { collectPersonalizationWarnings } from './personalization-prompt.js';
@@ -135,11 +135,29 @@ export function toSettingsTestResult(provider: BotProvider, result: BotTestResul
     ok: result.ok,
     message: result.ok
       ? `${provider} 凭据测试成功${result.identity?.username ? `：${result.identity.username}` : ''}。这不代表运行态已接收或发送成功。`
-      : generalizedErrorMessage(result.error ?? '', `${provider} 连接测试失败`),
+      : botTestErrorMessage(provider, result.error),
     details: {
       ...(result.identity ? { identity: result.identity } : {}),
       ...(result.capabilities ? { capabilities: result.capabilities } : {}),
       ...(result.hint ? { hint: result.hint } : {}),
     },
   };
+}
+
+export function botTestErrorMessage(provider: BotProvider, error: unknown): string {
+  const label = botDisplayLabel(provider);
+  const raw = redactSecrets(error instanceof Error ? error.message : String(error ?? '')).trim();
+  const lower = raw.toLowerCase();
+
+  if (!raw) return `${label} 连接测试失败，请检查凭据和网络后重试。`;
+  if (lower.includes('bot token is required')) return `${label} 需要 Bot Token，请填写后再测试。`;
+  if (lower.includes('invalid bot token')) return `${label} 的 Bot Token 无效，请检查后重试。`;
+  if (provider === 'feishu' && /appid|app_id|appsecret|app_secret|required/.test(lower)) {
+    return '飞书需要 App ID 和 App Secret，请填写后再测试。';
+  }
+
+  const classified = generalizedErrorMessageChinese(raw, '');
+  if (classified) return `${label} 连接测试失败：${classified}。`;
+  if (/[\u3400-\u9fff]/.test(raw)) return raw.length > 160 ? `${raw.slice(0, 160)}…` : raw;
+  return `${label} 连接测试失败，请检查凭据和网络后重试。`;
 }

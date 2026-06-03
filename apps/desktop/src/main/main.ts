@@ -156,7 +156,7 @@ import { resolveOpenPath, type OpenPathResult } from './open-path-guard.js';
 import { buildPersonalizationPromptFragment } from './personalization-prompt.js';
 import { resolveProjectGitInfo } from './project-context.js';
 import { buildSessionEnvironmentPromptFragment } from './session-environment-prompt.js';
-import { buildSettingsUpdateResult, maskAppSettings, preserveSensitivePlaceholders, toSettingsTestResult } from './settings-ipc-helpers.js';
+import { botTestErrorMessage, buildSettingsUpdateResult, maskAppSettings, preserveSensitivePlaceholders, toSettingsTestResult } from './settings-ipc-helpers.js';
 import {
   buildSkillAgentTool,
   buildSkillsPromptFragment,
@@ -2225,10 +2225,10 @@ function registerIpc(): void {
           [provider]: {
             connected: result.ok,
             readiness: result.ok ? 'credentials_valid' : 'configured',
-            readinessReason: result.ok ? undefined : generalizedErrorMessage(result.error ?? '', 'Bot connection test failed'),
+            readinessReason: result.ok ? undefined : botTestErrorMessage(provider, result.error),
             readinessUpdatedAt: Date.now(),
             lastTestAt: Date.now(),
-            lastError: result.ok ? undefined : generalizedErrorMessage(result.error ?? '', 'Bot connection test failed'),
+            lastError: result.ok ? undefined : botTestErrorMessage(provider, result.error),
           },
         },
       },

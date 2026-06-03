@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import { createDefaultSettings, mergeSettings } from '@maka/core/settings';
 import { SENSITIVE_PLACEHOLDER } from '@maka/core/settings/network-settings';
 import {
+  botTestErrorMessage,
   buildSettingsUpdateResult,
   maskAppSettings,
   preserveSensitivePlaceholders,
@@ -133,8 +134,14 @@ describe('settings IPC helpers', () => {
       error: '401 Authorization: Bearer sk-live-secret-token-value',
     });
 
-    assert.equal(result.message, 'Authentication failed');
+    assert.equal(result.message, 'Telegram 连接测试失败：鉴权失败。');
     assert.equal(JSON.stringify(result).includes('sk-live-secret-token-value'), false);
+  });
+
+  test('bot test error copy is Chinese and actionable for empty credentials', () => {
+    assert.equal(botTestErrorMessage('qq', 'Bot connection test failed'), 'QQ 连接测试失败，请检查凭据和网络后重试。');
+    assert.equal(botTestErrorMessage('telegram', 'Bot token is required'), 'Telegram 需要 Bot Token，请填写后再测试。');
+    assert.equal(botTestErrorMessage('feishu', 'Feishu appId and appSecret are required'), '飞书需要 App ID 和 App Secret，请填写后再测试。');
   });
 
   test('settings update result wraps settings and omits warnings for normal personalization', () => {
