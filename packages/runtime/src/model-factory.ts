@@ -4,6 +4,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { LanguageModelV3 } from '@ai-sdk/provider';
 import { effectiveBaseUrl, type LlmConnection } from '@maka/core/llm-connections';
+import { codexSubscriptionHeaders } from './subscription-auth.js';
 
 export interface ModelFactoryInput {
   connection: LlmConnection;
@@ -43,6 +44,12 @@ export function getAIModel(input: ModelFactoryInput): LanguageModelV3 {
       }).chat(modelId);
 
     case 'codex-subscription':
+      return createOpenAI({
+        apiKey,
+        baseURL,
+        headers: codexSubscriptionHeaders(apiKey),
+      }).responses(modelId);
+
     case 'gemini-cli':
       throw new Error(`${connection.providerType} is experimental and not wired yet`);
 

@@ -136,24 +136,22 @@ describe('chat readiness guard', () => {
     assert.equal(ready.model, 'claude-sonnet-4-5-20250929');
   });
 
-  test('blocks OAuth subscription providers that do not have a runtime send path yet', async () => {
-    await assertRejectsReadiness(
-      'codex subscription send path not wired',
-      () => requireReadyConnection(
-        'codex-subscription',
-        deps({
-          connection: connection({
-            slug: 'codex-subscription',
-            name: 'Codex Subscription',
-            providerType: 'codex-subscription',
-            defaultModel: 'gpt-5-codex',
-          }),
-          apiKey: 'legacy-oauth-secret',
+  test('allows Codex OAuth once its subscription send path is wired', async () => {
+    const ready = await requireReadyConnection(
+      'codex-subscription',
+      deps({
+        connection: connection({
+          slug: 'codex-subscription',
+          name: 'Codex Subscription',
+          providerType: 'codex-subscription',
+          defaultModel: 'gpt-5-codex',
         }),
-      ),
-      '当前不能作为聊天模型',
-      'oauth_subscription_not_wired',
+        apiKey: 'codex-oauth-secret',
+      }),
     );
+    assert.equal(ready.connection.slug, 'codex-subscription');
+    assert.equal(ready.apiKey, 'codex-oauth-secret');
+    assert.equal(ready.model, 'gpt-5-codex');
   });
 
   test('send path blocks explicit fake sessions and revalidates old ai sessions', async () => {

@@ -269,7 +269,7 @@ describe('experimental kill-switch (kenji 1da909d5 + 45b31e16)', () => {
     assert.match(src, /\{\s*id:\s*'oauth'[\s\S]*label:\s*'OAuth'/, 'model provider catalog must show OAuth as a peer tab');
     assert.match(
       src,
-      /catalogTab === 'oauth'\s*\?\s*\(\s*<ModelOAuthSection\s*\/>/,
+      /catalogTab === 'oauth'\s*\?\s*\(\s*<ModelOAuthSection\s+onConnectionsChanged=\{reload\}\s*\/>/,
       'OAuth tab must render the real login cards, not an empty roadmap tile',
     );
     assert.doesNotMatch(
@@ -321,7 +321,7 @@ describe('Claude OAuth model connection bridge', () => {
     const listIdx = src.indexOf("connections:list");
     assert.notEqual(listIdx, -1, 'connections:list handler must exist');
     const listRegion = src.slice(listIdx, listIdx + 500);
-    assert.match(listRegion, /await syncClaudeSubscriptionConnection\(\);[\s\S]*return connectionStore\.list\(\)/, 'connection list reads must materialize the logged-in Claude OAuth connection');
+    assert.match(listRegion, /await syncOAuthModelConnections\(\);[\s\S]*return connectionStore\.list\(\)/, 'connection list reads must materialize logged-in OAuth model connections');
   });
 
   it('model connection IPC resolves Claude OAuth token from the subscription service, not credentialStore api_key', async () => {
@@ -335,6 +335,33 @@ describe('Claude OAuth model connection bridge', () => {
     assert.match(src, /connections:fetchModels[\s\S]*const apiKey = await resolveConnectionSecret\(slug\)/, 'connections:fetchModels must use resolveConnectionSecret');
     assert.match(src, /connections:hasSecret[\s\S]*Boolean\(await resolveConnectionSecret\(slug\)\)/, 'connections:hasSecret must report OAuth login presence for claude-subscription');
     assert.match(src, /getApiKey:\s*\(slug:\s*string\)\s*=>\s*resolveConnectionSecret\(slug\)/, 'chat send readiness must use OAuth tokens through resolveConnectionSecret');
+  });
+
+  it('main syncs successful Codex OAuth login into the model connection list', async () => {
+    const src = await readFile(MAIN_SOURCE, 'utf8');
+    assert.match(
+      src,
+      /async function syncCodexSubscriptionConnection\(\)/,
+      'main.ts must turn Codex OAuth account state into a model connection',
+    );
+    assert.match(
+      src,
+      /slug:\s*CODEX_SUBSCRIPTION_CONNECTION_SLUG[\s\S]*providerType:\s*'codex-subscription'[\s\S]*enabled:\s*true[\s\S]*lastTestStatus:\s*'verified'/,
+      'sync helper must upsert an enabled codex-subscription connection after login',
+    );
+    const completeIdx = src.indexOf("codex-subscription:complete-authorization");
+    assert.notEqual(completeIdx, -1, 'codex complete-authorization handler must exist');
+    const completeRegion = src.slice(completeIdx, completeIdx + 1200);
+    assert.match(
+      completeRegion,
+      /if\s*\(\s*result\.ok\s*\)\s*\{[\s\S]*await syncCodexSubscriptionConnection\(\);[\s\S]*emitConnectionListChanged\(\);/,
+      'successful Codex OAuth completion must sync the connection and notify renderer',
+    );
+    assert.match(
+      src,
+      /providerType === 'codex-subscription'[\s\S]*codexSubscription\.getAccessTokenInternal\(\)/,
+      'resolveConnectionSecret must map codex-subscription to its stored OAuth access token',
+    );
   });
 
   it('ProvidersPanel treats OAuth model connections as login state, not editable API keys', async () => {

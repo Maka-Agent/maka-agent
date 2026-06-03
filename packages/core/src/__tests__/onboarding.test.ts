@@ -358,23 +358,21 @@ describe('deriveOnboardingState invariants', () => {
     assert.equal(result.kind, 'ready_empty');
   });
 
-  it('non-Claude OAuth subscription connections are not onboarding-ready before their send path lands', () => {
+  it('Codex OAuth subscription connections are onboarding-ready once their send path lands', () => {
     const conn = realConnection({
       slug: 'codex-subscription',
       providerType: 'codex-subscription',
       defaultModel: 'gpt-5-codex',
+      models: [{ id: 'gpt-5-codex' }],
     });
-    const notReady = isConnectionReady({ connection: conn, hasSecret: true });
-    assert.equal(notReady.ready, false);
-    if (!notReady.ready) {
-      assert.equal(notReady.reason, 'oauth_subscription_not_wired');
-    }
+    const ready = isConnectionReady({ connection: conn, hasSecret: true });
+    assert.equal(ready.ready, true);
     const result = derive({
       connections: [conn],
       defaultSlug: 'codex-subscription',
       secrets: { 'codex-subscription': true },
     });
-    assert.deepEqual(result, { kind: 'blocked', reason: 'all_connections_unhealthy' });
+    assert.equal(result.kind, 'ready_empty');
   });
 
   it('is pure: same input always produces same output (deep-equal)', () => {

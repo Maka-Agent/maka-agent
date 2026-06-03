@@ -38,21 +38,20 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
     assert.match(tabs[0], /id:\s*'oauth'[\s\S]*label:\s*'OAuth'/, 'OAuth must be a catalog tab');
     assert.match(
       src,
-      /catalogTab === 'oauth'\s*\?\s*\(\s*<ModelOAuthSection\s*\/>/,
-      'OAuth login UI must render from the tab content branch',
+      /catalogTab === 'oauth'\s*\?\s*\(\s*<ModelOAuthSection\s+onConnectionsChanged=\{reload\}\s*\/>/,
+      'OAuth login UI must render from the tab content branch and refresh enabled models',
     );
     const marketStart = src.indexOf('<section className="providerMarket">');
-    const firstOAuthRender = src.indexOf('<ModelOAuthSection />');
+    const firstOAuthRender = src.indexOf('<ModelOAuthSection');
     assert.ok(marketStart !== -1, 'provider market section must exist');
     assert.ok(firstOAuthRender > marketStart, 'ModelOAuthSection must not be pinned above providerMarket');
     assert.doesNotMatch(src, /providerOAuthHeader/, 'OAuth tab must not carry a second standalone section header');
   });
 
-  it('exposes exactly three button cards: codex, antigravity, cursor', async () => {
-    // PR-CLAUDE-CARD-MOVE-0 (WAWQAQ msg ddecd729): Claude is no
-    // longer a button card — the full ClaudeSubscriptionCard with
-    // quota meter renders inline above the 3-card grid. So the
-    // grid drops to 3 entries.
+  it('exposes exactly four equal OAuth cards: claude, codex, antigravity, cursor', async () => {
+    // WAWQAQ msg 8bb7e186: Claude must not be a huge standalone
+    // inline card while the other OAuth providers are compact
+    // cards. All four login entries live in the same grid.
     const src = await readFile(PROVIDERS_PANEL_SOURCE, 'utf8');
     const match = src.match(/MODEL_OAUTH_CARDS:\s*ReadonlyArray<ModelOAuthCard>\s*=\s*\[([\s\S]*?)\];/);
     assert.ok(match, 'MODEL_OAUTH_CARDS literal must exist');
@@ -60,8 +59,8 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
     const ids = [...body.matchAll(/id:\s*'([a-z]+)'/g)].map((m) => m[1]);
     assert.deepEqual(
       ids.sort(),
-      ['antigravity', 'codex', 'cursor'],
-      'grid must include exactly codex / antigravity / cursor (claude renders as the full inline card)',
+      ['antigravity', 'claude', 'codex', 'cursor'],
+      'grid must include exactly claude / codex / antigravity / cursor',
     );
   });
 
@@ -71,32 +70,36 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
     assert.ok(match, 'MODEL_OAUTH_CARDS literal must exist');
     const body = match[1]!;
     const statuses = [...body.matchAll(/status:\s*'([a-z_]+)'/g)].map((m) => m[1]);
-    assert.equal(statuses.length, 3, 'each card must declare a status');
+    assert.equal(statuses.length, 4, 'each card must declare a status');
     for (const s of statuses) {
       assert.equal(s, 'available', `card status must be 'available', got '${s}'`);
     }
     assert.doesNotMatch(body, /'planned'/, 'no card may still claim "planned" status');
   });
 
-  it('claude renders as the full inline card above the grid, not as a cross-section jump', async () => {
+  it('claude opens a modal from the equal-size card instead of rendering a full inline card above the grid', async () => {
     const src = await readFile(PROVIDERS_PANEL_SOURCE, 'utf8');
-    // Claude is an inline component within the OAuth catalog tab,
-    // not a button card that dispatches a cross-section jump.
+    const sectionMatch = src.match(/function ModelOAuthSection[\s\S]*?function ClaudeSubscriptionModal/);
+    assert.ok(sectionMatch, 'ModelOAuthSection and ClaudeSubscriptionModal must exist');
+    assert.doesNotMatch(
+      sectionMatch[0],
+      /<ClaudeSubscriptionCard\s*\/>/,
+      'ModelOAuthSection must not render the full Claude card inline above the OAuth grid',
+    );
     assert.match(
       src,
-      /<ClaudeSubscriptionCard\s*\/>/,
-      'ModelOAuthSection must render ClaudeSubscriptionCard inline',
+      /openModal === 'claude'[\s\S]*<ClaudeSubscriptionModal/,
+      'Claude card must open the provider-specific modal',
     );
     assert.doesNotMatch(
       src,
       /maka:jumpToSettingsSection[\s\S]*?'account'/,
       'after the card move, ModelOAuthSection must NOT jump to the account section',
     );
-    // The non-claude branches still open the modal.
     assert.match(
       src,
       /setOpenModal\(card\.id\)/,
-      'codex/cursor/antigravity cards must open the SubscriptionLoginModal',
+      'all OAuth cards must open a modal from the grid',
     );
   });
 
@@ -121,8 +124,8 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
     );
     assert.match(
       src,
-      /bridge\.getAccountState\(\)/,
-      'refreshAllCards must query each subscription bridge',
+      /getSubscriptionSnapshot\(card\.id\)/,
+      'refreshAllCards must query each subscription snapshot',
     );
     // 3. useEffect on mount fires the initial refresh.
     const refreshOnMount = src.match(/useEffect\(\(\) =>\s*\{\s*void refreshAllCards\(\);[\s\S]*?\},\s*\[\]\)/);
@@ -192,6 +195,7 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
     const fnMatch = src.match(/function pickSubscriptionBridge\(serviceId:[\s\S]*?^\}/m);
     assert.ok(fnMatch, 'pickSubscriptionBridge helper must exist');
     const body = fnMatch[0];
+    assert.doesNotMatch(body, /case 'claude'/, 'Claude has a paste-code modal and must not use the loopback generic bridge');
     assert.match(body, /case 'codex'[\s\S]*?window\.maka\.codexSubscription/);
     assert.match(body, /case 'cursor'[\s\S]*?window\.maka\.cursorSubscription/);
     assert.match(body, /case 'antigravity'[\s\S]*?window\.maka\.antigravitySubscription/);

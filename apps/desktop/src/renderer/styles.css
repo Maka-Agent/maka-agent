@@ -7709,6 +7709,7 @@ button:active {
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
+  min-height: 118px;
   padding: 14px 16px;
   border: 1px solid color-mix(in srgb, var(--oauth-accent, var(--accent)) 24%, transparent);
   border-radius: 14px;

@@ -98,7 +98,11 @@ export function isConnectionReady(input: IsConnectionReadyInput): IsConnectionRe
     return { ready: false, reason: 'connection_disabled' };
   }
   const authKind = PROVIDER_DEFAULTS[connection.providerType].authKind;
-  if (authKind === 'oauth_token' && connection.providerType !== 'claude-subscription') {
+  if (
+    authKind === 'oauth_token' &&
+    connection.providerType !== 'claude-subscription' &&
+    connection.providerType !== 'codex-subscription'
+  ) {
     return { ready: false, reason: 'oauth_subscription_not_wired' };
   }
   if (authKind !== 'none' && !hasSecret) {

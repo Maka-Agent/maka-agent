@@ -133,6 +133,20 @@ describe('fetchProviderModels', () => {
     assert.deepEqual(models, [{ id: 'claude-sonnet-4-5-20250929' }]);
   });
 
+  test('Codex subscription model fetch uses the pinned subscription model list', async () => {
+    const models = await fetchProviderModels({
+      slug: 'codex-subscription',
+      name: 'Codex OAuth',
+      providerType: 'codex-subscription',
+      defaultModel: 'gpt-5-codex',
+      enabled: true,
+      createdAt: 1,
+      updatedAt: 1,
+    }, 'oauth-access-token');
+
+    assert.deepEqual(models, [{ id: 'gpt-5-codex' }]);
+  });
+
   test('successful empty provider responses stay fetched-empty instead of falling back', async () => {
     const server = await startJsonServer((_request, response) => {
       respondJson(response, 200, { data: [] });

@@ -5,6 +5,7 @@ import {
   type LlmConnection,
 } from '@maka/core/llm-connections';
 import { proxiedFetch } from './bots/proxied-fetch.js';
+import { codexSubscriptionHeaders } from './subscription-auth.js';
 
 const CONNECTION_TEST_TIMEOUT_MS = 15_000;
 const CLAUDE_SUBSCRIPTION_BETA =
@@ -34,7 +35,7 @@ export async function testConnection(
       case 'anthropic':
         return await probeAnthropic(connection, baseUrl, secret, testModel, t0);
       case 'openai':
-        return await probeOpenAI(baseUrl, secret, testModel, t0);
+        return await probeOpenAI(connection, baseUrl, secret, testModel, t0);
       case 'google':
         return await probeGoogle(baseUrl, secret, testModel, t0);
     }
@@ -86,11 +87,15 @@ async function probeAnthropic(
 }
 
 async function probeOpenAI(
+  connection: LlmConnection,
   baseUrl: string,
   apiKey: string,
   model: string,
   t0: number,
 ): Promise<ConnectionTestResult> {
+  if (connection.providerType === 'codex-subscription') {
+    return probeCodexSubscription(baseUrl, apiKey, model, t0);
+  }
   const r = await proxiedFetch(`${stripTrailing(baseUrl)}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -101,6 +106,31 @@ async function probeOpenAI(
       model,
       max_tokens: 16,
       messages: [{ role: 'user', content: 'Hi' }],
+    }),
+    timeoutMs: CONNECTION_TEST_TIMEOUT_MS,
+  });
+  if (!r.ok) return httpFailure(r, t0);
+  return { ok: true, latencyMs: Date.now() - t0, modelTested: model };
+}
+
+async function probeCodexSubscription(
+  baseUrl: string,
+  accessToken: string,
+  model: string,
+  t0: number,
+): Promise<ConnectionTestResult> {
+  const r = await proxiedFetch(`${stripTrailing(baseUrl)}/responses`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      ...codexSubscriptionHeaders(accessToken),
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      input: [{ role: 'user', content: [{ type: 'input_text', text: 'Hi' }] }],
+      max_output_tokens: 16,
+      store: false,
     }),
     timeoutMs: CONNECTION_TEST_TIMEOUT_MS,
   });
@@ -132,6 +162,15 @@ async function probeGoogle(
 
 async function httpFailure(r: Response, t0: number): Promise<ConnectionTestResult> {
   const statusCode = r.status;
+  if (statusCode === 429) {
+    return {
+      ok: false,
+      errorMessage: 'OAuth 已登录，但当前账号或 provider 正在 rate limit。请稍后重试，或先切换到其它可用模型。',
+      statusCode,
+      errorClass: 'provider_unavailable',
+      latencyMs: Date.now() - t0,
+    };
+  }
   return {
     ok: false,
     errorMessage: `${statusCode} ${(await r.text()).slice(0, 200)}`,

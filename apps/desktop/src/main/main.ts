@@ -241,6 +241,7 @@ const antigravitySubscription = new AntigravitySubscriptionService({
 });
 
 const CLAUDE_SUBSCRIPTION_CONNECTION_SLUG = 'claude-subscription';
+const CODEX_SUBSCRIPTION_CONNECTION_SLUG = 'codex-subscription';
 
 function isClaudeSubscriptionAuthenticatedState(
   state: Awaited<ReturnType<ClaudeSubscriptionService['getAccountState']>>,
@@ -293,10 +294,66 @@ async function syncClaudeSubscriptionConnection(): Promise<LlmConnection | null>
   return connectionStore.save(connection);
 }
 
+function isCodexSubscriptionAuthenticatedState(
+  state: Awaited<ReturnType<CodexSubscriptionService['getAccountState']>>,
+): boolean {
+  return state.runtimeState === 'authenticated' || state.runtimeState === 'refreshing';
+}
+
+async function syncCodexSubscriptionConnection(): Promise<LlmConnection | null> {
+  if (!isCodexSubscriptionExperimentalEnabled()) return null;
+  const state = await codexSubscription.getAccountState();
+  const existing = await connectionStore.get(CODEX_SUBSCRIPTION_CONNECTION_SLUG);
+  if (!isCodexSubscriptionAuthenticatedState(state)) {
+    if (existing && (state.runtimeState === 'refresh_failed' || state.runtimeState === 'not_logged_in')) {
+      return connectionStore.update(existing.slug, {
+        enabled: false,
+        lastTestStatus: 'needs_reauth',
+        lastTestAt: new Date().toISOString(),
+        lastTestMessage: state.errorMessage ?? (state.runtimeState === 'not_logged_in'
+          ? 'Codex OAuth 未登录。'
+          : 'Codex OAuth 需要重新登录。'),
+      });
+    }
+    return existing;
+  }
+
+  const defaults = PROVIDER_DEFAULTS['codex-subscription'];
+  const fallbackModels = defaults.fallbackModels.map((id) => ({ id }));
+  const displayName = state.email ? `Codex OAuth · ${state.email}` : 'Codex OAuth';
+  const now = Date.now();
+  const connection: LlmConnection = {
+    slug: CODEX_SUBSCRIPTION_CONNECTION_SLUG,
+    name: existing?.name ?? displayName,
+    providerType: 'codex-subscription',
+    baseUrl: defaults.baseUrl,
+    defaultModel: existing?.defaultModel || defaults.fallbackModels[0] || '',
+    enabled: true,
+    models: existing?.models?.length ? existing.models : fallbackModels,
+    modelSource: existing?.modelSource ?? 'fallback',
+    lastTestStatus: 'verified',
+    lastTestAt: new Date(now).toISOString(),
+    lastTestMessage: 'Codex OAuth 已登录。',
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  };
+  return connectionStore.save(connection);
+}
+
+async function syncOAuthModelConnections(): Promise<void> {
+  await Promise.all([
+    syncClaudeSubscriptionConnection(),
+    syncCodexSubscriptionConnection(),
+  ]);
+}
+
 async function resolveConnectionSecret(slug: string): Promise<string | null> {
   const connection = await connectionStore.get(slug);
   if (connection?.providerType === 'claude-subscription') {
     return claudeSubscription.getAccessTokenInternal();
+  }
+  if (connection?.providerType === 'codex-subscription') {
+    return codexSubscription.getAccessTokenInternal();
   }
   return credentialStore.getSecret(slug, 'api_key');
 }
@@ -1589,7 +1646,12 @@ function registerIpc(): void {
       if (typeof authRequestId !== 'string') {
         return { ok: false as const, reason: 'authorization_pending' as const, message: '授权会话不存在。' };
       }
-      return codexSubscription.completeAuthorization(authRequestId);
+      const result = await codexSubscription.completeAuthorization(authRequestId);
+      if (result.ok) {
+        await syncCodexSubscriptionConnection();
+        emitConnectionListChanged();
+      }
+      return result;
     },
   );
   ipcMain.handle(
@@ -1609,16 +1671,36 @@ function registerIpc(): void {
         runtimeState: 'not_logged_in' as const,
       };
     }
-    return codexSubscription.getAccountState();
+    const state = await codexSubscription.getAccountState();
+    if (isCodexSubscriptionAuthenticatedState(state)) {
+      await syncCodexSubscriptionConnection();
+    }
+    return state;
   });
   ipcMain.handle('codex-subscription:refresh-tokens', async () => {
     if (!isCodexSubscriptionExperimentalEnabled()) return codexDisabledResponse;
-    return codexSubscription.refreshTokens();
+    const result = await codexSubscription.refreshTokens();
+    if (result.ok) {
+      await syncCodexSubscriptionConnection();
+      emitConnectionListChanged();
+    }
+    return result;
   });
   ipcMain.handle('codex-subscription:logout', async () => {
     // Logout is always allowed — even if experimental is off,
     // clearing a stale local token file is harmless.
-    return codexSubscription.logout();
+    const result = await codexSubscription.logout();
+    const existing = await connectionStore.get(CODEX_SUBSCRIPTION_CONNECTION_SLUG);
+    if (existing) {
+      await connectionStore.update(existing.slug, {
+        enabled: false,
+        lastTestStatus: 'needs_reauth',
+        lastTestAt: new Date().toISOString(),
+        lastTestMessage: 'Codex OAuth 已退出登录。',
+      });
+      emitConnectionListChanged();
+    }
+    return result;
   });
 
   const cursorDisabledResponse = {
@@ -1904,7 +1986,7 @@ function registerIpc(): void {
   });
 
   ipcMain.handle('connections:list', async () => {
-    await syncClaudeSubscriptionConnection();
+    await syncOAuthModelConnections();
     return connectionStore.list();
   });
   ipcMain.handle('connections:getDefault', () => connectionStore.getDefault());

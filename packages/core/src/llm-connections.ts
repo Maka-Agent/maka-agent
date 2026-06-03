@@ -245,8 +245,8 @@ export const PROVIDER_DEFAULTS: Record<ProviderType, ProviderDefaults> = {
   },
   'codex-subscription': {
     label: 'Codex Subscription (ChatGPT OAuth)',
-    description: 'ChatGPT/Codex account path is tracked separately from ready API-key providers.',
-    baseUrl: '',
+    description: 'ChatGPT/Codex account OAuth path for Codex Responses models.',
+    baseUrl: 'https://chatgpt.com/backend-api/codex',
     authKind: 'oauth_token',
     backendKind: 'ai-sdk',
     fallbackModels: ['gpt-5-codex'],

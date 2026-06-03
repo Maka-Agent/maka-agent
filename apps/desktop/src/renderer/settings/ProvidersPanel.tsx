@@ -28,6 +28,7 @@ export interface ConnectionsBridge {
   test(slug: string, opts?: { model?: string }): Promise<ConnectionTestResult>;
   fetchModels(slug: string): Promise<ModelDiscoveryResult>;
   hasSecret(slug: string): Promise<boolean>;
+  subscribeEvents?(handler: () => void): () => void;
 }
 
 type CatalogTab = Extract<ProviderCategory, 'domestic' | 'overseas' | 'local' | 'oauth'>;
@@ -73,7 +74,13 @@ export function ProvidersPanel({ bridge }: { bridge: ConnectionsBridge }) {
 
   useEffect(() => {
     void reload();
-  }, []);
+    const unsubscribe = bridge.subscribeEvents?.(() => {
+      void reload();
+    });
+    return () => {
+      unsubscribe?.();
+    };
+  }, [bridge]);
 
   const selected = useMemo(
     () => connections.find((connection) => connection.slug === selectedSlug) ?? null,
@@ -196,7 +203,7 @@ function chipTitle(connection: LlmConnection): string {
         </div>
 
         {catalogTab === 'oauth' ? (
-          <ModelOAuthSection />
+          <ModelOAuthSection onConnectionsChanged={reload} />
         ) : (
           <div className="catalogGrid providerMarketGrid">
             {catalogProviders.map((type) => (
@@ -371,16 +378,13 @@ export function ProviderLogo(props: { type: ProviderType; compact?: boolean }) {
  *
  * OAuth login catalog for Settings → 模型. It is rendered by the
  * same tab switcher as 国内 / 海外 / 本地, not as a standalone section
- * pinned above the provider market. Claude lives here as the full
- * inline card (with quota meter + login/logout actions).
- *
- * Codex / Cursor / Antigravity each render as a button card below;
- * clicking opens an inline modal that drives the corresponding
- * `window.maka.<provider>Subscription` bridge — getAuthUrl →
- * openExternal → wait for completion → refresh state.
+ * pinned above the provider market. All account providers render as
+ * equal-size cards; richer provider-specific controls live in the
+ * modal opened from that card.
  */
-type OAuthCardId = 'codex' | 'antigravity' | 'cursor';
+type OAuthCardId = 'claude' | 'codex' | 'antigravity' | 'cursor';
 type OAuthServiceId = OAuthCardId;
+type BrowserOAuthServiceId = Exclude<OAuthServiceId, 'claude'>;
 
 interface ModelOAuthCard {
   id: OAuthCardId;
@@ -392,6 +396,14 @@ interface ModelOAuthCard {
 }
 
 const MODEL_OAUTH_CARDS: ReadonlyArray<ModelOAuthCard> = [
+  {
+    id: 'claude',
+    name: 'Claude Code',
+    accent: '#D97757',
+    description: '用 Claude Pro / Max 订阅给 Claude Code / Claude OAuth 模型。',
+    status: 'available',
+    statusLabel: '可用',
+  },
   {
     id: 'codex',
     name: 'OpenAI Codex',
@@ -418,7 +430,7 @@ const MODEL_OAUTH_CARDS: ReadonlyArray<ModelOAuthCard> = [
   },
 ];
 
-function ModelOAuthSection() {
+function ModelOAuthSection(props: { onConnectionsChanged(): Promise<void> }) {
   const [openModal, setOpenModal] = useState<OAuthServiceId | null>(null);
   // PR-OAUTH-CARD-LIVE-STATE-0 (WAWQAQ msg d79fd115 follow-up):
   // before this lift the 3 button cards stayed at the static
@@ -429,6 +441,7 @@ function ModelOAuthSection() {
   // every time the modal closes (success OR cancel — the user
   // may have logged out from inside the modal).
   const [cardStates, setCardStates] = useState<Record<OAuthServiceId, SubscriptionSnapshot | null>>({
+    claude: null,
     codex: null,
     cursor: null,
     antigravity: null,
@@ -438,8 +451,7 @@ function ModelOAuthSection() {
     const results = await Promise.all(
       MODEL_OAUTH_CARDS.map(async (card) => {
         try {
-          const bridge = pickSubscriptionBridge(card.id);
-          const snapshot = (await bridge.getAccountState()) as SubscriptionSnapshot;
+          const snapshot = await getSubscriptionSnapshot(card.id);
           return [card.id, snapshot] as const;
         } catch {
           return [card.id, null] as const;
@@ -459,16 +471,15 @@ function ModelOAuthSection() {
 
   return (
     <div className="providerOAuthCatalog" aria-label="OAuth 登录" data-provider-category="oauth">
-      {/* Claude renders as the full inline card with quota meter
-          and login/logout. The other 3 providers render as button
-          cards because their account state is simpler (no quota
-          window data exposed by their APIs yet). */}
-      <ClaudeSubscriptionCard />
       <div className="providerOAuthGrid">
         {MODEL_OAUTH_CARDS.map((card) => {
           const snapshot = cardStates[card.id];
           const runtimeState = snapshot?.runtimeState ?? 'unknown';
-          const isLoggedIn = runtimeState === 'authenticated' || runtimeState === 'refreshing';
+          const isLoggedIn =
+            runtimeState === 'authenticated' ||
+            runtimeState === 'refreshing' ||
+            runtimeState === 'quota_unavailable' ||
+            runtimeState === 'provider_rejected';
           const liveBadge = isLoggedIn ? '已登录' : card.statusLabel;
           const liveDescription = isLoggedIn && snapshot?.email
             ? snapshot.email
@@ -491,7 +502,16 @@ function ModelOAuthSection() {
           );
         })}
       </div>
-      {openModal !== null && (
+      {openModal === 'claude' && (
+        <ClaudeSubscriptionModal
+          onClose={() => {
+            setOpenModal(null);
+            void refreshAllCards();
+            void props.onConnectionsChanged();
+          }}
+        />
+      )}
+      {openModal !== null && openModal !== 'claude' && (
         <SubscriptionLoginModal
           serviceId={openModal}
           onClose={() => {
@@ -499,6 +519,7 @@ function ModelOAuthSection() {
             // Always re-fetch after the modal closes — the user may
             // have logged in, logged out, or cancelled.
             void refreshAllCards();
+            void props.onConnectionsChanged();
           }}
         />
       )}
@@ -517,7 +538,42 @@ function ModelOAuthSection() {
  * Tokens never enter the renderer; this component reads only
  * account-state snapshots returned by getAccountState().
  */
-function SubscriptionLoginModal(props: { serviceId: OAuthServiceId; onClose(): void }) {
+function ClaudeSubscriptionModal(props: { onClose(): void }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  useModalA11y(dialogRef, props.onClose);
+  return (
+    <div className="providerConfigOverlay" role="presentation" onMouseDown={props.onClose}>
+      <section
+        ref={dialogRef as RefObject<HTMLDivElement>}
+        className="providerConfigSheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Claude Code 登录"
+        data-subscription="claude"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="providerConfigHeader">
+          <div>
+            <h3>Claude Code</h3>
+            <p>登录 Claude Pro / Max 后，会同步成已启用模型连接。</p>
+          </div>
+          <button
+            type="button"
+            className="maka-button"
+            data-variant="ghost"
+            onClick={props.onClose}
+            aria-label="关闭"
+          >
+            ×
+          </button>
+        </header>
+        <ClaudeSubscriptionCard />
+      </section>
+    </div>
+  );
+}
+
+function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClose(): void }) {
   const dialogRef = useRef<HTMLElement>(null);
   useModalA11y(dialogRef, props.onClose);
   const toast = useToast();
@@ -675,7 +731,14 @@ function SubscriptionLoginModal(props: { serviceId: OAuthServiceId; onClose(): v
 }
 
 interface SubscriptionSnapshot {
-  runtimeState: 'not_logged_in' | 'authorizing' | 'authenticated' | 'refreshing' | 'refresh_failed';
+  runtimeState:
+    | 'not_logged_in'
+    | 'authorizing'
+    | 'authenticated'
+    | 'refreshing'
+    | 'refresh_failed'
+    | 'quota_unavailable'
+    | 'provider_rejected';
   email?: string;
   plan?: string;
   status?: 'preview';
@@ -693,7 +756,19 @@ interface SubscriptionBridge {
   logout(): Promise<{ ok: true } | { ok: false; reason: string; message: string }>;
 }
 
-function pickSubscriptionBridge(serviceId: OAuthServiceId): SubscriptionBridge {
+async function getSubscriptionSnapshot(serviceId: OAuthServiceId): Promise<SubscriptionSnapshot> {
+  if (serviceId === 'claude') {
+    const state = await window.maka.claudeSubscription.getAccountState();
+    return {
+      runtimeState: state.runtimeState,
+      email: state.profile?.email,
+      errorMessage: state.errorMessage,
+    };
+  }
+  return (await pickSubscriptionBridge(serviceId).getAccountState()) as SubscriptionSnapshot;
+}
+
+function pickSubscriptionBridge(serviceId: BrowserOAuthServiceId): SubscriptionBridge {
   switch (serviceId) {
     case 'codex':
       return window.maka.codexSubscription as unknown as SubscriptionBridge;
@@ -710,7 +785,7 @@ interface SubscriptionDisplay {
   detail: string;
 }
 
-function subscriptionDisplay(serviceId: OAuthServiceId): SubscriptionDisplay {
+function subscriptionDisplay(serviceId: BrowserOAuthServiceId): SubscriptionDisplay {
   switch (serviceId) {
     case 'codex':
       return {
@@ -738,6 +813,8 @@ function subscriptionDisplay(serviceId: OAuthServiceId): SubscriptionDisplay {
         detail: '使用 Google 账号登录给 Gemini 模型。当前为预览状态：需要 Google client_id 后才能完成登录。',
       };
   }
+  const _exhaustive: never = serviceId;
+  return _exhaustive;
 }
 
 function presentSnapshotDetail(state: SubscriptionSnapshot | null, display: SubscriptionDisplay): string {
@@ -757,7 +834,12 @@ function presentSnapshotDetail(state: SubscriptionSnapshot | null, display: Subs
       return '正在刷新访问令牌…';
     case 'refresh_failed':
       return state.errorMessage ?? '令牌刷新失败，请重新登录。';
+    case 'quota_unavailable':
+    case 'provider_rejected':
+      return state.errorMessage ?? `${display.name} 已登录，但当前 provider 状态不可用。`;
   }
+  const _exhaustive: never = state.runtimeState;
+  return _exhaustive;
 }
 
 function ProviderLogoMark({ type }: { type: ProviderType }) {
@@ -1675,7 +1757,7 @@ function presentSubscriptionState(state: SubscriptionAccountState): Subscription
       return {
         label: '已登录',
         tone: 'success',
-        detail: '已绑定 Claude 订阅。目前仅展示账号与配额，聊天发送仍使用已配置的模型连接。',
+        detail: '已绑定 Claude 订阅，并会同步到“已启用模型”。',
       };
     case 'refreshing':
       return { label: '刷新中…', tone: 'info', detail: '正在刷新访问令牌。' };

@@ -29,6 +29,9 @@ async function fetchProviderModelsStrict(
 ): Promise<ModelInfo[]> {
   const baseUrl = effectiveBaseUrl(connection);
   const auth = PROVIDER_DEFAULTS[connection.providerType].authKind;
+  if (connection.providerType === 'codex-subscription') {
+    return PROVIDER_DEFAULTS['codex-subscription'].fallbackModels.map((id) => ({ id }));
+  }
   if (connection.providerType === 'ollama') {
     const r = await proxiedFetch(`${ollamaRoot(baseUrl)}/api/tags`, { timeoutMs: MODEL_FETCH_TIMEOUT_MS });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
