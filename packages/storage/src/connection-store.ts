@@ -123,6 +123,9 @@ class FileConnectionStore implements ConnectionStore {
         updatedAt: Date.now(),
       };
       file.connections[index] = next;
+      if (file.defaultSlug === slug && next.enabled === false) {
+        file.defaultSlug = null;
+      }
       updated = next;
       await this.write(file);
     });
@@ -147,7 +150,10 @@ class FileConnectionStore implements ConnectionStore {
       };
       if (index >= 0) file.connections[index] = next;
       else file.connections.push(next);
-      if (!file.defaultSlug) file.defaultSlug = connection.slug;
+      if (file.defaultSlug === connection.slug && next.enabled === false) {
+        file.defaultSlug = null;
+      }
+      if (!file.defaultSlug && next.enabled !== false) file.defaultSlug = connection.slug;
       await this.write(file);
     });
     return connection;
@@ -169,6 +175,11 @@ class FileConnectionStore implements ConnectionStore {
   async setDefault(slug: string | null): Promise<void> {
     await this.withQueue(async () => {
       const file = await this.readUnlocked();
+      if (slug) {
+        const connection = file.connections.find((item) => item.slug === slug);
+        if (!connection) throw new Error(`No such connection: ${slug}`);
+        if (!connection.enabled) throw new Error(`Connection is disabled: ${slug}`);
+      }
       file.defaultSlug = slug;
       await this.write(file);
     });

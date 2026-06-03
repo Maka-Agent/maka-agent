@@ -162,6 +162,33 @@ describe('FileConnectionStore', () => {
       assert.equal(next?.modelsFetchedAt, 1_800_000_000_000);
     });
   });
+
+  test('does not keep or assign disabled connections as the default', async () => {
+    await withConnectionStore(async (store) => {
+      const created = await store.create({
+        slug: 'claude-subscription',
+        name: 'Claude OAuth',
+        providerType: 'claude-subscription',
+        defaultModel: 'claude-sonnet-4-5-20250929',
+      });
+      assert.equal(await store.getDefault(), created.slug);
+
+      await store.update(created.slug, { enabled: false, lastTestStatus: 'needs_reauth' });
+      assert.equal(await store.getDefault(), null);
+
+      await assert.rejects(
+        () => store.setDefault(created.slug),
+        /Connection is disabled: claude-subscription/,
+      );
+
+      await store.save({
+        ...created,
+        enabled: false,
+        updatedAt: Date.now(),
+      });
+      assert.equal(await store.getDefault(), null);
+    });
+  });
 });
 
 async function withConnectionStore<T>(fn: (store: ReturnType<typeof createConnectionStore>) => Promise<T>): Promise<T> {

@@ -159,6 +159,22 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
     );
   });
 
+  it('does not let disabled OAuth connections become the default model', async () => {
+    const src = await readFile(PROVIDERS_PANEL_SOURCE, 'utf8');
+    const detail = src.match(/function ConnectionDetail[\s\S]*?function ModelTable/)?.[0] ?? '';
+
+    assert.match(
+      detail,
+      /if \(!connection\.enabled\) \{[\s\S]*toast\.error\('无法设为默认'/,
+      'ConnectionDetail must guard against stale disabled connections before setDefault',
+    );
+    assert.match(
+      detail,
+      /!\s*props\.isDefault && connection\.enabled && <button className="maka-button" type="button" onClick=\{setAsDefault\}>设为默认<\/button>/,
+      'disabled connections must not render the set-default action',
+    );
+  });
+
   it('claude opens a modal from the equal-size card instead of rendering a full inline card above the grid', async () => {
     const src = await readFile(PROVIDERS_PANEL_SOURCE, 'utf8');
     const sectionMatch = src.match(/function ModelOAuthSection[\s\S]*?function ClaudeSubscriptionModal/);

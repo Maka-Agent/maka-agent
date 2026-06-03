@@ -1167,8 +1167,17 @@ function ConnectionDetail(props: {
   }
 
   async function setAsDefault() {
-    await props.bridge.setDefault(connection.slug);
-    await props.onChanged();
+    if (!connection.enabled) {
+      toast.error('无法设为默认', '这个模型连接已禁用，请重新登录或启用后再设为默认。');
+      return;
+    }
+    try {
+      await props.bridge.setDefault(connection.slug);
+      await props.onChanged();
+      toast.success(`已设为默认 · ${connection.name}`);
+    } catch (error) {
+      toast.error('切换默认失败', error instanceof Error ? error.message : String(error));
+    }
   }
 
   async function remove() {
@@ -1247,7 +1256,7 @@ function ConnectionDetail(props: {
         <button className="maka-button" type="button" disabled={testing || (requiresCredential && !hasSecret)} onClick={runTest}>
           {testing ? '测试中…' : '测试连接'}
         </button>
-        {!props.isDefault && <button className="maka-button" type="button" onClick={setAsDefault}>设为默认</button>}
+        {!props.isDefault && connection.enabled && <button className="maka-button" type="button" onClick={setAsDefault}>设为默认</button>}
         <button className="maka-button" data-variant="destructive" type="button" onClick={remove}>删除</button>
       </div>
     </div>
