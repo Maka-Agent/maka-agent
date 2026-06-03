@@ -289,11 +289,11 @@ export function formatSearchResultSummary(message: StoredMessage): string {
 }
 
 /**
- * Extract user-visible text from a stored message. Returns `undefined`
+ * Extract user-visible answer text from a stored message. Returns `undefined`
  * for excluded message kinds (system notes, token usage, turn state,
- * permission decisions). This is the only "what counts as user-visible
- * content" gate; adding new searchable surfaces requires extending
- * this switch + a corresponding test.
+ * permission decisions). This is the only "what counts as searchable
+ * transcript content" gate; adding new searchable surfaces requires
+ * extending this switch + a corresponding test.
  *
  * For ToolResultMessage, the `content` is JSON-serialized and capped
  * at `TOOL_RESULT_SCAN_CAP_BYTES` so a 100 MB tool result doesn't
@@ -304,11 +304,9 @@ export function collectSearchableText(message: StoredMessage): string | undefine
     case 'user':
       return message.text;
     case 'assistant':
-      // Include `thinking.text` so users searching for assistant
-      // reasoning hit the right turn; thinking is user-visible content.
-      if (message.thinking?.text) {
-        return message.text + '\n' + message.thinking.text;
-      }
+      // Search result snippets are a transcript surface. Assistant
+      // reasoning/thinking may be rendered separately in the live chat,
+      // but it is not answer text and must not leak into local search.
       return message.text;
     case 'tool_call':
       // PR-SEARCH-2 review fixup (@xuan `2f1aba55`): index ONLY

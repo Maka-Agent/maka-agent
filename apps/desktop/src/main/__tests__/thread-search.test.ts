@@ -57,7 +57,7 @@ function userMessage(text: string, turnId: string = 't1', id: string = 'u1'): St
   return { type: 'user', id, turnId, ts: 1_700_000_000_000, text };
 }
 
-function assistantMessage(text: string, turnId: string = 't1', id: string = 'a1'): StoredMessage {
+function assistantMessage(text: string, turnId: string = 't1', id: string = 'a1'): Extract<StoredMessage, { type: 'assistant' }> {
   return {
     type: 'assistant',
     id,
@@ -65,6 +65,18 @@ function assistantMessage(text: string, turnId: string = 't1', id: string = 'a1'
     ts: 1_700_000_000_000,
     text,
     modelId: 'glm-4.7',
+  };
+}
+
+function assistantMessageWithThinking(
+  text: string,
+  thinkingText: string,
+  turnId: string = 't1',
+  id: string = 'a1',
+): Extract<StoredMessage, { type: 'assistant' }> {
+  return {
+    ...assistantMessage(text, turnId, id),
+    thinking: { text: thinkingText },
   };
 }
 
@@ -741,6 +753,62 @@ describe('ToolCallMessage indexes intent only (not toolName / displayName)', () 
   });
 });
 
+describe('AssistantMessage indexes answer text only (not thinking)', () => {
+  it('collectSearchableText omits assistant thinking from local search snippets', () => {
+    const text = collectSearchableText(
+      assistantMessageWithThinking(
+        'visible assistant answer',
+        'private reasoning path: The user is greeting me in Chinese',
+      ),
+    );
+
+    assert.equal(text, 'visible assistant answer');
+    assert.ok(!text?.includes('private reasoning'), 'assistant thinking must not enter searchable text');
+  });
+
+  it('does NOT match assistant thinking-only text', async () => {
+    const result = await runThreadSearch(
+      { source: 'thread', query: 'greeting me in Chinese', limit: 5 },
+      makeDeps({
+        s1: {
+          session: session({ id: 's1' }),
+          messages: [
+            assistantMessageWithThinking(
+              '你好！很高兴见到你。',
+              'The user is greeting me in Chinese. I will respond in Chinese.',
+            ),
+          ],
+        },
+      }),
+    );
+
+    if (!Array.isArray(result)) assert.fail('expected results');
+    assert.equal(result.length, 0);
+  });
+
+  it('matches visible assistant answer text without appending thinking to the snippet', async () => {
+    const result = await runThreadSearch(
+      { source: 'thread', query: 'visible answer', limit: 5 },
+      makeDeps({
+        s1: {
+          session: session({ id: 's1' }),
+          messages: [
+            assistantMessageWithThinking(
+              'this is the visible answer',
+              'private reasoning path: do not expose in search',
+            ),
+          ],
+        },
+      }),
+    );
+
+    if (!Array.isArray(result)) assert.fail('expected results');
+    assert.equal(result.length, 1);
+    assert.match(result[0]!.snippet ?? '', /visible answer/);
+    assert.ok(!result[0]!.snippet!.includes('private reasoning'), 'snippet must stay answer-only');
+  });
+});
+
 describe('G10 — system / token / turn-state / permission-decision excluded', () => {
   it('returns undefined for SystemNoteMessage', () => {
     const result = collectSearchableText(systemNoteMessage('session resumed'));
@@ -855,10 +923,10 @@ describe('SearchResult.target carries thread navigation (PR-SEARCH-1.5)', () => 
   });
 
   it('omits turnId in target when message has no turnId (e.g. session-level hit)', async () => {
-    // SystemNoteMessage has no turnId — but it's excluded by G10. The
-    // assistant.thinking path also includes a turnId. In current
-    // schema all searchable messages have turnId; this test simply
-    // pins the optional field semantics by simulating an edge case.
+    // SystemNoteMessage has no turnId, but it is excluded by G10.
+    // In current schema all searchable transcript messages have
+    // turnId; this test pins the optional field semantics by
+    // simulating an edge case.
     const result = await runThreadSearch(
       { source: 'thread', query: 'special', limit: 5 },
       makeDeps({
