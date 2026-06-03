@@ -48,6 +48,19 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
     assert.doesNotMatch(src, /providerOAuthHeader/, 'OAuth tab must not carry a second standalone section header');
   });
 
+  it('provider config sheets expose their own accessible close button', async () => {
+    const src = await readFile(PROVIDERS_PANEL_SOURCE, 'utf8');
+    const styles = await readFile(resolve(REPO_ROOT, 'apps', 'desktop', 'src', 'renderer', 'styles.css'), 'utf8');
+    const overlay = src.match(/function ProviderConfigSheetOverlay[\s\S]*?function ProviderCatalogCard/)?.[0] ?? '';
+
+    assert.match(overlay, /className="providerConfigSheetClose"/);
+    assert.match(overlay, /aria-label="关闭模型配置"/);
+    assert.match(overlay, /<X strokeWidth=\{1\.75\} aria-hidden="true" \/>/);
+    assert.match(styles, /\.providerConfigSheet\s*\{[\s\S]*position:\s*relative;/);
+    assert.match(styles, /\.providerConfigSheetClose\s*\{[\s\S]*position:\s*absolute;[\s\S]*right:\s*14px;/);
+    assert.match(styles, /\.providerConfigSheetClose:focus-visible\s*\{[\s\S]*outline:\s*2px solid var\(--accent\);/);
+  });
+
   it('exposes exactly four equal OAuth cards: claude, codex, antigravity, cursor', async () => {
     // WAWQAQ msg 8bb7e186: Claude must not be a huge standalone
     // inline card while the other OAuth providers are compact

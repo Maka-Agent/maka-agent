@@ -18,6 +18,7 @@ describe('localized main shell contract', () => {
     const relativeTime = await readFile(resolve(process.cwd(), '..', '..', 'packages', 'core', 'src', 'relative-time.ts'), 'utf8');
     const main = await readFile(join(process.cwd(), 'src', 'renderer', 'main.tsx'), 'utf8');
     const settings = await readFile(join(process.cwd(), 'src', 'renderer', 'settings', 'SettingsModal.tsx'), 'utf8');
+    const providers = await readFile(join(process.cwd(), 'src', 'renderer', 'settings', 'ProvidersPanel.tsx'), 'utf8');
     const commandPalette = await readFile(join(process.cwd(), 'src', 'renderer', 'command-palette.tsx'), 'utf8');
     const zhComposerBlock = components.match(/zh: \{\n\s*placeholder: '给 Maka 发消息…'[\s\S]*?\n\s*\},\n\s*en:/)?.[0] ?? '';
 
@@ -36,6 +37,10 @@ describe('localized main shell contract', () => {
     assert.match(settings, /SettingRow title="启动"[\s\S]*value="已启用"/);
     assert.match(settings, /SettingRow title="新对话模式"[\s\S]*value="确认"/);
     assert.match(settings, /props\.defaultSlug \?\? '未设置'/);
+    assert.match(settings, /detail: '设置开关关闭'/);
+    assert.doesNotMatch(settings, /Settings 开关关闭/);
+    assert.match(providers, /已成功调用供应商接口，但返回 0 个模型/);
+    assert.doesNotMatch(providers, /已成功调用 provider/);
     assert.match(commandPalette, /权限 · 只读[\s\S]*权限 · 确认[\s\S]*权限 · 执行/);
   });
 
@@ -50,6 +55,7 @@ describe('localized main shell contract', () => {
   });
 
   it('does not force Daily Review Chinese labels into uppercase tracking', async () => {
+    const components = await readFile(resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'components.tsx'), 'utf8');
     const styles = await readFile(join(process.cwd(), 'src', 'renderer', 'styles.css'), 'utf8');
     const totalsLabel = styles.match(/\.maka-daily-review-totals-label\s*\{[\s\S]*?\}/)?.[0] ?? '';
     const sectionTitle = styles.match(/\.maka-daily-review-section-title\s*\{[\s\S]*?\}/)?.[0] ?? '';
@@ -58,6 +64,9 @@ describe('localized main shell contract', () => {
     assert.match(totalsLabel, /letter-spacing:\s*0;/);
     assert.match(sectionTitle, /text-transform:\s*none;/);
     assert.match(sectionTitle, /letter-spacing:\s*0;/);
+    assert.match(components, /<DailyReviewTotalsCell\s+label="Token"/);
+    assert.match(components, /lines\.push\(`- Token：/);
+    assert.doesNotMatch(components, /DailyReviewTotalsCell\s+label="Tokens"/);
   });
 
   it('keeps English skill metadata out of the visible skills list copy', async () => {

@@ -1020,7 +1020,7 @@ function DailyReviewPanel(props: {
             <DailyReviewTotalsCell label="对话" value={summary.totals.sessionCount.toString()} />
             <DailyReviewTotalsCell label="请求" value={summary.totals.requestCount.toString()} />
             <DailyReviewTotalsCell
-              label="Tokens"
+              label="Token"
               value={summary.totals.totalTokens.toLocaleString()}
             />
             <DailyReviewTotalsCell
@@ -1093,7 +1093,7 @@ export function formatDailyReviewMarkdown(
   lines.push('');
   lines.push(`- 对话：${summary.totals.sessionCount}`);
   lines.push(`- 请求：${summary.totals.requestCount}`);
-  lines.push(`- Tokens：${summary.totals.totalTokens.toLocaleString()}`);
+  lines.push(`- Token：${summary.totals.totalTokens.toLocaleString()}`);
   lines.push(`- 费用：$${summary.totals.costUsd.toFixed(2)}`);
   if (summary.totals.errorCount > 0) {
     lines.push(`- 错误：${summary.totals.errorCount}`);

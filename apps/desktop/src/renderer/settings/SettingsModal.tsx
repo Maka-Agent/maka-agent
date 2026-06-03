@@ -3682,7 +3682,7 @@ function presentGatewayStatus(
   status: OpenGatewayRuntimeStatus | null,
   settings: AppSettings['openGateway'],
 ): { label: string; detail: string } {
-  if (!settings.enabled) return { label: '已关闭', detail: 'Settings 开关关闭' };
+  if (!settings.enabled) return { label: '已关闭', detail: '设置开关关闭' };
   if (!settings.token) return { label: '等待 token', detail: '生成访问 token 后服务会自动启动' };
   if (!status) return { label: '读取中', detail: '正在读取运行状态' };
   if (status.running) return { label: '运行中', detail: status.startedAt ? '本机 API 已启动' : '服务已监听' };

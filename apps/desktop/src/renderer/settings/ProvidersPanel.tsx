@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { X } from 'lucide-react';
 import { nextRadioId } from './model-table-keyboard';
 import {
   CATALOG_PROVIDER_TYPES,
@@ -294,6 +295,14 @@ function ProviderConfigSheetOverlay(props: { onClose(): void; children: ReactNod
         aria-label="模型供应商配置"
         onMouseDown={(event) => event.stopPropagation()}
       >
+        <button
+          type="button"
+          className="providerConfigSheetClose"
+          aria-label="关闭模型配置"
+          onClick={props.onClose}
+        >
+          <X strokeWidth={1.75} aria-hidden="true" />
+        </button>
         {props.children}
       </section>
     </div>
@@ -1270,7 +1279,7 @@ function ModelTable(props: {
     props.modelSource === 'fetched'
       ? props.modelChoices.length > 0
         ? `实时拉取的 ${props.modelChoices.length} 个模型${formatFetchedAtSuffix(props.modelsFetchedAt)}`
-        : '已成功调用 provider，但返回 0 个模型 — 该 provider 可能未对当前 API key 开放任何模型。'
+        : '已成功调用供应商接口，但返回 0 个模型 — 该供应商可能未对当前 API key 开放任何模型。'
       : `静态备用列表（${props.fallbackCount} 项）。点「从 API 刷新」拉取该 provider 的真实模型清单。`;
 
   // ARIA radiogroup keyboard pattern: arrow keys move focus AND select.
