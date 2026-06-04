@@ -2,7 +2,9 @@
  * Source contract for active-session message lifecycle.
  *
  * The chat body must not show messages from the previous session while the
- * newly selected session's message read is still in flight or has failed.
+ * newly selected session's message read is still in flight. Once a session is
+ * already active, transient refresh failures must preserve the visible log
+ * instead of blanking the conversation.
  */
 
 import { strict as assert } from 'node:assert';
@@ -15,7 +17,8 @@ const MAIN_RENDERER_SOURCE = join(process.cwd(), 'src', 'renderer', 'main.tsx');
 describe('active session message lifecycle contract', () => {
   it('clears stale messages before reading the selected session and guards late reads', async () => {
     const src = await readFile(MAIN_RENDERER_SOURCE, 'utf8');
-    const activeSessionEffect = src.match(/useEffect\(\(\) => \{[\s\S]*?readMessages\(activeId\)[\s\S]*?\}, \[activeId\]\);/)?.[0] ?? '';
+    const activeSessionEffect = src.match(/useEffect\(\(\) => \{\s*if \(!activeId\) return;[\s\S]*?readMessages\(activeId\)[\s\S]*?\}, \[activeId\]\);/)?.[0] ?? '';
+    const activeReadCatch = activeSessionEffect.match(/readMessages\(activeId\)[\s\S]*?\.catch\(\(\) => \{[\s\S]*?\n      \}\);/)?.[0] ?? '';
     const refreshMessages = src.match(/async function refreshMessages\(sessionId: string\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
 
     assert.match(
@@ -29,14 +32,24 @@ describe('active session message lifecycle contract', () => {
       'late active-session reads may set messages only while the same session is still active',
     );
     assert.match(
-      activeSessionEffect,
-      /\.catch\(\(\) => \{[\s\S]*if \(!disposed && activeIdRef\.current === activeId\) setMessages\(\[\]\);[\s\S]*\}\)/,
-      'active-session read failures must clear stale messages instead of leaving old content visible',
+      activeReadCatch,
+      /\.catch\(\(\) => \{[\s\S]*if \(!disposed && activeIdRef\.current === activeId\)[\s\S]*toastApi\.error\('读取对话失败'/,
+      'active-session read failures must surface a visible error after the old chat body has already been cleared',
+    );
+    assert.doesNotMatch(
+      activeReadCatch,
+      /setMessages\(\[\]\)/,
+      'the read-failure catch must not perform a second destructive clear; the pre-read clear is the only stale-content boundary',
     );
     assert.match(
       refreshMessages,
-      /try \{[\s\S]*readMessages\(sessionId\)[\s\S]*activeIdRef\.current === sessionId[\s\S]*setMessages\(next\)[\s\S]*\} catch \{[\s\S]*activeIdRef\.current === sessionId[\s\S]*setMessages\(\[\]\)/,
-      'shared refreshMessages path must catch read failures and clear only the active session',
+      /try \{[\s\S]*readMessages\(sessionId\)[\s\S]*activeIdRef\.current === sessionId[\s\S]*setMessages\(next\)[\s\S]*\} catch \(error\) \{[\s\S]*activeIdRef\.current === sessionId[\s\S]*toastApi\.error\('刷新对话失败', cleanErrorMessage\(error\)\)/,
+      'shared refreshMessages path must catch read failures and surface them without dropping the current visible log',
+    );
+    assert.doesNotMatch(
+      refreshMessages,
+      /catch \(error\) \{[\s\S]*setMessages\(\[\]\)/,
+      'background message refresh failures must preserve the visible conversation instead of blanking the chat',
     );
   });
 });

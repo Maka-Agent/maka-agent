@@ -816,7 +816,9 @@ function AppShell() {
         if (!disposed && activeIdRef.current === activeId) setMessages(next);
       })
       .catch(() => {
-        if (!disposed && activeIdRef.current === activeId) setMessages([]);
+        if (!disposed && activeIdRef.current === activeId) {
+          toastApi.error('读取对话失败', '已保留当前可见内容，请稍后重试。');
+        }
       });
     const unsubscribe = window.maka.sessions.subscribeEvents(activeId, (event) => {
       setSessionEventHealthBySession((current) => {
@@ -1539,9 +1541,9 @@ function AppShell() {
       if (activeIdRef.current === sessionId) {
         setMessages(next);
       }
-    } catch {
+    } catch (error) {
       if (activeIdRef.current === sessionId) {
-        setMessages([]);
+        toastApi.error('刷新对话失败', cleanErrorMessage(error));
       }
     }
   }
