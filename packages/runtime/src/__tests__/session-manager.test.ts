@@ -321,6 +321,27 @@ describe('SessionManager permission mode updates', () => {
     expect(turn?.errorClass).toBe('tool_failed');
   });
 
+  test('does not let a late complete event overwrite a prior turn error', async () => {
+    const store = new MemorySessionStore();
+    const backends = new BackendRegistry();
+    backends.register('fake', (ctx) => new EventBackend(ctx, [
+      { type: 'error', recoverable: false, reason: 'tool_failed', message: 'Tool failed' },
+      { type: 'complete', stopReason: 'end_turn' },
+    ]));
+    const manager = new SessionManager({ store, backends, newId: nextId(), now: nextNow(10_500) });
+    const session = await manager.createSession(makeInput());
+
+    await drain(manager.sendMessage(session.id, { turnId: 'turn-1', text: 'hello' }));
+
+    const states = (await store.readMessages(session.id)).filter((message) =>
+      message.type === 'turn_state' && message.turnId === 'turn-1'
+    );
+    expect(states.map((state) => state.type === 'turn_state' ? state.status : '')).toEqual(['running', 'failed']);
+    const [turn] = await store.listTurns(session.id);
+    expect(turn?.status).toBe('failed');
+    expect(turn?.errorClass).toBe('tool_failed');
+  });
+
   test('marks aborts as aborted', async () => {
     const store = new MemorySessionStore();
     const backends = new BackendRegistry();
@@ -399,6 +420,64 @@ describe('SessionManager permission mode updates', () => {
     const [turn] = await store.listTurns(session.id);
     expect(turn?.status).toBe('aborted');
     expect(turn?.abortSource).toBe('renderer.stop_button');
+  });
+
+  test('startup recovery marks persisted running turns as failed instead of leaving them stuck', async () => {
+    const store = new MemorySessionStore();
+    const backends = new BackendRegistry();
+    backends.register('fake', (ctx) => new TestBackend(ctx));
+    const manager = new SessionManager({ store, backends, newId: nextId(), now: nextNow(12_800) });
+    const running = await manager.createSession(makeInput({ status: 'running' }));
+    const waiting = await manager.createSession(makeInput({ status: 'waiting_for_user' }));
+    const activeStuck = await manager.createSession(makeInput({ status: 'active' }));
+    const failedThenCompleted = await manager.createSession(makeInput({ status: 'active' }));
+    const activeDone = await manager.createSession(makeInput({ status: 'active' }));
+
+    await store.appendMessages(running.id, [
+      { type: 'user', id: 'running-user', turnId: 'running-turn', ts: 10, text: 'still running' },
+      { type: 'turn_state', id: 'running-state', turnId: 'running-turn', ts: 11, status: 'running', partialOutputRetained: false },
+    ]);
+    await store.appendMessages(waiting.id, [
+      { type: 'user', id: 'waiting-user', turnId: 'waiting-turn', ts: 20, text: 'waiting' },
+      { type: 'turn_state', id: 'waiting-state', turnId: 'waiting-turn', ts: 21, status: 'running', partialOutputRetained: false },
+    ]);
+    await store.appendMessages(activeStuck.id, [
+      { type: 'user', id: 'active-stuck-user', turnId: 'active-stuck-turn', ts: 30, text: 'already active but stuck' },
+      { type: 'turn_state', id: 'active-stuck-state', turnId: 'active-stuck-turn', ts: 31, status: 'running', partialOutputRetained: false },
+    ]);
+    await store.appendMessages(failedThenCompleted.id, [
+      { type: 'user', id: 'failed-completed-user', turnId: 'failed-completed-turn', ts: 32, text: 'failed then completed' },
+      { type: 'turn_state', id: 'failed-completed-running', turnId: 'failed-completed-turn', ts: 33, status: 'running', partialOutputRetained: false },
+      { type: 'turn_state', id: 'failed-completed-failed', turnId: 'failed-completed-turn', ts: 34, status: 'failed', errorClass: 'tool_failed', partialOutputRetained: false },
+      { type: 'turn_state', id: 'failed-completed-completed', turnId: 'failed-completed-turn', ts: 35, status: 'completed', partialOutputRetained: false },
+    ]);
+    await store.appendMessages(activeDone.id, [
+      { type: 'user', id: 'active-user', turnId: 'active-turn', ts: 30, text: 'done' },
+      { type: 'turn_state', id: 'active-state', turnId: 'active-turn', ts: 31, status: 'completed', partialOutputRetained: false },
+    ]);
+
+    const recovered = await manager.recoverInterruptedSessions();
+
+    expect(recovered).toEqual([running.id, waiting.id, activeStuck.id, failedThenCompleted.id]);
+    expect((await store.readHeader(running.id)).status).toBe('active');
+    expect((await store.readHeader(waiting.id)).status).toBe('active');
+    expect((await store.readHeader(activeStuck.id)).status).toBe('active');
+    expect((await store.readHeader(failedThenCompleted.id)).status).toBe('active');
+    expect((await store.readHeader(activeDone.id)).status).toBe('active');
+    const runningTurn = (await store.listTurns(running.id)).find((turn) => turn.turnId === 'running-turn');
+    const waitingTurn = (await store.listTurns(waiting.id)).find((turn) => turn.turnId === 'waiting-turn');
+    const activeStuckTurn = (await store.listTurns(activeStuck.id)).find((turn) => turn.turnId === 'active-stuck-turn');
+    const failedThenCompletedTurn = (await store.listTurns(failedThenCompleted.id)).find((turn) => turn.turnId === 'failed-completed-turn');
+    const activeTurn = (await store.listTurns(activeDone.id)).find((turn) => turn.turnId === 'active-turn');
+    expect(runningTurn?.status).toBe('failed');
+    expect(runningTurn?.errorClass).toBe('app_restarted');
+    expect(waitingTurn?.status).toBe('failed');
+    expect(waitingTurn?.errorClass).toBe('app_restarted');
+    expect(activeStuckTurn?.status).toBe('failed');
+    expect(activeStuckTurn?.errorClass).toBe('app_restarted');
+    expect(failedThenCompletedTurn?.status).toBe('failed');
+    expect(failedThenCompletedTurn?.errorClass).toBe('tool_failed');
+    expect(activeTurn?.status).toBe('completed');
   });
 
   test('retry creates a new sibling turn and does not rewrite the aborted source turn', async () => {

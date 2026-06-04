@@ -4,7 +4,10 @@ import {
   type LlmConnection,
   type SessionHeader,
 } from '@maka/core';
-import { PROVIDER_DEFAULTS } from '@maka/core/llm-connections';
+import {
+  CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS,
+  PROVIDER_DEFAULTS,
+} from '@maka/core/llm-connections';
 
 export const NO_REAL_CONNECTION_CODE = 'NO_REAL_CONNECTION';
 
@@ -67,21 +70,57 @@ export async function requireReadyConnection(
   // truth. The desktop side only owns: (1) async secret lookup, (2)
   // Chinese error copy, (3) the throw-error API the rest of main.ts
   // expects.
-  const apiKey = await deps.getApiKey(connection.slug);
+  const normalizedConnection = normalizeCodexSubscriptionConnection(connection);
+  const apiKey = await deps.getApiKey(normalizedConnection.slug);
+  const normalizedRequestedModel = normalizeRequestedModel(connection, requestedModel);
   const verdict = isConnectionReady({
-    connection,
+    connection: normalizedConnection,
     hasSecret: typeof apiKey === 'string' && apiKey.length > 0,
-    requestedModel,
+    requestedModel: normalizedRequestedModel,
   });
 
   if (verdict.ready === false) {
     throw chatConfigurationError(
-      messageForReason(verdict.reason, connection, requestedModel),
+      messageForReason(verdict.reason, normalizedConnection, normalizedRequestedModel),
       verdict.reason,
     );
   }
 
-  return { connection, apiKey: apiKey ?? '', model: verdict.model };
+  return { connection: normalizedConnection, apiKey: apiKey ?? '', model: verdict.model };
+}
+
+function normalizeCodexSubscriptionConnection(connection: LlmConnection): LlmConnection {
+  if (connection.providerType !== 'codex-subscription') return connection;
+  const fallbackModels = PROVIDER_DEFAULTS['codex-subscription'].fallbackModels;
+  const safeModels = (connection.models ?? []).filter(
+    (entry) => entry.id && !CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS.has(entry.id),
+  );
+  const models = safeModels.length
+    ? safeModels
+    : fallbackModels.map((id) => ({ id }));
+  const enabledModelIds = new Set(models.map((entry) => entry.id));
+  const defaultModel =
+    connection.defaultModel &&
+    !CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS.has(connection.defaultModel) &&
+    enabledModelIds.has(connection.defaultModel)
+      ? connection.defaultModel
+      : models[0]?.id ?? fallbackModels[0] ?? connection.defaultModel;
+  if (models === connection.models && defaultModel === connection.defaultModel) return connection;
+  return { ...connection, defaultModel, models };
+}
+
+function normalizeRequestedModel(
+  connection: LlmConnection,
+  requestedModel: string | undefined,
+): string | undefined {
+  if (
+    connection.providerType === 'codex-subscription' &&
+    requestedModel &&
+    CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS.has(requestedModel)
+  ) {
+    return undefined;
+  }
+  return requestedModel;
 }
 
 /**

@@ -34,6 +34,7 @@ describe('Office document capability contract', () => {
     assert.match(snapshot, /等待刷新 OfficeCLI 状态/);
     assert.doesNotMatch(snapshot, /尚未探测 officecli/, 'Office capability no-probe copy should read as a refreshable state, not unfinished implementation');
     const officeCapabilityBlock = snapshot.match(/function officeDocumentsCapability[\s\S]*?function officeCliProbeReason/)?.[0] ?? '';
+    assert.match(officeCapabilityBlock, /state:\s*'not_run'/, 'Missing OfficeCLI is a setup warning, not an app-wide runtime error state');
     assert.doesNotMatch(officeCapabilityBlock, /读取与校验。|只读|生成/, 'Office capability copy must not lag behind the permission-gated edit tool');
     assert.match(main, /probeOfficeCli\(\{ now: permissions\.checkedAt \}\)/);
     assert.match(main, /probeOfficeCli\(\{ now \}\)/);

@@ -140,6 +140,7 @@ declare global {
         setFlagged(sessionId: string, isFlagged: boolean): Promise<void>;
         rename(sessionId: string, name: string): Promise<void>;
         setPermissionMode(sessionId: string, mode: PermissionMode): Promise<SessionSummary>;
+        setModel(sessionId: string, input: { llmConnectionSlug: string; model: string }): Promise<SessionSummary>;
         remove(sessionId: string): Promise<void>;
       };
       connections: {

@@ -471,6 +471,7 @@ export type {
   UpdateConnectionInput,
 } from './llm-connections.js';
 export {
+  CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS,
   PROVIDER_DEFAULTS,
   CATALOG_PROVIDER_TYPES,
   READY_PROVIDER_TYPES,

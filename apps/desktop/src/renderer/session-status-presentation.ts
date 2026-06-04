@@ -124,6 +124,7 @@ export function describeTurnErrorClass(errorClass: string | undefined): string {
   if (lower === 'provider_unavailable' || /\b5\d\d\b/.test(lower)) return '模型服务返回错误';
   if (lower === 'tool_failed' || lower.includes('tool')) return '工具调用失败';
   if (lower === 'permission_required' || lower.includes('permission')) return '等待权限确认';
+  if (lower === 'app_restarted') return '本地应用重启，上一轮没有完成';
   return '未知错误';
 }
 

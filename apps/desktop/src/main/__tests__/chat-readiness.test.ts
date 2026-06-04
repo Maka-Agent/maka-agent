@@ -144,14 +144,33 @@ describe('chat readiness guard', () => {
           slug: 'codex-subscription',
           name: 'Codex Subscription',
           providerType: 'codex-subscription',
-          defaultModel: 'gpt-5-codex',
+          defaultModel: 'gpt-5.5',
         }),
         apiKey: 'codex-oauth-secret',
       }),
     );
     assert.equal(ready.connection.slug, 'codex-subscription');
     assert.equal(ready.apiKey, 'codex-oauth-secret');
-    assert.equal(ready.model, 'gpt-5-codex');
+    assert.equal(ready.model, 'gpt-5.5');
+  });
+
+  test('normalizes stale Codex OAuth session model away from unsupported ChatGPT-account model', async () => {
+    const ready = await requireReadyConnection(
+      'codex-subscription',
+      deps({
+        connection: connection({
+          slug: 'codex-subscription',
+          name: 'Codex Subscription',
+          providerType: 'codex-subscription',
+          defaultModel: 'gpt-5.5',
+          models: [{ id: 'gpt-5.5' }, { id: 'gpt-5.4' }],
+        }),
+        apiKey: 'codex-oauth-secret',
+      }),
+      'gpt-5-codex',
+    );
+    assert.equal(ready.connection.slug, 'codex-subscription');
+    assert.equal(ready.model, 'gpt-5.5');
   });
 
   test('send path blocks explicit fake sessions and revalidates old ai sessions', async () => {

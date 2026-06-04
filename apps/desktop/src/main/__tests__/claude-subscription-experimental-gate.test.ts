@@ -389,6 +389,21 @@ describe('Claude OAuth model connection bridge', () => {
       /slug:\s*CODEX_SUBSCRIPTION_CONNECTION_SLUG[\s\S]*providerType:\s*'codex-subscription'[\s\S]*enabled:\s*true[\s\S]*lastTestStatus:\s*'verified'/,
       'sync helper must upsert an enabled codex-subscription connection after login',
     );
+    assert.match(
+      src,
+      /normalizeCodexSubscriptionModels\(existing\?\.models, fallbackModels\)/,
+      'Codex OAuth sync must migrate stale unsupported model lists',
+    );
+    assert.match(
+      src,
+      /normalizeCodexSubscriptionDefaultModel\([\s\S]*existing\?\.defaultModel[\s\S]*defaults\.fallbackModels\[0\]/,
+      'Codex OAuth sync must migrate stale unsupported default models',
+    );
+    assert.match(
+      src,
+      /CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS\.has\(existingDefaultModel\)/,
+      'Codex OAuth migration must explicitly reject ChatGPT-account-unsupported model ids',
+    );
     const completeIdx = src.indexOf("codex-subscription:complete-authorization");
     assert.notEqual(completeIdx, -1, 'codex complete-authorization handler must exist');
     const completeRegion = src.slice(completeIdx, completeIdx + 1200);

@@ -2772,6 +2772,14 @@ export interface ChatHeaderAlert {
   onClick?(): void;
 }
 
+export interface ChatModelChoice {
+  connectionSlug: string;
+  connectionLabel: string;
+  providerType: ProviderType;
+  model: string;
+  label?: string;
+}
+
 export function ChatView(props: {
   messages: StoredMessage[];
   streamingText: string;
@@ -2808,6 +2816,8 @@ export function ChatView(props: {
   /** Optional renderer for the provider mark; supplied by the desktop app to
    *  avoid bringing the full provider SVG library into @maka/ui. */
   renderProviderMark?(type: ProviderType): ReactNode;
+  modelChoices?: ChatModelChoice[];
+  onModelChange?(input: { llmConnectionSlug: string; model: string }): void | Promise<void>;
   /** Personalized user label shown on user messages. Falls back to "你". */
   userLabel?: string;
   /**
@@ -3068,6 +3078,13 @@ export function ChatView(props: {
         ? '当前有工具调用正在等待确认，处理后再切换权限模式。'
         : undefined;
   const switcherDisabled = Boolean(permissionModeDisabledReason) || !props.activeSession || !props.onPermissionModeChange;
+  const modelSwitcherDisabledReason = streaming
+    ? '当前对话正在流式输出，等结束后再切换模型。'
+    : props.activeSession?.status === 'running'
+      ? '当前对话正在运行，等结束后再切换模型。'
+      : props.activeSession?.status === 'waiting_for_user'
+        ? '当前有工具调用正在等待确认，处理后再切换模型。'
+        : undefined;
 
   if (!props.activeSession) {
     return (
@@ -3107,6 +3124,13 @@ export function ChatView(props: {
           <Plus strokeWidth={1.5} aria-hidden="true" />
         </button>
         <span className="maka-chat-header-spacer" />
+        <ChatModelSwitcher
+          activeSession={props.activeSession}
+          activeModel={props.activeModelLabel}
+          choices={props.modelChoices ?? []}
+          disabledReason={modelSwitcherDisabledReason}
+          onChange={props.onModelChange}
+        />
         {props.memoryActive && (
           <button
             type="button"
@@ -3244,6 +3268,97 @@ export function ChatView(props: {
       </div>
     </main>
   );
+}
+
+function ChatModelSwitcher(props: {
+  activeSession: SessionSummary;
+  activeModel?: string;
+  choices: ChatModelChoice[];
+  disabledReason?: string;
+  onChange?(input: { llmConnectionSlug: string; model: string }): void | Promise<void>;
+}) {
+  const currentModel = props.activeModel ?? props.activeSession.model;
+  const currentValue = modelChoiceValue(props.activeSession.llmConnectionSlug, currentModel);
+  const disabled = Boolean(props.disabledReason) || !props.onChange || props.choices.length === 0;
+  const grouped = groupModelChoices(props.choices);
+  const title = props.disabledReason ?? '切换当前会话使用的模型。设置里的默认模型只影响新建会话；这里会更新当前会话。';
+
+  return (
+    <label className="maka-model-switcher" title={title} data-disabled={disabled ? 'true' : undefined}>
+      <span className="maka-model-switcher-label">模型</span>
+      <select
+        className="maka-model-switcher-select"
+        aria-label="切换当前会话模型"
+        value={currentValue}
+        disabled={disabled}
+        onChange={(event) => {
+          const next = parseModelChoiceValue(event.currentTarget.value);
+          if (!next) return;
+          if (
+            next.llmConnectionSlug === props.activeSession.llmConnectionSlug &&
+            next.model === currentModel
+          ) {
+            return;
+          }
+          void props.onChange?.(next);
+        }}
+      >
+        {!props.choices.some((choice) => modelChoiceValue(choice.connectionSlug, choice.model) === currentValue) && (
+          <option value={currentValue}>{currentModel}</option>
+        )}
+        {grouped.map((group) => (
+          <optgroup key={group.connectionSlug} label={group.connectionLabel}>
+            {group.choices.map((choice) => (
+              <option
+                key={modelChoiceValue(choice.connectionSlug, choice.model)}
+                value={modelChoiceValue(choice.connectionSlug, choice.model)}
+              >
+                {choice.label ?? choice.model}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function groupModelChoices(choices: ChatModelChoice[]): Array<{
+  connectionSlug: string;
+  connectionLabel: string;
+  choices: ChatModelChoice[];
+}> {
+  const bySlug = new Map<string, { connectionSlug: string; connectionLabel: string; choices: ChatModelChoice[] }>();
+  for (const choice of choices) {
+    const group = bySlug.get(choice.connectionSlug);
+    if (group) {
+      group.choices.push(choice);
+    } else {
+      bySlug.set(choice.connectionSlug, {
+        connectionSlug: choice.connectionSlug,
+        connectionLabel: choice.connectionLabel,
+        choices: [choice],
+      });
+    }
+  }
+  return [...bySlug.values()];
+}
+
+function modelChoiceValue(connectionSlug: string, model: string): string {
+  return `${encodeURIComponent(connectionSlug)}:${encodeURIComponent(model)}`;
+}
+
+function parseModelChoiceValue(value: string): { llmConnectionSlug: string; model: string } | undefined {
+  const idx = value.indexOf(':');
+  if (idx <= 0) return undefined;
+  try {
+    const llmConnectionSlug = decodeURIComponent(value.slice(0, idx));
+    const model = decodeURIComponent(value.slice(idx + 1));
+    if (!llmConnectionSlug || !model) return undefined;
+    return { llmConnectionSlug, model };
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -3923,7 +4038,7 @@ function TurnSummary(props: { turn: TurnViewModel; previousModelId?: string }) {
   // "进行中" pill instead of a number that would tick up forever — per
   // @kenji's PR82 review.
   const hasDuration = turn.durationMs !== undefined && turn.durationMs > 0;
-  const inProgress = turn.user !== undefined && turn.assistant === undefined;
+  const inProgress = turn.status === 'running' && turn.user !== undefined && turn.assistant === undefined;
   const hasTokens = Boolean(turn.tokens && (turn.tokens.input > 0 || turn.tokens.output > 0));
   // costUsd is only meaningful when present AND > 0 — never fabricate a
   // "$0.00" hover, that reads as false precision (also @kenji PR82 review).

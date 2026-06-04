@@ -132,7 +132,7 @@ describe('Claude subscription runtime wiring', () => {
         respondJson(response, 200, {
           id: 'resp_test',
           object: 'response',
-          model: 'gpt-5-codex',
+          model: 'gpt-5.5',
         });
       });
     });
@@ -146,7 +146,7 @@ describe('Claude subscription runtime wiring', () => {
     assert.equal(observedPath, '/responses');
     assert.equal(observedAuth, `Bearer ${codexAccessToken('acct_test')}`);
     assert.equal(observedAccountId, 'acct_test');
-    assert.match(observedBody, /gpt-5-codex/);
+    assert.match(observedBody, /gpt-5\.5/);
     assert.match(observedBody, /store/);
   });
 });
@@ -190,7 +190,7 @@ function codexOAuthConnection(): LlmConnection {
     slug: 'codex-subscription',
     name: 'Codex OAuth',
     providerType: 'codex-subscription',
-    defaultModel: 'gpt-5-codex',
+    defaultModel: 'gpt-5.5',
     enabled: true,
     createdAt: 1,
     updatedAt: 1,

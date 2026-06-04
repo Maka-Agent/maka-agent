@@ -188,6 +188,9 @@ contextBridge.exposeInMainWorld('maka', {
     setPermissionMode(sessionId: string, mode: PermissionMode): Promise<SessionSummary> {
       return ipcRenderer.invoke('sessions:setPermissionMode', sessionId, mode);
     },
+    setModel(sessionId: string, input: { llmConnectionSlug: string; model: string }): Promise<SessionSummary> {
+      return ipcRenderer.invoke('sessions:setModel', sessionId, input);
+    },
     remove(sessionId: string): Promise<void> {
       return ipcRenderer.invoke('sessions:remove', sessionId);
     },

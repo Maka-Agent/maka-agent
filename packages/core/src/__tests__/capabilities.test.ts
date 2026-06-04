@@ -46,13 +46,13 @@ describe('permission and capability snapshot contracts', () => {
     })).toBe('not_configured');
   });
 
-  test('partial feature is degraded after configuration and permission gates pass', () => {
+  test('partial feature stays not_configured until runtime probe reports degradation', () => {
     expect(deriveCapabilityReadiness({
       feature: { state: 'partial', source: 'runtime', reason: 'local smoke only' },
       configuration: presentConfig,
       osPermissions: [requiredPermission('microphone', 'granted')],
       runtimeProbe: { state: 'not_run', source: 'runtime_probe' },
-    })).toBe('degraded');
+    })).toBe('not_configured');
   });
 
   test('missing configuration is not_configured before runtime health', () => {
@@ -99,6 +99,15 @@ describe('permission and capability snapshot contracts', () => {
   test('degraded runtime probe is surfaced after feature and permission gates pass', () => {
     expect(deriveCapabilityReadiness({
       feature: enabledFeature,
+      configuration: presentConfig,
+      osPermissions: [requiredPermission('microphone', 'granted')],
+      runtimeProbe: { state: 'degraded', source: 'runtime_probe', reason: 'probe failed' },
+    })).toBe('degraded');
+  });
+
+  test('degraded runtime probe still wins over partial feature copy', () => {
+    expect(deriveCapabilityReadiness({
+      feature: { state: 'partial', source: 'runtime', reason: 'local smoke only' },
       configuration: presentConfig,
       osPermissions: [requiredPermission('microphone', 'granted')],
       runtimeProbe: { state: 'degraded', source: 'runtime_probe', reason: 'probe failed' },

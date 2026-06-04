@@ -362,8 +362,8 @@ describe('deriveOnboardingState invariants', () => {
     const conn = realConnection({
       slug: 'codex-subscription',
       providerType: 'codex-subscription',
-      defaultModel: 'gpt-5-codex',
-      models: [{ id: 'gpt-5-codex' }],
+      defaultModel: 'gpt-5.5',
+      models: [{ id: 'gpt-5.5' }],
     });
     const ready = isConnectionReady({ connection: conn, hasSecret: true });
     assert.equal(ready.ready, true);

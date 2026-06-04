@@ -162,7 +162,7 @@ function officeDocumentsCapability(probe: OfficeCliProbe | undefined, now: numbe
         reason: `officecli ${probe.version}`,
       }
     : {
-        state: 'degraded',
+        state: 'not_run',
         source: 'runtime_probe',
         lastCheckedAt: probe?.checkedAt ?? now,
         reason: officeCliProbeReason(probe),

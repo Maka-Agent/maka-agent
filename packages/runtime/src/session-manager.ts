@@ -152,6 +152,28 @@ export class SessionManager {
     return this.deps.store.listTurns(sessionId);
   }
 
+  async recoverInterruptedSessions(): Promise<string[]> {
+    const interrupted = (await this.deps.store.list())
+      .filter((session) => session.status !== 'archived');
+    const recovered: string[] = [];
+    for (const session of interrupted) {
+      if (this.active.has(session.id)) continue;
+      const messages = await this.deps.store.readMessages(session.id).catch(() => []);
+      const recoveries = interruptedTurnRecoveries(messages);
+      if (recoveries.length === 0) continue;
+      for (const recovery of recoveries) {
+        await this.appendTurnState(session.id, recovery.turnId, 'failed', recovery.lineage, {
+          errorClass: recovery.errorClass,
+        }).catch(() => {});
+      }
+      if (session.status === 'running' || session.status === 'waiting_for_user') {
+        await this.updateStatus(session.id, 'active').catch(() => {});
+      }
+      recovered.push(session.id);
+    }
+    return recovered;
+  }
+
   async updateSession(
     sessionId: string,
     patch: Partial<SessionHeader>,
@@ -291,6 +313,7 @@ export class SessionManager {
     let finalStatus: { status: SessionStatus; blockedReason?: SessionBlockedReason } | undefined;
     let active: ActiveSession | undefined;
     let activeStreamTracked = false;
+    let turnFailed = false;
 
     try {
       // 3. Lock connection right after the user message is flushed (§9 Step 2.3).
@@ -329,7 +352,7 @@ export class SessionManager {
         if (transition && !stoppedDuringTurn) {
           await this.updateStatus(sessionId, transition.status, transition.blockedReason, ev.ts);
         }
-        if (ev.type === 'complete' || ev.type === 'abort') {
+        if ((ev.type === 'complete' || ev.type === 'abort') && !turnFailed) {
           sawCompletion = true;
           finalStatus = stoppedDuringTurn
             ? { status: 'aborted' }
@@ -343,6 +366,7 @@ export class SessionManager {
           }
         }
         if (ev.type === 'error') {
+          turnFailed = true;
           finalStatus = transition ?? { status: 'blocked', blockedReason: 'unknown' };
           await this.appendTurnState(sessionId, input.turnId, 'failed', input, {
             ts: ev.ts,
@@ -646,6 +670,62 @@ function statusPatch(
     status,
     blockedReason: status === 'blocked' ? (blockedReason ?? 'unknown') : undefined,
     statusUpdatedAt: ts,
+  };
+}
+
+interface InterruptedTurnRecovery {
+  turnId: string;
+  errorClass: string;
+  lineage: Partial<Pick<UserMessageInput, 'parentTurnId' | 'retriedFromTurnId' | 'regeneratedFromTurnId' | 'branchOfTurnId' | 'parentSessionId'>>;
+}
+
+function interruptedTurnRecoveries(messages: readonly StoredMessage[]): InterruptedTurnRecovery[] {
+  const byTurn = new Map<string, {
+    hasAssistant: boolean;
+    states: Array<Extract<StoredMessage, { type: 'turn_state' }>>;
+  }>();
+  for (const message of messages) {
+    const turnId = (message as { turnId?: string }).turnId;
+    if (!turnId) continue;
+    const bucket = byTurn.get(turnId) ?? { hasAssistant: false, states: [] };
+    if (message.type === 'assistant') bucket.hasAssistant = true;
+    if (message.type === 'turn_state') bucket.states.push(message);
+    byTurn.set(turnId, bucket);
+  }
+
+  const recoveries: InterruptedTurnRecovery[] = [];
+  for (const [turnId, bucket] of byTurn) {
+    const latest = bucket.states.at(-1);
+    if (!latest) continue;
+    if (latest.status === 'running') {
+      recoveries.push({
+        turnId,
+        errorClass: 'app_restarted',
+        lineage: turnStateLineage(latest),
+      });
+      continue;
+    }
+    const failed = [...bucket.states].reverse().find((state) => state.status === 'failed');
+    if (latest.status === 'completed' && !bucket.hasAssistant && failed) {
+      recoveries.push({
+        turnId,
+        errorClass: failed.errorClass ?? 'unknown',
+        lineage: turnStateLineage(failed),
+      });
+    }
+  }
+  return recoveries;
+}
+
+function turnStateLineage(
+  state: Extract<StoredMessage, { type: 'turn_state' }>,
+): Partial<Pick<UserMessageInput, 'parentTurnId' | 'retriedFromTurnId' | 'regeneratedFromTurnId' | 'branchOfTurnId' | 'parentSessionId'>> {
+  return {
+    ...(state.parentTurnId ? { parentTurnId: state.parentTurnId } : {}),
+    ...(state.retriedFromTurnId ? { retriedFromTurnId: state.retriedFromTurnId } : {}),
+    ...(state.regeneratedFromTurnId ? { regeneratedFromTurnId: state.regeneratedFromTurnId } : {}),
+    ...(state.branchOfTurnId ? { branchOfTurnId: state.branchOfTurnId } : {}),
+    ...(state.parentSessionId ? { parentSessionId: state.parentSessionId } : {}),
   };
 }
 

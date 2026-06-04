@@ -183,6 +183,10 @@ describe('describeTurnErrorClass (PR109e-d @kenji gate #3)', () => {
     assert.match(describeTurnErrorClass('tool_failed'), /工具/);
   });
 
+  it('returns a specific Chinese label for app restart recovery', () => {
+    assert.equal(describeTurnErrorClass('app_restarted'), '本地应用重启，上一轮没有完成');
+  });
+
   it('falls back to "未知错误" for unrecognized classes', () => {
     for (const cls of [undefined, 'xyz', 'something_new', '']) {
       assert.match(describeTurnErrorClass(cls), /未知/, `${JSON.stringify(cls)} should fall back to 未知错误`);

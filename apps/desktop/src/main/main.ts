@@ -138,7 +138,11 @@ import {
 import type { BotIncomingMessage, ToolArtifactRecorderInput } from '@maka/runtime';
 import { testProxyConnection } from '@maka/runtime/network/proxy-test';
 import { fetchWeChatQrcode, pollWeChatQrcodeStatus } from './wechat-scan-login.js';
-import { PROVIDER_DEFAULTS, type LlmConnection } from '@maka/core/llm-connections';
+import {
+  CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS,
+  PROVIDER_DEFAULTS,
+  type LlmConnection,
+} from '@maka/core/llm-connections';
 import { createArtifactStore, createConnectionStore, createPlanReminderStore, createSessionStore, createSettingsStore, createTelemetryRepo, resolveArtifactPath } from '@maka/storage';
 import {
   ensureSessionCanSendOrRebind,
@@ -320,6 +324,12 @@ async function syncCodexSubscriptionConnection(): Promise<LlmConnection | null> 
 
   const defaults = PROVIDER_DEFAULTS['codex-subscription'];
   const fallbackModels = defaults.fallbackModels.map((id) => ({ id }));
+  const normalizedModels = normalizeCodexSubscriptionModels(existing?.models, fallbackModels);
+  const normalizedDefaultModel = normalizeCodexSubscriptionDefaultModel(
+    existing?.defaultModel,
+    normalizedModels.map((entry) => entry.id),
+    defaults.fallbackModels[0] || '',
+  );
   const displayName = state.email ? `Codex OAuth · ${state.email}` : 'Codex OAuth';
   const now = Date.now();
   const connection: LlmConnection = {
@@ -327,9 +337,9 @@ async function syncCodexSubscriptionConnection(): Promise<LlmConnection | null> 
     name: existing?.name ?? displayName,
     providerType: 'codex-subscription',
     baseUrl: defaults.baseUrl,
-    defaultModel: existing?.defaultModel || defaults.fallbackModels[0] || '',
+    defaultModel: normalizedDefaultModel,
     enabled: true,
-    models: existing?.models?.length ? existing.models : fallbackModels,
+    models: normalizedModels,
     modelSource: existing?.modelSource ?? 'fallback',
     lastTestStatus: 'verified',
     lastTestAt: new Date(now).toISOString(),
@@ -338,6 +348,31 @@ async function syncCodexSubscriptionConnection(): Promise<LlmConnection | null> 
     updatedAt: now,
   };
   return connectionStore.save(connection);
+}
+
+function normalizeCodexSubscriptionModels(
+  existingModels: LlmConnection['models'] | undefined,
+  fallbackModels: NonNullable<LlmConnection['models']>,
+): NonNullable<LlmConnection['models']> {
+  const safeExisting = (existingModels ?? []).filter(
+    (entry) => entry.id && !CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS.has(entry.id),
+  );
+  return safeExisting.length ? safeExisting : fallbackModels;
+}
+
+function normalizeCodexSubscriptionDefaultModel(
+  existingDefaultModel: string | undefined,
+  enabledModelIds: string[],
+  fallbackModel: string,
+): string {
+  if (
+    existingDefaultModel &&
+    !CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS.has(existingDefaultModel) &&
+    enabledModelIds.includes(existingDefaultModel)
+  ) {
+    return existingDefaultModel;
+  }
+  return enabledModelIds[0] || fallbackModel;
 }
 
 async function syncOAuthModelConnections(): Promise<void> {
@@ -617,15 +652,15 @@ function isInsideOrSamePath(root: string, target: string): boolean {
 }
 
 backends.register('ai-sdk', async (ctx) => {
-  const { connection, apiKey } = await getReadyConnection(ctx.header.llmConnectionSlug, ctx.header.model);
+  const { connection, apiKey, model } = await getReadyConnection(ctx.header.llmConnectionSlug, ctx.header.model);
 
   return new AiSdkBackend({
     sessionId: ctx.sessionId,
-    header: ctx.header,
+    header: { ...ctx.header, model },
     appendMessage: (message) => ctx.store.appendMessage(ctx.sessionId, message),
     connection,
     apiKey: apiKey ?? '',
-    modelId: ctx.header.model || connection.defaultModel,
+    modelId: model,
     permissionEngine,
     modelFactory: getAIModel,
     tools: builtinTools,
@@ -2015,6 +2050,31 @@ function registerIpc(): void {
       return session;
     });
   });
+  ipcMain.handle('sessions:setModel', async (_event, sessionId: string, input: unknown) => {
+    const { llmConnectionSlug, model } = normalizeSessionModelSelection(input);
+    const header = await store.readHeader(sessionId);
+    if (header.status === 'running') {
+      throw new Error('当前对话正在运行，等结束后再切换模型。');
+    }
+    if (header.status === 'waiting_for_user') {
+      throw new Error('当前有工具调用正在等待确认，处理后再切换模型。');
+    }
+    const ready = await getReadyConnection(llmConnectionSlug, model);
+    const next = await runtime.updateSession(sessionId, {
+      backend: 'ai-sdk',
+      llmConnectionSlug: ready.connection.slug,
+      model: ready.model,
+      connectionLocked: true,
+      status: 'active',
+      blockedReason: undefined,
+      statusUpdatedAt: Date.now(),
+    });
+    emitSessionsChanged('updated', sessionId, {
+      connectionSlug: ready.connection.slug,
+      modelId: ready.model,
+    });
+    return next;
+  });
   ipcMain.handle('sessions:remove', async (_event, sessionId: string) => {
     await runtime.remove(sessionId);
     emitSessionsChanged('deleted', sessionId);
@@ -2898,6 +2958,22 @@ function emitSessionsChanged(
   mainWindow?.webContents.send('sessions:changed', event);
 }
 
+function normalizeSessionModelSelection(input: unknown): { llmConnectionSlug: string; model: string } {
+  if (!input || typeof input !== 'object') {
+    throw new Error('Invalid model selection');
+  }
+  const record = input as Record<string, unknown>;
+  const llmConnectionSlug = typeof record.llmConnectionSlug === 'string' ? record.llmConnectionSlug.trim() : '';
+  const model = typeof record.model === 'string' ? record.model.trim() : '';
+  if (!llmConnectionSlug) {
+    throw new Error('Missing model connection');
+  }
+  if (!model) {
+    throw new Error('Missing model');
+  }
+  return { llmConnectionSlug, model };
+}
+
 function emitPlansChanged(
   reason: 'created' | 'updated' | 'deleted' | 'triggered' | 'blocked',
   reminder: Pick<PlanReminder, 'id'>,
@@ -2936,6 +3012,15 @@ async function refreshPlanReminderTimers(): Promise<void> {
   await triggerDuePlanReminders();
   const reminders = await planReminderStore.list();
   for (const reminder of reminders) schedulePlanReminder(reminder);
+}
+
+async function recoverInterruptedSessionsOnStartup(): Promise<void> {
+  try {
+    await runtime.recoverInterruptedSessions();
+  } catch {
+    // Best-effort: startup should still reach the renderer so users can inspect
+    // and repair any remaining local session state.
+  }
 }
 
 async function triggerDuePlanReminders(): Promise<void> {
@@ -3108,6 +3193,7 @@ app.whenReady().then(async () => {
   setActiveProxy(toContractNetworkSettings(settings.network).proxy);
   await telemetryRepo.load();
   lookupPricing = buildPricingLookup(telemetryRepo.listPricingOverrides());
+  await recoverInterruptedSessionsOnStartup();
   await botRegistry.applySettings(settings.botChat);
   await openGateway.sync(settings.openGateway);
   await createWindow();

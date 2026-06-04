@@ -160,13 +160,18 @@ describe('fetchProviderModels', () => {
       slug: 'codex-subscription',
       name: 'Codex OAuth',
       providerType: 'codex-subscription',
-      defaultModel: 'gpt-5-codex',
+      defaultModel: 'gpt-5.5',
       enabled: true,
       createdAt: 1,
       updatedAt: 1,
     }, 'oauth-access-token');
 
-    assert.deepEqual(models, [{ id: 'gpt-5-codex' }]);
+    assert.deepEqual(models, [
+      { id: 'gpt-5.5' },
+      { id: 'gpt-5.4' },
+      { id: 'gpt-5.4-mini' },
+      { id: 'gpt-5.3-codex-spark' },
+    ]);
   });
 
   test('successful empty provider responses stay fetched-empty instead of falling back', async () => {

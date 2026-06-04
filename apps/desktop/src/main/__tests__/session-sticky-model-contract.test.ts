@@ -16,9 +16,15 @@ describe('PR-SESSION-STICKY-MODEL-0 contract', () => {
 
   it('validates sends against the session model, not the latest provider default', async () => {
     const readiness = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/main/chat-readiness.ts'), 'utf8');
+    const main = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/main/main.ts'), 'utf8');
 
     assert.match(readiness, /assertSessionCanSend\([\s\S]*header: Pick<SessionHeader, 'backend' \| 'llmConnectionSlug' \| 'model'>/);
     assert.match(readiness, /requireReadyConnection\(header\.llmConnectionSlug, deps, header\.model\)/);
+    assert.match(readiness, /normalizeRequestedModel\(connection, requestedModel\)/);
+    assert.match(readiness, /CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS\.has\(requestedModel\)/);
+    assert.match(main, /const \{ connection, apiKey, model \} = await getReadyConnection\(ctx\.header\.llmConnectionSlug, ctx\.header\.model\)/);
+    assert.match(main, /header: \{ \.\.\.ctx\.header, model \}/);
+    assert.match(main, /modelId: model/);
     assert.match(readiness, /Once a session has user messages, its connection\/model is sticky/);
     assert.match(readiness, /if \(header\.connectionLocked\) \{\s*throw error;\s*\}/);
   });
@@ -39,10 +45,38 @@ describe('PR-SESSION-STICKY-MODEL-0 contract', () => {
     const ui = await readFile(resolve(REPO_ROOT, 'packages/ui/src/components.tsx'), 'utf8');
     const providers = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/renderer/settings/ProvidersPanel.tsx'), 'utf8');
 
-    assert.match(renderer, /activeSession\?\.model \?\? activeConnection\?\.defaultModel/);
+    assert.match(renderer, /normalizeActiveChatModel\(activeSession, activeConnection, chatModelChoices\)/);
     assert.match(ui, /本会话固定模型：\$\{props\.activeConnectionLabel\} · \$\{props\.activeModelLabel\}/);
     assert.match(ui, /设置里的默认模型只影响新建会话/);
     assert.match(providers, /默认模型只用于新建会话；已有会话会保留创建时的模型选择/);
+  });
+
+  it('lets the user explicitly switch the current session model from the chat header', async () => {
+    const main = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/main/main.ts'), 'utf8');
+    const preload = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/preload/preload.ts'), 'utf8');
+    const globalTypes = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/global.d.ts'), 'utf8');
+    const renderer = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/renderer/main.tsx'), 'utf8');
+    const ui = await readFile(resolve(REPO_ROOT, 'packages/ui/src/components.tsx'), 'utf8');
+    const styles = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/renderer/styles.css'), 'utf8');
+
+    assert.match(main, /ipcMain\.handle\('sessions:setModel'[\s\S]*normalizeSessionModelSelection\(input\)/);
+    assert.match(main, /getReadyConnection\(llmConnectionSlug, model\)/, 'model switch must reuse the send-path readiness gate');
+    assert.match(main, /runtime\.updateSession\(sessionId, \{[\s\S]*llmConnectionSlug: ready\.connection\.slug,[\s\S]*model: ready\.model,[\s\S]*connectionLocked: true/);
+    assert.match(main, /当前对话正在运行，等结束后再切换模型/);
+    assert.match(main, /当前有工具调用正在等待确认，处理后再切换模型/);
+    assert.match(preload, /setModel\(sessionId: string, input: \{ llmConnectionSlug: string; model: string \}\): Promise<SessionSummary>/);
+    assert.match(globalTypes, /setModel\(sessionId: string, input: \{ llmConnectionSlug: string; model: string \}\): Promise<SessionSummary>/);
+    assert.match(renderer, /modelChoices=\{chatModelChoices\}/);
+    assert.match(renderer, /onModelChange=\{\(input\) => void setSessionModel\(input\)\}/);
+    assert.match(renderer, /PROVIDER_DEFAULTS\[connection\.providerType\]/);
+    assert.match(renderer, /CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS\.has\(model\.trim\(\)\)/);
+    assert.match(ui, /function ChatModelSwitcher/);
+    assert.match(ui, /activeModel\?: string/);
+    assert.match(ui, /const currentModel = props\.activeModel \?\? props\.activeSession\.model/);
+    assert.match(ui, /aria-label="切换当前会话模型"/);
+    assert.match(ui, /props\.onChange\?\.\(next\)/);
+    assert.match(styles, /\.maka-model-switcher\s*\{/);
+    assert.match(styles, /\.maka-model-switcher-select:focus-visible\s*\{/);
   });
 
   it('flags per-turn model departures against the session sticky model', async () => {

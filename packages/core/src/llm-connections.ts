@@ -105,6 +105,10 @@ export interface ProviderDefaults {
   signupUrl?: string;
 }
 
+export const CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS = new Set([
+  'gpt-5-codex',
+]);
+
 export const PROVIDER_DEFAULTS: Record<ProviderType, ProviderDefaults> = {
   anthropic: {
     label: 'Anthropic',
@@ -249,7 +253,7 @@ export const PROVIDER_DEFAULTS: Record<ProviderType, ProviderDefaults> = {
     baseUrl: 'https://chatgpt.com/backend-api/codex',
     authKind: 'oauth_token',
     backendKind: 'ai-sdk',
-    fallbackModels: ['gpt-5-codex'],
+    fallbackModels: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex-spark'],
     status: 'phase3-experimental',
     protocol: 'openai',
     category: 'oauth',

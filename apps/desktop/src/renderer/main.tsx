@@ -21,13 +21,19 @@ import type {
   ThemePreference,
   UiDensity,
 } from '@maka/core';
-import { MAX_IMPORTED_TEXT_FILE_SAMPLE_BYTES, preflightDroppedTextFilesForPromptImport } from '@maka/core';
+import {
+  CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS,
+  MAX_IMPORTED_TEXT_FILE_SAMPLE_BYTES,
+  preflightDroppedTextFilesForPromptImport,
+} from '@maka/core';
+import { PROVIDER_DEFAULTS } from '@maka/core';
 import {
   applyAssistantDelta,
   applyThinkingComplete,
   applyThinkingDelta,
   applyToolOutputChunk,
   type ChatHeaderAlert,
+  type ChatModelChoice,
   ChatView,
   Composer,
   type ComposerHandle,
@@ -115,6 +121,67 @@ function dailyReviewExportDefaultName(label: string): string {
           ? 'today'
           : 'day';
   return `maka-daily-review-${scope}-${yyyy}-${mm}-${dd}.md`;
+}
+
+function buildChatModelChoices(connections: readonly LlmConnection[]): ChatModelChoice[] {
+  const choices: ChatModelChoice[] = [];
+  for (const connection of connections) {
+    const defaults = PROVIDER_DEFAULTS[connection.providerType];
+    if (!connection.enabled || defaults.backendKind !== 'ai-sdk') continue;
+    if (
+      defaults.authKind === 'oauth_token' &&
+      connection.providerType !== 'claude-subscription' &&
+      connection.providerType !== 'codex-subscription'
+    ) {
+      continue;
+    }
+    const seen = new Set<string>();
+    const rawModels = connection.models?.length
+      ? connection.models.map((model) => model.id)
+      : connection.defaultModel
+        ? [connection.defaultModel]
+        : [];
+    const safeModels = connection.providerType === 'codex-subscription'
+      ? rawModels.filter((model) => !CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS.has(model.trim()))
+      : rawModels;
+    const models = safeModels.length || connection.providerType !== 'codex-subscription'
+      ? safeModels
+      : defaults.fallbackModels;
+    for (const model of models) {
+      const trimmed = model.trim();
+      if (!trimmed || seen.has(trimmed)) continue;
+      seen.add(trimmed);
+      choices.push({
+        connectionSlug: connection.slug,
+        connectionLabel: connection.name,
+        providerType: connection.providerType,
+        model: trimmed,
+        label: `${connection.name} · ${trimmed}`,
+      });
+    }
+  }
+  return choices;
+}
+
+function normalizeActiveChatModel(
+  session: SessionSummary | undefined,
+  connection: LlmConnection | undefined,
+  choices: readonly ChatModelChoice[],
+): string | undefined {
+  if (!session || session.backend === 'fake') return undefined;
+  const requested = session.model || connection?.defaultModel;
+  const matchingChoice = choices.find(
+    (choice) => choice.connectionSlug === session.llmConnectionSlug && choice.model === requested,
+  );
+  if (matchingChoice) return matchingChoice.model;
+  if (
+    connection?.providerType === 'codex-subscription' &&
+    requested &&
+    CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS.has(requested)
+  ) {
+    return choices.find((choice) => choice.connectionSlug === session.llmConnectionSlug)?.model;
+  }
+  return requested;
 }
 
 function App() {
@@ -299,12 +366,16 @@ function AppShell() {
   const activeConnection = activeSession
     ? connections.find((connection) => connection.slug === activeSession.llmConnectionSlug)
     : undefined;
+  const chatModelChoices = useMemo<ChatModelChoice[]>(
+    () => buildChatModelChoices(connections),
+    [connections],
+  );
   const activeConnectionLabel = activeSession?.backend === 'fake'
     ? '本地模拟连接'
     : activeConnection?.name ?? activeSession?.llmConnectionSlug;
   const activeModelLabel = activeSession?.backend === 'fake'
     ? undefined
-    : activeSession?.model ?? activeConnection?.defaultModel;
+    : normalizeActiveChatModel(activeSession, activeConnection, chatModelChoices);
 
   // Surface a credential-lifecycle alert directly in the chat header when
   // the active session's connection is in `needs_reauth` / `error` or has
@@ -1149,6 +1220,22 @@ function AppShell() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toastApi.error('切换权限模式失败', message);
+    }
+  }
+
+  async function setSessionModel(input: { llmConnectionSlug: string; model: string }) {
+    if (!activeId) return;
+    try {
+      const next = await window.maka.sessions.setModel(activeId, input);
+      setSessions((prev) => prev.map((session) => (session.id === next.id ? next : session)));
+      const connection = connections.find((entry) => entry.slug === next.llmConnectionSlug);
+      toastApi.success(
+        '已切换当前会话模型',
+        `${connection?.name ?? next.llmConnectionSlug} · ${next.model}`,
+      );
+      await refreshSessions();
+    } catch (error) {
+      toastApi.error('切换模型失败', cleanErrorMessage(error));
     }
   }
 
@@ -2283,6 +2370,8 @@ function AppShell() {
                 activeModelLabel={activeModelLabel}
                 activeProviderType={activeConnection?.providerType}
                 renderProviderMark={(type) => <ProviderLogo type={type} compact />}
+                modelChoices={chatModelChoices}
+                onModelChange={(input) => void setSessionModel(input)}
                 userLabel={userLabel}
                 memoryActive={memoryActive}
                 onOpenMemorySettings={() => openSettingsSection('memory')}

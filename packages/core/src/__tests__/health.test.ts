@@ -238,7 +238,7 @@ describe('HealthSignal contract', () => {
     expect(snapshot.signals.some((s) => s.scope === 'bot')).toBe(true);
   });
 
-  test('capability denied and degraded remain distinct health errors', () => {
+  test('capability denied and degraded remain distinct health states', () => {
     const denied = healthSignalFromCapability(capability('computer_use', 'denied', {
       osPermissions: [{ id: 'accessibility', required: true, status: 'denied' }],
     }));
@@ -251,6 +251,25 @@ describe('HealthSignal contract', () => {
     expect(degraded.layer).toBe('runtime_probe');
     expect(degraded.message).toBe('能力运行态探测处于降级状态。');
     expect(degraded.scope).toBe('bot');
+  });
+
+  test('partial-only capabilities are warnings, not app-wide error states', () => {
+    const partial = healthSignalFromCapability(capability('activity_recorder', 'not_configured', {
+      feature: {
+        state: 'partial',
+        source: 'runtime',
+        reason: 'Daily Review 已聚合本地会话 / 工具 / 模型活动；当前不包含屏幕与应用级录制',
+      },
+      runtimeProbe: {
+        state: 'not_run',
+        source: 'runtime_probe',
+        reason: '打开 Daily Review 可查看本地活动聚合结果',
+      },
+    }));
+
+    expect(partial.status).toBe('warning');
+    expect(partial.layer).toBe('feature');
+    expect(partial.blocksCapability).toBe(false);
   });
 
   test('capability details localize internal reason strings before renderer display', () => {
