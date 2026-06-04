@@ -33,6 +33,7 @@ export interface ConnectionsBridge {
 }
 
 type CatalogTab = Extract<ProviderCategory, 'domestic' | 'overseas' | 'local' | 'oauth'>;
+type CredentialPresenceStatus = boolean | 'loading' | 'error';
 
 const CATALOG_TABS: Array<{ id: CatalogTab; label: string }> = [
   { id: 'domestic', label: '国内' },
@@ -1201,7 +1202,9 @@ function ConnectionDetail(props: {
   const defaults = PROVIDER_DEFAULTS[connection.providerType];
   const display = providerDisplay(connection.providerType);
   const [apiKey, setApiKey] = useState('');
-  const [hasSecret, setHasSecret] = useState(defaults.authKind === 'none');
+  const [hasSecret, setHasSecret] = useState<CredentialPresenceStatus>(
+    defaults.authKind === 'none' ? true : 'loading',
+  );
   const [baseUrl, setBaseUrl] = useState(connection.baseUrl ?? defaults.baseUrl ?? '');
   const [defaultModel, setDefaultModel] = useState(connection.defaultModel);
   const [models, setModels] = useState<ModelInfo[]>(connection.models ?? []);
@@ -1221,6 +1224,8 @@ function ConnectionDetail(props: {
   const needsOAuth = defaults.authKind === 'oauth_token';
   const hasFixedOAuthBaseUrl = needsOAuth && Boolean(defaults.baseUrl);
   const requiresCredential = defaults.authKind !== 'none';
+  const credentialProbePending = requiresCredential && (hasSecret === 'loading' || hasSecret === 'error');
+  const hasUsableCredential = !requiresCredential || hasSecret === true;
   const credentialTroubleshootingCopy = needsOAuth
     ? 'OAuth 登录 / 代理设置'
     : 'API key / Base URL / 代理设置';
@@ -1237,11 +1242,12 @@ function ConnectionDetail(props: {
       setHasSecret(true);
       return;
     }
+    setHasSecret('loading');
     void props.bridge
       .hasSecret(connection.slug)
       .then(setHasSecret)
       .catch((error) => {
-        setHasSecret(false);
+        setHasSecret('error');
         toast.error('读取模型凭据状态失败', providerPanelActionErrorMessage(error));
       });
   }, [props.bridge, connection.slug, defaults.authKind, toast]);
@@ -1313,6 +1319,9 @@ function ConnectionDetail(props: {
         void refreshModels({ silent: true });
       }
     } catch (error) {
+      if (saved && requiresCredential) {
+        setHasSecret('error');
+      }
       toast.error(
         saved ? '刷新模型连接失败' : '保存模型连接失败',
         error instanceof Error ? error.message : String(error),
@@ -1443,24 +1452,47 @@ function ConnectionDetail(props: {
       </label>
       {needsApiKey && (
         <label>
-          <span>API key {hasSecret ? '（已设置，粘贴新值可替换）' : ''}</span>
+          <span>
+            API key {hasSecret === true ? '（已设置，粘贴新值可替换）' : ''}
+            {hasSecret === 'loading' ? '（正在读取状态）' : ''}
+            {hasSecret === 'error' ? '（凭据状态未知）' : ''}
+          </span>
           <PasswordInput
             value={apiKey}
             onChange={setApiKey}
-            placeholder={hasSecret ? '••••••••' : '粘贴 API key'}
+            placeholder={hasSecret === true ? '••••••••' : '粘贴 API key'}
             ariaLabel={`${display.name} API key`}
           />
         </label>
       )}
       {needsOAuth && (
         <div className="providerUnavailableNotice" data-auth-kind="oauth">
-          <strong>{hasSecret ? 'OAuth 已登录' : '等待 OAuth 登录'}</strong>
+          <strong>
+            {hasSecret === true
+              ? 'OAuth 已登录'
+              : hasSecret === 'loading'
+                ? 'OAuth 状态读取中'
+                : hasSecret === 'error'
+                  ? 'OAuth 状态未知'
+                  : '等待 OAuth 登录'}
+          </strong>
           <span>
-            {hasSecret
+            {hasSecret === true
               ? '该模型连接使用主进程保存的 OAuth access token，不在这里显示或编辑令牌。'
-              : '请到上方 OAuth 分类完成登录；登录成功后会自动出现在已启用模型里。'}
+              : hasSecret === 'loading'
+                ? '正在读取本机 OAuth 登录状态，读取完成前不会把未知状态显示成未登录。'
+                : hasSecret === 'error'
+                  ? '暂时无法读取本机 OAuth 登录状态；请刷新页面或重新打开设置。'
+                  : '请到上方 OAuth 分类完成登录；登录成功后会自动出现在已启用模型里。'}
           </span>
         </div>
+      )}
+      {credentialProbePending && (
+        <p className="providerError" role="alert">
+          {hasSecret === 'loading'
+            ? '正在读取模型凭据状态，读取完成前暂不测试连接或刷新模型。'
+            : '模型凭据状态暂时没刷新成功，已避免把未知状态显示成未登录或未配置。'}
+        </p>
       )}
       <ModelTable
         modelChoices={modelChoices}
@@ -1469,7 +1501,7 @@ function ConnectionDetail(props: {
         modelSource={modelSource}
         modelsFetchedAt={connection.modelsFetchedAt}
         fallbackCount={fallbackModels.length}
-        canRefresh={!fetchingModels && !(requiresCredential && !hasSecret)}
+        canRefresh={!fetchingModels && hasUsableCredential}
         fetchingModels={fetchingModels}
         onRefresh={() => void refreshModels()}
       />
@@ -1482,7 +1514,7 @@ function ConnectionDetail(props: {
         <button className="maka-button" data-variant="primary" type="button" disabled={busy || !hasSaveChanges} onClick={save}>
           {busy ? '保存中…' : '保存修改'}
         </button>
-        <button className="maka-button" type="button" disabled={testing || (requiresCredential && !hasSecret)} onClick={runTest}>
+        <button className="maka-button" type="button" disabled={testing || !hasUsableCredential} onClick={runTest}>
           {testing ? '测试中…' : '测试连接'}
         </button>
         {!props.isDefault && connection.enabled && <button className="maka-button" type="button" onClick={setAsDefault}>设为默认</button>}

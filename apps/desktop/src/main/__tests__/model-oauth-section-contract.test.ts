@@ -319,11 +319,23 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
     const src = await readFile(PROVIDERS_PANEL_SOURCE, 'utf8');
     const detail = src.match(/function ConnectionDetail[\s\S]*?function ModelTable/)?.[0] ?? '';
 
+    assert.match(src, /type CredentialPresenceStatus = boolean \| 'loading' \| 'error'/);
+    assert.match(detail, /useState<CredentialPresenceStatus>\([\s\S]*defaults\.authKind === 'none' \? true : 'loading'/);
+    assert.match(detail, /const credentialProbePending = requiresCredential && \(hasSecret === 'loading' \|\| hasSecret === 'error'\)/);
+    assert.match(detail, /const hasUsableCredential = !requiresCredential \|\| hasSecret === true/);
     assert.match(
       detail,
-      /props\.bridge[\s\S]*\.hasSecret\(connection\.slug\)[\s\S]*\.then\(setHasSecret\)[\s\S]*\.catch\(\(error\) => \{[\s\S]*setHasSecret\(false\);[\s\S]*toast\.error\('读取模型凭据状态失败', providerPanelActionErrorMessage\(error\)\)/,
-      'ConnectionDetail must show a visible error when credential-presence probing fails',
+      /props\.bridge[\s\S]*\.hasSecret\(connection\.slug\)[\s\S]*\.then\(setHasSecret\)[\s\S]*\.catch\(\(error\) => \{[\s\S]*setHasSecret\('error'\);[\s\S]*toast\.error\('读取模型凭据状态失败', providerPanelActionErrorMessage\(error\)\)/,
+      'ConnectionDetail must show a visible error and keep unknown credential state distinct when probing fails',
     );
+    assert.doesNotMatch(
+      detail,
+      /catch\(\(error\) => \{[\s\S]*setHasSecret\(false\)/,
+      'credential-presence probe failures must not be downgraded to missing credentials',
+    );
+    assert.match(detail, /role="alert"[\s\S]*模型凭据状态暂时没刷新成功，已避免把未知状态显示成未登录或未配置/);
+    assert.match(detail, /canRefresh=\{!fetchingModels && hasUsableCredential\}/);
+    assert.match(detail, /disabled=\{testing \|\| !hasUsableCredential\}/);
     assert.doesNotMatch(
       detail,
       /void props\.bridge\.hasSecret\(connection\.slug\)\.then\(setHasSecret\);/,
