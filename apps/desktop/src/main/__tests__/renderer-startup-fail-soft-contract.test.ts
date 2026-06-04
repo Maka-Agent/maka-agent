@@ -66,6 +66,15 @@ describe('renderer startup fail-soft contract', () => {
     assert.match(reloadSettingsBlock, /catch \(error\) \{[\s\S]*toast\.error\('载入设置失败', settingsActionErrorMessage\(error\)\)/);
     assert.match(reloadSettingsBlock, /finally \{[\s\S]*setLoading\(false\)/);
     assert.match(reloadUsageBlock, /try \{[\s\S]*window\.maka\.settings\.usageStats\(range\)/);
-    assert.match(reloadUsageBlock, /catch \(error\) \{[\s\S]*setUsageStats\(null\)[\s\S]*toast\.error\('载入使用统计失败', settingsActionErrorMessage\(error\)\)/);
+    assert.match(
+      reloadUsageBlock,
+      /catch \(error\) \{[\s\S]*toast\.error\('载入使用统计失败', settingsActionErrorMessage\(error\)\)/,
+      'usage stats reload failures must be visible',
+    );
+    assert.doesNotMatch(
+      reloadUsageBlock,
+      /catch \(error\) \{[\s\S]*setUsageStats\(null\)/,
+      'usage stats reload failures must preserve the currently visible dashboard',
+    );
   });
 });

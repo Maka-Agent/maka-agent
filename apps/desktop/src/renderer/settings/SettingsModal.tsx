@@ -776,7 +776,6 @@ function SettingsSurface(props: {
     try {
       setUsageStats(await window.maka.settings.usageStats(range));
     } catch (error) {
-      setUsageStats(null);
       toast.error('载入使用统计失败', settingsActionErrorMessage(error));
     }
   }
