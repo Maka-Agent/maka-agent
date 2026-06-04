@@ -28,6 +28,7 @@ const PROVIDERS_PANEL_SOURCE = resolve(
   'settings',
   'ProvidersPanel.tsx',
 );
+const MAIN_SOURCE = resolve(REPO_ROOT, 'apps', 'desktop', 'src', 'main', 'main.ts');
 const PRELOAD_SOURCE = resolve(REPO_ROOT, 'apps', 'desktop', 'src', 'preload', 'preload.ts');
 
 describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MOVE-0)', () => {
@@ -82,6 +83,53 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
       src,
       /loadError \? \([\s\S]*模型连接载入失败[\s\S]*点击重试/,
       'enabled-model strip must show a retryable load-failure state',
+    );
+  });
+
+  it('provider detail actions localize and sanitize model-test / model-fetch failures', async () => {
+    const providers = await readFile(PROVIDERS_PANEL_SOURCE, 'utf8');
+    const main = await readFile(MAIN_SOURCE, 'utf8');
+    const detail = providers.match(/function ConnectionDetail[\s\S]*?function ModelTable/)?.[0] ?? '';
+
+    assert.match(
+      providers,
+      /generalizedErrorMessageChinese\(error,\s*'模型连接服务暂时不可用，请稍后重试。'\)/,
+      'provider action errors must go through the Chinese redaction classifier before reaching toast detail',
+    );
+    assert.match(
+      providers,
+      /function connectionTestFailureMessage\(result: ConnectionTestResult, troubleshootingCopy: string\)[\s\S]*generalizedErrorMessageChinese\(new Error\(result\.errorMessage\), fallback\)/,
+      'failed connection tests must not toast raw provider response bodies',
+    );
+    assert.match(
+      detail,
+      /toast\.error\([\s\S]*`连接失败 · \$\{connection\.name\}`,[\s\S]*connectionTestFailureMessage\(result, credentialTroubleshootingCopy\)/,
+      'ConnectionDetail test failure toast must use localized sanitized copy',
+    );
+    assert.match(
+      detail,
+      /catch \(error\) \{[\s\S]*const message = providerPanelActionErrorMessage\(error\);[\s\S]*toast\.error\(`连接测试出错 · \$\{connection\.name\}`, message\)/,
+      'ConnectionDetail test IPC failures must use the shared localized action-error helper',
+    );
+    assert.match(
+      detail,
+      /catch \(error\) \{[\s\S]*const message = providerPanelActionErrorMessage\(error\);[\s\S]*toast\.error\([\s\S]*`拉取模型失败 · \$\{connection\.name\}`,[\s\S]*`\$\{message\} · 当前继续显示静态列表/,
+      'ConnectionDetail model-fetch failures must use the shared localized action-error helper',
+    );
+    assert.doesNotMatch(
+      detail,
+      /error instanceof Error \? error\.message : String\(error\)/,
+      'provider detail action toasts must not directly echo raw Error.message',
+    );
+    assert.match(
+      main,
+      /connections:fetchModels[\s\S]*generalizedErrorMessageChinese\(error,\s*'拉取模型列表失败'\)/,
+      'main-process fetchModels errors must be localized before crossing IPC to renderer toasts',
+    );
+    assert.doesNotMatch(
+      main,
+      /No OAuth login stored for this connection|No API key set for this connection|Failed to fetch provider models/,
+      'main-process model connection IPC must not throw English user-visible fallback copy',
     );
   });
 

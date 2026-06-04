@@ -4,6 +4,7 @@ import { nextRadioId } from './model-table-keyboard';
 import {
   CATALOG_PROVIDER_TYPES,
   PROVIDER_DEFAULTS,
+  generalizedErrorMessageChinese,
   validateSlug,
   type ConnectionTestResult,
   type CreateConnectionInput,
@@ -56,12 +57,26 @@ function formatFetchedAtSuffix(modelsFetchedAt: number | undefined): string {
 }
 
 function providerPanelActionErrorMessage(error: unknown): string {
-  const message = error instanceof Error
-    ? error.message
-    : typeof error === 'string'
-      ? error
-      : '';
-  return message.trim() || '模型连接服务暂时不可用，请稍后重试。';
+  return generalizedErrorMessageChinese(error, '模型连接服务暂时不可用，请稍后重试。');
+}
+
+function connectionTestFailureMessage(result: ConnectionTestResult, troubleshootingCopy: string): string {
+  const fallback = connectionTestFailureFallback(result, troubleshootingCopy);
+  if (!result.errorMessage) return fallback;
+  return generalizedErrorMessageChinese(new Error(result.errorMessage), fallback);
+}
+
+function connectionTestFailureFallback(result: ConnectionTestResult, troubleshootingCopy: string): string {
+  if (result.statusCode === 429) return '当前账号或模型服务触发速率限制，请稍后重试。';
+  if (result.errorClass === 'timeout') return '请求超时，请检查网络或代理后重试。';
+  if (result.errorClass === 'auth' || result.statusCode === 401 || result.statusCode === 403) {
+    return `鉴权失败，请确认 ${troubleshootingCopy} 后重试。`;
+  }
+  if (result.errorClass === 'provider_unavailable' || (result.statusCode !== undefined && result.statusCode >= 500)) {
+    return '模型服务暂时不可用，请稍后重试。';
+  }
+  if (result.errorClass === 'network') return '网络错误，请检查 Base URL 或代理设置后重试。';
+  return `检查 ${troubleshootingCopy} 后重试。`;
 }
 
 export function ProvidersPanel({ bridge }: { bridge: ConnectionsBridge }) {
@@ -1329,7 +1344,7 @@ function ConnectionDetail(props: {
       }
       toast.error(
         saved ? '刷新模型连接失败' : '保存模型连接失败',
-        error instanceof Error ? error.message : String(error),
+        providerPanelActionErrorMessage(error),
       );
     } finally {
       setBusy(false);
@@ -1348,11 +1363,11 @@ function ConnectionDetail(props: {
       } else {
         toast.error(
           `连接失败 · ${connection.name}`,
-          result.errorMessage || '检查 API key、Base URL 或代理设置后重试。',
+          connectionTestFailureMessage(result, credentialTroubleshootingCopy),
         );
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = providerPanelActionErrorMessage(error);
       toast.error(`连接测试出错 · ${connection.name}`, message);
     } finally {
       setTesting(false);
@@ -1375,7 +1390,7 @@ function ConnectionDetail(props: {
         toast.success(`已拉取 ${result.models.length} 个模型 · ${connection.name}`);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = providerPanelActionErrorMessage(error);
       // Leave the previously-known source / models intact (so the dropdown
       // doesn't suddenly empty out), but downgrade the source label back to
       // 'fallback' if we have nothing fresh to show — the failed fetch
@@ -1400,7 +1415,7 @@ function ConnectionDetail(props: {
       await props.onChanged();
       toast.success(`已设为默认 · ${connection.name}`);
     } catch (error) {
-      toast.error('切换默认失败', error instanceof Error ? error.message : String(error));
+      toast.error('切换默认失败', providerPanelActionErrorMessage(error));
     }
   }
 
@@ -1422,7 +1437,7 @@ function ConnectionDetail(props: {
     } catch (error) {
       toast.error(
         deleted ? '刷新模型列表失败' : '删除模型连接失败',
-        error instanceof Error ? error.message : String(error),
+        providerPanelActionErrorMessage(error),
       );
     } finally {
       setBusy(false);
