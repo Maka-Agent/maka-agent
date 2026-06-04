@@ -128,7 +128,7 @@ function HtmlPreview(props: { record: ArtifactRecord }) {
       </div>
       <iframe
         className="maka-artifact-preview-html-iframe"
-        title={`Artifact preview · ${props.record.name}`}
+        title={`生成文件预览 · ${props.record.name}`}
         sandbox="allow-scripts"
         srcDoc={srcdoc}
       />
@@ -215,14 +215,14 @@ function failureCopyText(record: ArtifactRecord, reason: TextFailureReason): Fai
     case 'read_failed':
       return {
         tone: 'destructive',
-        title: '无法读取 artifact 文件',
+        title: '无法读取生成文件',
         description: '路径可能已被外部删除。请通过工具栏「在 Finder 中打开」检查文件位置。',
       };
     case 'not_allowed':
       return {
         tone: 'destructive',
-        title: '无法读取 artifact 文件',
-        description: '路径检查未通过，文件已不在允许预览的 artifact 根目录内。',
+        title: '无法读取生成文件',
+        description: '路径检查未通过，文件已不在允许预览的生成文件目录内。',
       };
     case 'too_large':
       return {
@@ -233,7 +233,7 @@ function failureCopyText(record: ArtifactRecord, reason: TextFailureReason): Fai
     case 'deleted':
       return {
         tone: 'info',
-        title: '此 artifact 已删除',
+        title: '此生成文件已删除',
         description: '预览已停止。如需查看原文件请使用「在 Finder 中打开」。',
       };
   }
@@ -244,7 +244,7 @@ function failureCopyBinary(record: ArtifactRecord, reason: BinaryFailureReason):
     return {
       tone: 'info',
       title: '不支持的文件类型',
-      description: '该 artifact 的 MIME 类型不在内联预览允许列表中。请使用工具栏「在 Finder 中打开」或「另存为」。',
+      description: '该生成文件的 MIME 类型不在内联预览允许列表中。请使用工具栏「在 Finder 中打开」或「另存为」。',
     };
   }
   return failureCopyText(record, reason);
