@@ -252,9 +252,9 @@ describe('createThreadSearchPoller — race + lifecycle (xuan 6e7372c5)', () => 
     assert.equal(last.kind, 'error');
     if (last.kind === 'error') {
       // The fallback message must NOT include the query body —
-      // generic "Search failed." only.
+      // generic "搜索暂时失败，请稍后重试。" only.
       assert.doesNotMatch(last.message, /hello-secret-query/);
-      assert.equal(last.message, 'Search failed.');
+      assert.equal(last.message, '搜索暂时失败，请稍后重试。');
     }
   });
 
@@ -394,7 +394,7 @@ describe('buildContentSearchCommands — palette commands per state', () => {
       kind: 'error',
       query: 'hello',
       reason: 'parse_error',
-      message: 'Search failed.',
+      message: '搜索暂时失败，请稍后重试。',
     });
     assert.equal(cmds.length, 1);
     assert.equal(cmds[0]!.label, '搜索失败');
@@ -518,7 +518,7 @@ describe('disabled flag on status tiles (xuan fd675604)', () => {
       kind: 'error',
       query: 'hello',
       reason: 'parse_error',
-      message: 'Search failed.',
+      message: '搜索暂时失败，请稍后重试。',
     });
     assert.equal(cmds[0]!.disabled, true);
   });

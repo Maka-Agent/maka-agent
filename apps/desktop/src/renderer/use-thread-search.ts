@@ -171,7 +171,7 @@ export function createThreadSearchPoller(
             kind: 'error',
             query: trimmed,
             reason: 'parse_error',
-            message: 'Search failed.',
+            message: '搜索暂时失败，请稍后重试。',
           });
         }
       })();
