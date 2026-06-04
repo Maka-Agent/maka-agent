@@ -727,9 +727,7 @@ function AppShell() {
   useEffect(() => {
     void bootstrapSessions();
     void refreshConnections();
-    void window.maka.app.info().then((next) => {
-      setAppInfo({ projectPath: next.projectPath, projectGit: next.projectGit });
-    }).catch(() => setAppInfo(null));
+    void refreshAppInfo();
     // Pull the persisted theme preference (auto/light/dark) and apply it
     // before any first paint settles. If settings are unreadable we leave the
     // default `auto` which still produces a correct result.
@@ -1302,6 +1300,15 @@ function AppShell() {
       setDefaultConnection(nextDefault);
     } catch (error) {
       toastApi.error('刷新模型连接失败', cleanErrorMessage(error));
+    }
+  }
+
+  async function refreshAppInfo() {
+    try {
+      const next = await window.maka.app.info();
+      setAppInfo({ projectPath: next.projectPath, projectGit: next.projectGit });
+    } catch (error) {
+      toastApi.error('读取项目路径失败', cleanErrorMessage(error));
     }
   }
 

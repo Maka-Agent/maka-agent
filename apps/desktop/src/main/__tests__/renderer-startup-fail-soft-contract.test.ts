@@ -8,11 +8,22 @@ describe('renderer startup fail-soft contract', () => {
     const main = await readFile(join(process.cwd(), 'src/renderer/main.tsx'), 'utf8');
     const mountEffect = main.match(/useEffect\(\(\) => \{[\s\S]*?const unsubscribeConnections =/)?.[0] ?? '';
     const refreshConnections = main.match(/async function refreshConnections\(\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
+    const refreshAppInfo = main.match(/async function refreshAppInfo\(\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
     const refreshPlanReminders = main.match(/async function refreshPlanReminders\(\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
     const refreshSkills = main.match(/async function refreshSkills\(\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
     const refreshMemoryActive = main.match(/async function refreshMemoryActive[\s\S]*?\n  \}/)?.[0] ?? '';
 
-    assert.match(mountEffect, /window\.maka\.app\.info\(\)\.then\([\s\S]*?\.catch\(\(\) => setAppInfo\(null\)\)/);
+    assert.match(mountEffect, /void refreshAppInfo\(\)/);
+    assert.match(
+      refreshAppInfo,
+      /try \{[\s\S]*window\.maka\.app\.info\(\)[\s\S]*setAppInfo\(\{ projectPath: next\.projectPath, projectGit: next\.projectGit \}\)[\s\S]*\} catch \(error\) \{[\s\S]*toastApi\.error\('读取项目路径失败', cleanErrorMessage\(error\)\)/,
+      'app-info refresh failures must be visible and preserve the last known project badge',
+    );
+    assert.doesNotMatch(
+      refreshAppInfo,
+      /setAppInfo\(null\)/,
+      'app-info refresh failure must not silently hide the existing project badge',
+    );
     assert.match(mountEffect, /void refreshMemoryActive\('载入本地记忆状态失败'\)/);
     assert.match(
       refreshMemoryActive,
