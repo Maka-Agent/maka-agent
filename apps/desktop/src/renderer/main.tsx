@@ -1081,21 +1081,40 @@ function AppShell() {
   // corresponding IPC and then refreshes the session list so the sidebar
   // reflects the new state immediately.
   async function flagSession(sessionId: string, flagged: boolean) {
-    await window.maka.sessions.setFlagged(sessionId, flagged);
-    await refreshSessions();
+    try {
+      await window.maka.sessions.setFlagged(sessionId, flagged);
+      await refreshSessions();
+    } catch (error) {
+      toastApi.error(flagged ? '标记会话失败' : '取消标记失败', cleanErrorMessage(error));
+    }
   }
   async function archiveSession(sessionId: string) {
-    await window.maka.sessions.archive(sessionId);
-    if (activeId === sessionId) setActiveId(undefined);
-    await refreshSessions();
+    try {
+      await window.maka.sessions.archive(sessionId);
+      if (activeIdRef.current === sessionId) {
+        setActiveId(undefined);
+        setMessages([]);
+      }
+      await refreshSessions();
+    } catch (error) {
+      toastApi.error('归档会话失败', cleanErrorMessage(error));
+    }
   }
   async function unarchiveSession(sessionId: string) {
-    await window.maka.sessions.unarchive(sessionId);
-    await refreshSessions();
+    try {
+      await window.maka.sessions.unarchive(sessionId);
+      await refreshSessions();
+    } catch (error) {
+      toastApi.error('恢复会话失败', cleanErrorMessage(error));
+    }
   }
   async function renameSession(sessionId: string, name: string) {
-    await window.maka.sessions.rename(sessionId, name);
-    await refreshSessions();
+    try {
+      await window.maka.sessions.rename(sessionId, name);
+      await refreshSessions();
+    } catch (error) {
+      toastApi.error('重命名会话失败', cleanErrorMessage(error));
+    }
   }
   async function setPermissionMode(mode: PermissionMode) {
     if (!activeId) return;
@@ -1129,10 +1148,17 @@ function AppShell() {
       destructive: true,
     });
     if (!ok) return;
-    await window.maka.sessions.remove(sessionId);
-    if (activeId === sessionId) setActiveId(undefined);
-    await refreshSessions();
-    toastApi.success(`已删除 ${name}`);
+    try {
+      await window.maka.sessions.remove(sessionId);
+      if (activeIdRef.current === sessionId) {
+        setActiveId(undefined);
+        setMessages([]);
+      }
+      await refreshSessions();
+      toastApi.success(`已删除 ${name}`);
+    } catch (error) {
+      toastApi.error('删除会话失败', cleanErrorMessage(error));
+    }
   }
 
   async function refreshConnections() {
