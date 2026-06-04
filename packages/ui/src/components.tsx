@@ -2390,7 +2390,7 @@ const BLOCKED_REASON_TOOLTIP = {
   auth: '需要重新登录',
   permission_required: '等待权限确认',
   tool_failed: '工具调用失败',
-  unknown: '未知阻塞',
+  unknown: '运行中断，可重试',
 } as const;
 
 const SCROLL_BOTTOM_THRESHOLD = 64; // px

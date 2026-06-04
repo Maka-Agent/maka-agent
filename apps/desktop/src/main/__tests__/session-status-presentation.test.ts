@@ -128,10 +128,11 @@ describe('sessionStatusAriaLabel', () => {
     assert.match(text, / · /);
   });
 
-  it('blocked without reason falls back to unknown', () => {
+  it('blocked without reason falls back to actionable recovery copy', () => {
     const text = sessionStatusAriaLabel('blocked');
     assert.match(text, /已阻塞/);
-    assert.match(text, /未知阻塞/);
+    assert.match(text, /运行中断，可重试/);
+    assert.doesNotMatch(text, /未知阻塞/);
   });
 });
 

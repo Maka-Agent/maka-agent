@@ -1049,7 +1049,7 @@ function workstationStatusSessions(now: number): Array<{ header: SessionHeader; 
     }),
     make({
       id: WORKSTATION_BLOCKED_UNKNOWN_SESSION_ID,
-      name: '未知阻塞',
+      name: '运行中断',
       status: 'blocked',
       blockedReason: 'unknown',
       lastMessageOffset: 300_000,

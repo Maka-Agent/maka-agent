@@ -730,7 +730,7 @@ badge ("进行中") is visible in the screenshot alongside the sidebar.
   - `需要重新登录`
   - `等待权限确认`
   - `工具调用失败`
-  - `未知阻塞`
+  - `运行中断`
 - The chat header badge "进行中" is visible (because the active
   session is running).
 - `归档` group is collapsed by default; clicking the header expands
