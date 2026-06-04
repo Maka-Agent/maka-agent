@@ -12,6 +12,7 @@ describe('renderer startup fail-soft contract', () => {
     const refreshPlanReminders = main.match(/async function refreshPlanReminders\(\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
     const refreshSkills = main.match(/async function refreshSkills\(\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
     const refreshMemoryActive = main.match(/async function refreshMemoryActive[\s\S]*?\n  \}/)?.[0] ?? '';
+    const refreshShellSettings = main.match(/async function refreshShellSettings\(\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
 
     assert.match(mountEffect, /void refreshAppInfo\(\)/);
     assert.match(
@@ -35,7 +36,17 @@ describe('renderer startup fail-soft contract', () => {
       /catch\(\(\) => setMemoryActive\(false\)\)|catch \(error\) \{[\s\S]*setMemoryActive\(false\)/,
       'memory-active refresh failures must not silently hide the existing memory pill',
     );
-    assert.match(mountEffect, /window\.maka\.settings\.get\(\)\.then\([\s\S]*?\.catch\(\(\) => \{[\s\S]*applyUiLocale\('auto'\)[\s\S]*applyTheme\('auto'\)[\s\S]*applyDensity\('comfortable'\)[\s\S]*applyThemePalette\('default'\)/);
+    assert.match(mountEffect, /void refreshShellSettings\(\)/);
+    assert.match(
+      refreshShellSettings,
+      /try \{[\s\S]*window\.maka\.settings\.get\(\)[\s\S]*applyUiLocale\(uiLocale\)[\s\S]*applyTheme\(pref\)[\s\S]*applyDensity\(den\)[\s\S]*applyThemePalette\(palette\)[\s\S]*\} catch \(error\) \{[\s\S]*toastApi\.error\('载入外观设置失败', cleanErrorMessage\(error\)\)/,
+      'startup shell settings load failures must surface visibly instead of silently applying default appearance values',
+    );
+    assert.doesNotMatch(
+      refreshShellSettings,
+      /catch \(error\) \{[\s\S]*applyUiLocale\('auto'\)|catch \(error\) \{[\s\S]*applyTheme\('auto'\)|catch \(error\) \{[\s\S]*applyDensity\('comfortable'\)|catch \(error\) \{[\s\S]*applyThemePalette\('default'\)/,
+      'startup shell settings failures must not force default language/theme/density/palette over unknown persisted settings',
+    );
     assert.match(
       refreshConnections,
       /try \{[\s\S]*window\.maka\.connections\.list\(\)[\s\S]*window\.maka\.connections\.getDefault\(\)[\s\S]*setConnections\(next\)[\s\S]*setDefaultConnection\(nextDefault\)[\s\S]*\} catch \(error\) \{[\s\S]*toastApi\.error\('刷新模型连接失败', cleanErrorMessage\(error\)\)/,
