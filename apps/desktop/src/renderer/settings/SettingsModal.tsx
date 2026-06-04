@@ -1005,6 +1005,7 @@ const PLATFORM_LABEL: Record<string, string> = {
 
 function AboutSettingsPage() {
   const [info, setInfo] = useState<AppInfo | null>(null);
+  const [infoError, setInfoError] = useState<string | null>(null);
   const toast = useToast();
 
   useEffect(() => {
@@ -1012,20 +1013,39 @@ function AboutSettingsPage() {
     window.maka.app
       .info()
       .then((next) => {
-        if (!cancelled) setInfo(next);
+        if (!cancelled) {
+          setInfo(next);
+          setInfoError(null);
+        }
       })
-      .catch(() => {});
+      .catch((error) => {
+        if (cancelled) return;
+        const message = settingsActionErrorMessage(error);
+        setInfoError(message);
+        toast.error('载入关于信息失败', message);
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [toast]);
 
-  if (!info) {
+  if (!info && !infoError) {
     return (
       <div className="maka-skeleton-stack" aria-busy="true" aria-label="正在加载关于页">
         <div className="maka-skeleton maka-skeleton-line" data-size="lg" style={{ width: '38%' }} />
         <div className="maka-skeleton maka-skeleton-line" style={{ width: '70%' }} />
         <div className="maka-skeleton maka-skeleton-line" style={{ width: '52%' }} />
+      </div>
+    );
+  }
+
+  if (!info) {
+    return (
+      <div className="settingsStructuredPage">
+        <div className="settingsNotice" role="alert">
+          <strong>无法载入关于信息</strong>
+          <small>{infoError}</small>
+        </div>
       </div>
     );
   }
@@ -1646,19 +1666,27 @@ function AccountAuthActionView(props: {
 
 function DataSettingsPage() {
   const [info, setInfo] = useState<Awaited<ReturnType<typeof window.maka.app.info>> | null>(null);
+  const [infoError, setInfoError] = useState<string | null>(null);
   const toast = useToast();
 
   useEffect(() => {
     let cancelled = false;
     void window.maka.app.info().then((next) => {
-      if (!cancelled) setInfo(next);
-    }).catch(() => {
-      if (!cancelled) setInfo(null);
+      if (!cancelled) {
+        setInfo(next);
+        setInfoError(null);
+      }
+    }).catch((error) => {
+      if (cancelled) return;
+      const message = settingsActionErrorMessage(error);
+      setInfo(null);
+      setInfoError(message);
+      toast.error('载入数据目录失败', message);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [toast]);
 
   async function openWorkspace() {
     if (!info) return;
@@ -1688,7 +1716,7 @@ function DataSettingsPage() {
         <SettingRow
           title="工作区路径"
           detail="会话、设置、credentials、skills 都存在这个目录下。"
-          value={info?.workspacePath ?? '正在加载…'}
+          value={info?.workspacePath ?? (infoError ? '载入失败' : '正在加载…')}
         />
         <SettingRow
           title="存储引擎"
@@ -1719,6 +1747,11 @@ function DataSettingsPage() {
         本机数据保存在工作区。需要备份时先退出 Maka，再复制整个目录；恢复时替换同一路径后重启。
         API key 使用系统 safeStorage 加密，跨设备恢复后需要重新测试连接。
       </div>
+      {infoError && (
+        <div className="settingsNotice" role="alert">
+          无法载入工作区路径：{infoError}
+        </div>
+      )}
     </div>
   );
 }

@@ -24,7 +24,12 @@ describe('renderer startup fail-soft contract', () => {
     const dataPage = settings.match(/function DataSettingsPage\(\)[\s\S]*?function PersonalizationSettingsPage/)?.[0] ?? '';
     const botPage = settings.match(/function BotChatSettingsPage\([\s\S]*?function UsageSettingsPage/)?.[0] ?? '';
 
-    assert.match(dataPage, /window\.maka\.app\.info\(\)\.then\([\s\S]*?\.catch\(\(\) => \{[\s\S]*setInfo\(null\)/);
+    assert.match(
+      dataPage,
+      /window\.maka\.app\.info\(\)\.then\([\s\S]*?\.catch\(\(error\) => \{[\s\S]*const message = settingsActionErrorMessage\(error\);[\s\S]*setInfo\(null\);[\s\S]*setInfoError\(message\);[\s\S]*toast\.error\('载入数据目录失败', message\)/,
+      'Data settings app-info load failure must surface visibly instead of leaving the path row loading forever',
+    );
+    assert.match(dataPage, /role="alert"[\s\S]*无法载入工作区路径：\{infoError\}/);
     assert.match(dataPage, /catch \(error\) \{[\s\S]*toast\.error\(`无法打开\$\{openPathActionLabel\('workspace'\)\}`, settingsActionErrorMessage\(error\)\)/);
     assert.match(botPage, /window\.maka\.settings\.bots\.listStatuses\(\)\.then\([\s\S]*?\.catch\(\(\) => \{[\s\S]*setStatuses\(null\)/);
   });
