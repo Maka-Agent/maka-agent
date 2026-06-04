@@ -1282,8 +1282,8 @@ function AppShell() {
     try {
       const next = await window.maka.plans.list();
       setPlanReminders(next);
-    } catch {
-      setPlanReminders([]);
+    } catch (error) {
+      toastApi.error('刷新计划失败', cleanErrorMessage(error));
     }
   }
 
@@ -1402,8 +1402,12 @@ function AppShell() {
   // Earlier we silently dropped the structured failure result; surface it
   // so missing-skills-dir / open-failed don't look like the button did nothing.
   async function refreshSkills() {
-    const next = await window.maka.skills.list().catch(() => []);
-    setSkills(next);
+    try {
+      const next = await window.maka.skills.list();
+      setSkills(next);
+    } catch (error) {
+      toastApi.error('刷新技能失败', cleanErrorMessage(error));
+    }
   }
 
   async function createSkillTemplate() {

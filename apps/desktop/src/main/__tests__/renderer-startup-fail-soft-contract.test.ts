@@ -8,6 +8,8 @@ describe('renderer startup fail-soft contract', () => {
     const main = await readFile(join(process.cwd(), 'src/renderer/main.tsx'), 'utf8');
     const mountEffect = main.match(/useEffect\(\(\) => \{[\s\S]*?const unsubscribeConnections =/)?.[0] ?? '';
     const refreshConnections = main.match(/async function refreshConnections\(\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
+    const refreshPlanReminders = main.match(/async function refreshPlanReminders\(\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
+    const refreshSkills = main.match(/async function refreshSkills\(\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
 
     assert.match(mountEffect, /window\.maka\.app\.info\(\)\.then\([\s\S]*?\.catch\(\(\) => setAppInfo\(null\)\)/);
     assert.match(mountEffect, /window\.maka\.memory\.getState\(\)\.then\([\s\S]*?\.catch\(\(\) => setMemoryActive\(false\)\)/);
@@ -16,6 +18,26 @@ describe('renderer startup fail-soft contract', () => {
       refreshConnections,
       /try \{[\s\S]*window\.maka\.connections\.list\(\)[\s\S]*window\.maka\.connections\.getDefault\(\)[\s\S]*setConnections\(next\)[\s\S]*setDefaultConnection\(nextDefault\)[\s\S]*\} catch \(error\) \{[\s\S]*toastApi\.error\('刷新模型连接失败', cleanErrorMessage\(error\)\)/,
       'startup / connections:event refreshConnections is fire-and-forget and must catch IPC failures',
+    );
+    assert.match(
+      refreshPlanReminders,
+      /try \{[\s\S]*window\.maka\.plans\.list\(\)[\s\S]*setPlanReminders\(next\)[\s\S]*\} catch \(error\) \{[\s\S]*toastApi\.error\('刷新计划失败', cleanErrorMessage\(error\)\)/,
+      'plan reminder refresh failures must be visible and must preserve the existing list',
+    );
+    assert.doesNotMatch(
+      refreshPlanReminders,
+      /catch[\s\S]*setPlanReminders\(\[\]\)/,
+      'plan reminder refresh failure must not wipe the current sidebar/panel list',
+    );
+    assert.match(
+      refreshSkills,
+      /try \{[\s\S]*window\.maka\.skills\.list\(\)[\s\S]*setSkills\(next\)[\s\S]*\} catch \(error\) \{[\s\S]*toastApi\.error\('刷新技能失败', cleanErrorMessage\(error\)\)/,
+      'skills refresh failures must be visible and must preserve the existing list',
+    );
+    assert.doesNotMatch(
+      refreshSkills,
+      /catch[\s\S]*setSkills\(\[\]\)|window\.maka\.skills\.list\(\)\.catch\(\(\) => \[\]\)/,
+      'skills refresh failure must not replace the current list with an empty fallback',
     );
   });
 
