@@ -23,6 +23,7 @@ import type {
 } from '@maka/core';
 import {
   CODEX_SUBSCRIPTION_UNSUPPORTED_CHATGPT_MODELS,
+  generalizedErrorMessageChinese,
   MAX_IMPORTED_TEXT_FILE_SAMPLE_BYTES,
   preflightDroppedTextFilesForPromptImport,
 } from '@maka/core';
@@ -122,6 +123,10 @@ function dailyReviewExportDefaultName(label: string): string {
           ? 'today'
           : 'day';
   return `maka-daily-review-${scope}-${yyyy}-${mm}-${dd}.md`;
+}
+
+function dailyReviewActionErrorMessage(error: unknown, fallback: string): string {
+  return generalizedErrorMessageChinese(error, fallback);
 }
 
 function buildChatModelChoices(connections: readonly LlmConnection[]): ChatModelChoice[] {
@@ -361,7 +366,7 @@ function AppShell() {
         toastApi.error('保存失败', '无法写入选择的位置');
       }
     } catch (err) {
-      toastApi.error('保存失败', err instanceof Error ? err.message : '保存每日回顾失败');
+      toastApi.error('保存失败', dailyReviewActionErrorMessage(err, '保存每日回顾失败，请稍后重试。'));
     }
   }
   const activePermission = activeId ? permissionBySession[activeId] : undefined;
@@ -2412,7 +2417,7 @@ function AppShell() {
                   `${summary.totals.sessionCount} 个对话 · ${summary.totals.requestCount} 个请求`,
                 );
               } catch (error) {
-                toastApi.error('复制失败', error instanceof Error ? error.message : '剪贴板不可用');
+                toastApi.error('复制失败', dailyReviewActionErrorMessage(error, '剪贴板不可用或被系统拒绝'));
               }
             }}
             onSaveDailyReviewMarkdown={(input) => void saveDailyReviewMarkdown(input)}
@@ -2501,7 +2506,7 @@ function AppShell() {
                       `${summary.totals.sessionCount} 个对话 · ${summary.totals.requestCount} 个请求`,
                     );
                   } catch (error) {
-                    toastApi.error('复制失败', error instanceof Error ? error.message : '剪贴板不可用');
+                    toastApi.error('复制失败', dailyReviewActionErrorMessage(error, '剪贴板不可用或被系统拒绝'));
                   }
                 }}
                 onAppendDailyReviewMarkdown={({ markdown, label, summary }) => {
@@ -2811,7 +2816,7 @@ function AppShell() {
               } catch (err) {
                 toastApi.error(
                   '复制失败',
-                  err instanceof Error ? err.message : '剪贴板或数据不可用',
+                  dailyReviewActionErrorMessage(err, '今日回顾暂时不可用，或剪贴板被系统拒绝。'),
                 );
               }
             },
@@ -2827,7 +2832,7 @@ function AppShell() {
               } catch (err) {
                 toastApi.error(
                   '粘贴失败',
-                  err instanceof Error ? err.message : '加载今日回顾失败',
+                  dailyReviewActionErrorMessage(err, '今日回顾暂时不可用，请稍后重试。'),
                 );
               }
             },
@@ -2839,7 +2844,7 @@ function AppShell() {
               } catch (err) {
                 toastApi.error(
                   '保存失败',
-                  err instanceof Error ? err.message : '加载今日回顾失败',
+                  dailyReviewActionErrorMessage(err, '今日回顾暂时不可用，请稍后重试。'),
                 );
               }
             },

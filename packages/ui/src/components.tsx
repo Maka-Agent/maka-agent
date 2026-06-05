@@ -77,6 +77,7 @@ import {
   formatPlanReminderDeliveryTarget,
   formatPermissionRequestWait,
   formatRelativeTimestamp,
+  generalizedErrorMessageChinese,
   DEEP_RESEARCH_EVIDENCE_CHECKLIST,
   DEEP_RESEARCH_PROGRESS_CHECKPOINTS,
   DEEP_RESEARCH_REPORT_SECTIONS,
@@ -891,7 +892,7 @@ function DailyReviewPanel(props: {
       .catch((err: unknown) => {
         if (cancelled) return;
         setSummary(null);
-        setError(err instanceof Error ? err.message : '加载失败');
+        setError(dailyReviewPanelErrorMessage(err));
         setLoading(false);
       });
     return () => {
@@ -1088,6 +1089,10 @@ function DailyReviewPanel(props: {
       )}
     </div>
   );
+}
+
+function dailyReviewPanelErrorMessage(error: unknown): string {
+  return generalizedErrorMessageChinese(error, '每日回顾暂时不可用，请稍后重试。');
 }
 
 /**
