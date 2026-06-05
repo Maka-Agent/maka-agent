@@ -194,6 +194,18 @@ export class ClaudeSubscriptionService {
    */
   async getAuthorizationUrl(): Promise<AuthorizationUrlPayload> {
     this.pruneExpiredPending();
+    // PR-CLAUDE-OAUTH-SINGLE-PENDING-0 (WAWQAQ msg b481e9db):
+    // clear any non-expired prior pending before generating a new one
+    // so the renderer only ever holds ONE valid authRequestId at a
+    // time. Otherwise: user clicks "登录" twice within the 10-min TTL,
+    // both pendings stay in the map, the modal shows the LATEST
+    // state hint, but the user's browser may still have the older
+    // Anthropic tab open and paste back a code whose state matches
+    // the OLDER pending — state validation against the latest
+    // pending fails and the user is stuck in an undebuggable loop.
+    // Claude OAuth is single-user / single-flow; there is no
+    // legitimate reason for multiple concurrent pendings.
+    this.pending.clear();
     const verifier = base64urlEncode(randomBytes(PKCE_VERIFIER_LENGTH_BYTES));
     // Alma / upstream Claude Code uses the PKCE verifier as the OAuth
     // state value. Anthropic's authorize page rejects shorter, unrelated

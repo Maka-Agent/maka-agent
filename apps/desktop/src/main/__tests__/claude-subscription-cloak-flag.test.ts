@@ -66,6 +66,25 @@ describe('cloaked request module isolation (xuan G-X4)', () => {
     assert.match(src, /You are Claude Code/, 'cloak module must inject the Claude Code system prefix');
   });
 
+  it('getAuthorizationUrl clears prior pending so only one authRequestId is ever valid (PR-CLAUDE-OAUTH-SINGLE-PENDING-0)', async () => {
+    // WAWQAQ msg b481e9db: user clicked 登录 multiple times; each
+    // click stashed a new pending under a fresh authRequestId, but
+    // older pendings stayed valid for 10 min and the modal only
+    // remembered the LATEST stateHint. If the user pasted from a
+    // browser tab tied to an older Anthropic redirect, the parsed
+    // state would not match the latest pending and validation
+    // would fail forever. Pinning that getAuthorizationUrl
+    // explicitly clears prior pendings keeps this from regressing.
+    const src = await readFile(SERVICE_SOURCE, 'utf8');
+    const region = src.match(/async getAuthorizationUrl\(\)[\s\S]*?const verifier/);
+    assert.ok(region, 'getAuthorizationUrl must exist');
+    assert.match(
+      region[0],
+      /this\.pending\.clear\(\)/,
+      'getAuthorizationUrl must clear prior pending so only one authRequestId is valid at a time',
+    );
+  });
+
   it('subscription service keeps the MAKA_CLAUDE_SUBSCRIPTION_CLOAK emergency opt-out', async () => {
     // The service should expose `isCloakEnabled()` (or otherwise
     // check the env var) so the send-path can decide whether to
