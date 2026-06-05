@@ -34,6 +34,8 @@ describe('voice capture smoke Settings contract', () => {
     assert.ok(voiceBlock, 'voice capability block must exist');
     assert.match(voiceBlock![0], /state:\s*'partial'/, 'voice feature must be partial, not not_available');
     assert.match(voiceBlock![0], /本地麦克风录音自检已可用/, 'voice feature reason must name the shipped smoke path');
+    assert.match(voiceBlock![0], /在设置 → 语音模型运行本地录音自检/, 'voice capability guidance must use localized Settings navigation copy');
+    assert.doesNotMatch(voiceBlock![0], /Settings · 语音模型/, 'voice capability guidance must not leak English Settings prefix');
     assert.doesNotMatch(voiceBlock![0], /voice capture\/playback not implemented/, 'old placeholder reason must not return');
   });
 
@@ -70,5 +72,18 @@ describe('voice capture smoke Settings contract', () => {
     assert.match(snapshot, /本地 Gateway 已关闭/, 'Open Gateway disabled state must use user-facing copy');
     assert.match(snapshot, /等待生成访问 token/, 'Open Gateway missing token state must use actionable waiting copy');
     assert.doesNotMatch(snapshot, /缺少访问 token/, 'Open Gateway missing token state should not read like a raw missing-field error');
+  });
+
+  it('capability center does not expose raw English implementation reasons', async () => {
+    const snapshot = await readFile(CAPABILITY_SNAPSHOT, 'utf8');
+    assert.match(snapshot, /未配置平台凭据/, 'bot missing credentials state must be localized');
+    assert.match(snapshot, /macOS 不区分辅助功能权限是未授权还是未申请/, 'Accessibility TCC limitation must be localized');
+    assert.match(snapshot, /主进程暂时无法读取通知授权状态/, 'notification unknown state must be localized');
+    assert.match(snapshot, /Electron 暂不支持读取逐 App 的 Apple Events 授权状态/, 'Automation TCC limitation must be localized');
+    assert.doesNotMatch(
+      snapshot,
+      /missing platform credentials|macOS does not expose|main process cannot read|no Electron API|macOS TCC only|Electron Notification unsupported/,
+      'Settings capability reasons must not leak raw English implementation copy',
+    );
   });
 });

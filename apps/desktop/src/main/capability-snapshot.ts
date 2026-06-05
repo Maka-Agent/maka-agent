@@ -97,7 +97,7 @@ export function buildCapabilitySnapshotCollection(input: {
       runtimeProbe: {
         state: 'not_run',
         source: 'runtime_probe',
-        reason: '在 Settings · 语音模型运行本地录音自检',
+        reason: '在设置 → 语音模型运行本地录音自检',
       },
     }),
     staticCapability({
@@ -249,7 +249,7 @@ function botCapability(
   };
   const configuration: CapabilityConfigurationSignal = hasConfig
     ? { state: 'present', source: 'settings' }
-    : { state: 'missing', source: 'settings', reason: 'missing platform credentials' };
+    : { state: 'missing', source: 'settings', reason: '未配置平台凭据' };
   const runtimeProbe = runtimeProbeFromBotReadiness(
     status.readiness,
     channel.readinessUpdatedAt,
@@ -280,7 +280,7 @@ function botCapability(
 }
 
 function accessibilitySnapshot(now: number, platform: NodeJS.Platform): OsPermissionSnapshot {
-  if (platform !== 'darwin') return unsupportedPermission('accessibility', now, 'macOS TCC only');
+  if (platform !== 'darwin') return unsupportedPermission('accessibility', now, '仅 macOS TCC 权限适用');
   try {
     const granted = systemPreferences.isTrustedAccessibilityClient(false);
     return {
@@ -288,7 +288,7 @@ function accessibilitySnapshot(now: number, platform: NodeJS.Platform): OsPermis
       status: granted ? 'granted' : 'not_determined',
       source: 'electron',
       checkedAt: now,
-      reason: granted ? undefined : 'macOS does not expose denied vs not determined for Accessibility',
+      reason: granted ? undefined : 'macOS 不区分辅助功能权限是未授权还是未申请',
       canOpenSettings: true,
       canRequest: false,
     };
@@ -304,7 +304,7 @@ function mediaPermissionSnapshot(
   platform: NodeJS.Platform,
 ): OsPermissionSnapshot {
   if (platform !== 'darwin' && id === 'screen_recording') {
-    return unsupportedPermission(id, now, 'macOS TCC only');
+    return unsupportedPermission(id, now, '仅 macOS TCC 权限适用');
   }
   try {
     const status = mapMediaAccessStatus(systemPreferences.getMediaAccessStatus(mediaType));
@@ -327,20 +327,20 @@ function notificationSnapshot(now: number, platform: NodeJS.Platform): OsPermiss
     status: Notification.isSupported() ? 'unknown' : 'unsupported',
     source: 'electron',
     checkedAt: now,
-    reason: Notification.isSupported() ? 'main process cannot read notification grant state yet' : 'Electron Notification unsupported',
+    reason: Notification.isSupported() ? '主进程暂时无法读取通知授权状态' : 'Electron 通知能力不可用',
     canOpenSettings: platform === 'darwin',
     canRequest: Notification.isSupported(),
   };
 }
 
 function automationSnapshot(now: number, platform: NodeJS.Platform): OsPermissionSnapshot {
-  if (platform !== 'darwin') return unsupportedPermission('automation', now, 'macOS TCC only');
+  if (platform !== 'darwin') return unsupportedPermission('automation', now, '仅 macOS TCC 权限适用');
   return {
     id: 'automation',
     status: 'unknown',
     source: 'static',
     checkedAt: now,
-    reason: 'no Electron API for per-target Apple Events TCC status',
+    reason: 'Electron 暂不支持读取逐 App 的 Apple Events 授权状态',
     canOpenSettings: true,
     canRequest: false,
   };

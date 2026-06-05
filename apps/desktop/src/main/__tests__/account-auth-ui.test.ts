@@ -170,6 +170,34 @@ describe('Account settings credential probe UI', () => {
     );
   });
 
+  it('normalizes legacy persisted connection-test messages before display', async () => {
+    const source = await readFile(join(process.cwd(), 'src/renderer/settings/SettingsModal.tsx'), 'utf8');
+    const helper = source.match(/function accountLastTestMessageDisplay\(message: string \| undefined\): string \| undefined \{[\s\S]*?\n\}/)?.[0] ?? '';
+    const row = source.match(/function AccountConnectionRow[\s\S]*?function AccountAuthActionView/)?.[0] ?? '';
+
+    assert.match(helper, /normalized === 'connection verified'[\s\S]*连接已验证/);
+    assert.match(helper, /normalized === 'authentication failed'[\s\S]*鉴权失败/);
+    assert.match(helper, /normalized === 'request timed out'[\s\S]*请求超时/);
+    assert.match(helper, /normalized === 'network error'[\s\S]*网络错误/);
+    assert.match(helper, /normalized === 'provider returned an error'[\s\S]*模型服务返回错误/);
+    assert.match(helper, /normalized === 'connection test failed'[\s\S]*连接测试失败/);
+    assert.match(
+      helper,
+      /generalizedErrorMessageChinese\(new Error\(trimmed\), ''\)/,
+      'unknown legacy raw provider messages should be classified/redacted before display',
+    );
+    assert.match(
+      row,
+      /const lastTestMessage = accountLastTestMessageDisplay\(props\.connection\.lastTestMessage\)/,
+      'Account connection rows must not render persisted lastTestMessage directly',
+    );
+    assert.doesNotMatch(
+      row,
+      /const lastTestMessage = props\.connection\.lastTestMessage/,
+      'legacy English persisted status such as Connection verified must be normalized at render time',
+    );
+  });
+
   it('does not display credential-probe failures as missing credentials', async () => {
     // task #38 sweep: Settings -> 账号 used to map a thrown
     // `connections.hasSecret(slug)` to `false`, which rendered an
