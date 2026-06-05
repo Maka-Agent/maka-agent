@@ -84,6 +84,26 @@ describe('ArtifactPane async lifecycle contract', () => {
     const deleteBlock = src.match(/async function deleteArtifact[\s\S]*?\n  \}\n\n  \/\/ ---- render/)?.[0] ?? '';
 
     assert.match(src, /function artifactActionErrorMessage\(error: unknown\)/);
+    assert.match(
+      src,
+      /function artifactActionErrorMessage\(error: unknown\): string \{[\s\S]*redactSecrets\(error instanceof Error \? error\.message : String\(error \?\? ''\)\)\.trim\(\)/,
+      'artifact action failures must redact raw IPC/file-system errors before toast detail',
+    );
+    assert.match(
+      src,
+      /generalizedErrorMessageChinese\(new Error\(raw\), ''\)/,
+      'artifact action failures must classify raw English errors into Chinese copy',
+    );
+    assert.match(
+      src,
+      /\/\[\\u4e00-\\u9fff\]\/\.test\(raw\) \? raw : '生成文件操作失败，请稍后重试。'/,
+      'artifact action failures may preserve already-Chinese diagnostics but must not echo unknown English',
+    );
+    assert.doesNotMatch(
+      src,
+      /if \(error instanceof Error && error\.message\.trim\(\)\) return error\.message\.trim\(\)/,
+      'artifact action failure helper must not directly echo raw Error.message',
+    );
     assert.match(openBlock, /catch \(error\) \{[\s\S]*toast\.error\('无法在 Finder 中打开生成文件', artifactActionErrorMessage\(error\)\)/);
     assert.match(copyBlock, /catch \(error\) \{[\s\S]*toast\.error\('复制失败', artifactActionErrorMessage\(error\)\)/);
     assert.match(saveBlock, /catch \(error\) \{[\s\S]*toast\.error\('另存失败', artifactActionErrorMessage\(error\)\)/);

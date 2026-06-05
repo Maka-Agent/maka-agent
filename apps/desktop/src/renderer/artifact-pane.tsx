@@ -49,6 +49,10 @@ import type {
   ArtifactKind,
   ArtifactRecord,
 } from '@maka/core';
+import {
+  generalizedErrorMessageChinese,
+  redactSecrets,
+} from '@maka/core';
 import { useToast } from '@maka/ui';
 import { ArtifactPreview } from './artifact-preview';
 import { nextArtifactListAction } from './artifact-list-keyboard';
@@ -465,9 +469,11 @@ function saveArtifactFailureCopy(reason: string): string {
 }
 
 function artifactActionErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) return error.message.trim();
-  if (typeof error === 'string' && error.trim()) return error.trim();
-  return '未知错误，请稍后重试。';
+  const raw = redactSecrets(error instanceof Error ? error.message : String(error ?? '')).trim();
+  if (!raw) return '生成文件操作失败，请稍后重试。';
+  const classified = generalizedErrorMessageChinese(new Error(raw), '');
+  if (classified) return classified;
+  return /[\u4e00-\u9fff]/.test(raw) ? raw : '生成文件操作失败，请稍后重试。';
 }
 
 function KindIcon(props: { kind: ArtifactKind }) {
