@@ -159,6 +159,16 @@ describe('local MEMORY.md Settings UI contract', () => {
     );
   });
 
+  it('gives repeated workspace-instruction row actions file-specific accessible names', async () => {
+    const src = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
+    const memoryPage = src.match(/function MemorySettingsPage\([\s\S]*?function MemoryEntryList/)?.[0] ?? '';
+
+    assert.match(memoryPage, /aria-label=\{`打开项目指令文件 \$\{file\.file\}`\}/);
+    assert.match(memoryPage, /aria-label=\{`创建项目指令文件 \$\{file\.file\}`\}/);
+    assert.match(memoryPage, /openWorkspaceInstructionFile\(file\.file\)/);
+    assert.match(memoryPage, /createWorkspaceInstructionFile\(file\.file\)/);
+  });
+
   it('manual add stays draft-only and routes through the core helper', async () => {
     const src = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
     const manualAddBlock = src.match(/function addManualMemoryDraftEntry\(\) \{[\s\S]*?\n  \}\n\n  async function updateMemoryEntryStatus/)?.[0] ?? '';

@@ -3136,6 +3136,7 @@ function MemorySettingsPage(props: {
                   <button
                     type="button"
                     className="settingsInlineTextButton"
+                    aria-label={`打开项目指令文件 ${file.file}`}
                     onClick={() => void openWorkspaceInstructionFile(file.file)}
                   >
                     打开
@@ -3145,6 +3146,7 @@ function MemorySettingsPage(props: {
                   <button
                     type="button"
                     className="settingsInlineTextButton"
+                    aria-label={`创建项目指令文件 ${file.file}`}
                     disabled={memoryControlsDisabled}
                     onClick={() => void createWorkspaceInstructionFile(file.file)}
                   >
