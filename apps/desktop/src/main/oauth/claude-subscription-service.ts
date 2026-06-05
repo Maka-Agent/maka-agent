@@ -119,8 +119,14 @@ interface PendingAuthorization {
 }
 
 class ClaudeTokenExchangeError extends Error {
-  constructor(readonly status: number) {
-    super(`Claude OAuth token endpoint returned ${status}.`);
+  // PR-CLAUDE-OAUTH-TOKEN-EXCHANGE-BODY-0: also carry Anthropic's
+  // response body so the user can see WHY the exchange failed
+  // (`invalid_grant: code already used`, `expired_token`, etc.)
+  // instead of the catch-all "授权码已过期、已使用或与本次登录不匹配"
+  // fallback. The body is best-effort: if reading it throws, we keep
+  // the original status-only error semantics.
+  constructor(readonly status: number, readonly body?: string) {
+    super(`Claude OAuth token endpoint returned ${status}.${body ? ` ${body}` : ''}`);
     this.name = 'ClaudeTokenExchangeError';
   }
 }
@@ -536,7 +542,15 @@ export class ClaudeSubscriptionService {
       }),
     });
     if (!response.ok) {
-      throw new ClaudeTokenExchangeError(response.status);
+      // Read the body (best-effort, never throw) so the user can
+      // see Anthropic's actual reject reason — `invalid_grant: code
+      // already used`, `expired_token`, etc. Without this Maka has
+      // been falling back to a generic "授权码已过期、已使用或与本次
+      // 登录不匹配" message that hides whether the failure is on
+      // Anthropic's side, the user's side, or our request shape.
+      const raw = await response.text().catch(() => '');
+      const compact = raw.replace(/\s+/g, ' ').slice(0, 280);
+      throw new ClaudeTokenExchangeError(response.status, compact || undefined);
     }
     const payload = (await response.json()) as {
       access_token: string;
@@ -673,7 +687,12 @@ export class ClaudeSubscriptionService {
       if (err.status >= 500) {
         return { ok: false, reason: fallbackReason, message: 'Claude OAuth 服务暂时不可用，请稍后重新登录。' };
       }
-      return { ok: false, reason: fallbackReason, message: fallbackMessage };
+      // 4xx: append Anthropic's actual reject reason when we have it
+      // so the user sees `invalid_grant` / `expired_token` / etc.
+      // and can tell whether the code was already used vs the
+      // request shape is still wrong.
+      const detail = err.body ? ` Anthropic 返回 ${err.status}: ${err.body}` : '';
+      return { ok: false, reason: fallbackReason, message: `${fallbackMessage}${detail}` };
     }
     const message = err instanceof Error ? err.message : '操作失败。';
     return { ok: false, reason: fallbackReason, message };
