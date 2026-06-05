@@ -1277,8 +1277,10 @@ function AppShell() {
       };
       toastApi.success(`已切到 ${labels[mode]}`, modeDescriptions[mode]);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      toastApi.error('切换权限模式失败', message);
+      toastApi.error(
+        '切换权限模式失败',
+        generalizedErrorMessageChinese(error, '权限模式暂时无法切换，请稍后重试。'),
+      );
     }
   }
 

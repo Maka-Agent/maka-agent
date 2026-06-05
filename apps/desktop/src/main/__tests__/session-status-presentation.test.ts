@@ -162,6 +162,22 @@ describe('permission mode transition guard copy', () => {
     assert.match(switcherBlock, /const group = event\.currentTarget/);
     assert.match(switcherBlock, /focus\(\{ preventScroll: true \}\)/);
   });
+
+  it('scrubs thrown permission-mode IPC failures before toast', async () => {
+    const renderer = await readFile(join(REPO_ROOT, 'apps/desktop/src/renderer/main.tsx'), 'utf8');
+    const setPermissionModeBlock = renderer.match(/async function setPermissionMode[\s\S]*?async function setSessionModel/)?.[0] ?? '';
+
+    assert.match(
+      setPermissionModeBlock,
+      /toastApi\.error\(\s*'切换权限模式失败',\s*generalizedErrorMessageChinese\(error, '权限模式暂时无法切换，请稍后重试。'\)/,
+      'Permission mode failures must use shared Chinese error classification/redaction before reaching toast',
+    );
+    assert.doesNotMatch(
+      setPermissionModeBlock,
+      /error instanceof Error \? error\.message : String\(error\)/,
+      'Permission mode failures must not render raw thrown Error.message',
+    );
+  });
 });
 
 describe('describeTurnErrorClass (PR109e-d @kenji gate #3)', () => {
