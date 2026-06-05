@@ -5,6 +5,7 @@ import {
   CATALOG_PROVIDER_TYPES,
   PROVIDER_DEFAULTS,
   generalizedErrorMessageChinese,
+  redactSecrets,
   validateSlug,
   type ConnectionTestResult,
   type CreateConnectionInput,
@@ -790,7 +791,7 @@ function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClo
     try {
       const payload = await bridge.getAuthUrl();
       if ('ok' in payload) {
-        const failureMessage = payload.ok ? '请稍后再试。' : payload.message;
+        const failureMessage = payload.ok ? '请稍后再试。' : subscriptionResultMessage(payload.message, '无法开始登录，请稍后再试。');
         toast.error('无法开始登录', failureMessage);
         setErrorMessage(failureMessage);
         return;
@@ -799,8 +800,9 @@ function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClo
       setStateHint(payload.stateHint);
       const opened = await bridge.openAuthUrl(payload.authRequestId);
       if (!opened.ok) {
-        toast.error('无法打开浏览器', opened.message);
-        setErrorMessage(opened.message);
+        const message = subscriptionResultMessage(opened.message, '无法打开浏览器，请稍后重试。');
+        toast.error('无法打开浏览器', message);
+        setErrorMessage(message);
         setAuthRequestId(null);
         setStateHint(null);
         return;
@@ -814,8 +816,9 @@ function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClo
         toast.success('登录成功', `${display.name} 已绑定本机。`);
         await refresh();
       } else {
-        toast.error('登录未完成', result.message);
-        setErrorMessage(result.message);
+        const message = subscriptionResultMessage(result.message, '登录未完成，请重新打开浏览器授权。');
+        toast.error('登录未完成', message);
+        setErrorMessage(message);
       }
     } catch (error) {
       const message = subscriptionActionErrorMessage(error);
@@ -842,7 +845,7 @@ function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClo
         toast.success('已退出登录', '本地凭据已清除。');
         await refresh();
       } else {
-        toast.error('退出失败', result.message);
+        toast.error('退出失败', subscriptionResultMessage(result.message, '退出登录失败，请稍后重试。'));
       }
     } catch (error) {
       toast.error('退出失败', subscriptionActionErrorMessage(error));
@@ -952,7 +955,15 @@ function subscriptionActionErrorMessage(error: unknown): string {
     : typeof error === 'string'
       ? error
       : '';
-  return message.trim() || '登录服务暂时不可用，请检查网络后重试。';
+  return subscriptionResultMessage(message, '登录服务暂时不可用，请检查网络后重试。');
+}
+
+function subscriptionResultMessage(message: string | undefined, fallback: string): string {
+  const raw = redactSecrets(message ?? '').trim();
+  if (!raw) return fallback;
+  const classified = generalizedErrorMessageChinese(new Error(raw), '');
+  if (classified) return classified;
+  return /[\u4e00-\u9fff]/.test(raw) ? raw : fallback;
 }
 
 async function getSubscriptionSnapshot(serviceId: OAuthServiceId): Promise<SubscriptionSnapshot> {
@@ -1032,12 +1043,12 @@ function presentSnapshotDetail(state: SubscriptionSnapshot | null, display: Subs
     case 'refreshing':
       return '正在刷新访问令牌…';
     case 'refresh_failed':
-      return state.errorMessage ?? '令牌刷新失败，请重新登录。';
+      return subscriptionResultMessage(state.errorMessage, '令牌刷新失败，请重新登录。');
     case 'storage_failed':
-      return state.errorMessage ?? `${display.name} 本地凭据读取失败，请重新登录。`;
+      return subscriptionResultMessage(state.errorMessage, `${display.name} 本地凭据读取失败，请重新登录。`);
     case 'quota_unavailable':
     case 'provider_rejected':
-      return state.errorMessage ?? `${display.name} 已登录，但当前 provider 状态不可用。`;
+      return subscriptionResultMessage(state.errorMessage, `${display.name} 已登录，但当前 provider 状态不可用。`);
   }
   const _exhaustive: never = state.runtimeState;
   return _exhaustive;
@@ -1964,7 +1975,7 @@ function ClaudeSubscriptionCard() {
         // Envelope variant. `ok: true` shouldn't happen for
         // getAuthUrl (success returns the payload, not an envelope),
         // so this branch is the failure case in practice.
-        toast.error('无法开始登录', payload.ok ? '请稍后再试。' : payload.message);
+        toast.error('无法开始登录', payload.ok ? '请稍后再试。' : subscriptionResultMessage(payload.message, '无法开始登录，请稍后再试。'));
         return;
       }
       setAuthRequestId(payload.authRequestId);
@@ -1975,7 +1986,7 @@ function ClaudeSubscriptionCard() {
       // NOT the URL. Main looks up the URL it generated.
       const opened = await window.maka.claudeSubscription.openAuthUrl(payload.authRequestId);
       if (!opened.ok) {
-        toast.error('无法打开浏览器', opened.message);
+        toast.error('无法打开浏览器', subscriptionResultMessage(opened.message, '无法打开浏览器，请稍后重试。'));
         setAuthRequestId(null);
         setStateHint(null);
       }
@@ -2005,7 +2016,7 @@ function ClaudeSubscriptionCard() {
         setPasteValue('');
         await refresh();
       } else {
-        setPasteError(result.message);
+        setPasteError(subscriptionResultMessage(result.message, '授权码提交失败，请重新登录后再试。'));
       }
     } catch (error) {
       const message = subscriptionActionErrorMessage(error);
@@ -2049,7 +2060,7 @@ function ClaudeSubscriptionCard() {
         toast.success('已退出登录', '本地凭据已清除。');
         await refresh();
       } else {
-        toast.error('退出失败', result.message);
+        toast.error('退出失败', subscriptionResultMessage(result.message, '退出登录失败，请稍后重试。'));
       }
     } catch (error) {
       toast.error('退出失败', subscriptionActionErrorMessage(error));
@@ -2220,25 +2231,25 @@ function presentSubscriptionState(state: SubscriptionAccountState): Subscription
       return {
         label: '刷新失败',
         tone: 'warning',
-        detail: state.errorMessage ?? '令牌刷新失败，请重新登录。',
+        detail: subscriptionResultMessage(state.errorMessage, '令牌刷新失败，请重新登录。'),
       };
     case 'storage_failed':
       return {
         label: '凭据读取失败',
         tone: 'warning',
-        detail: state.errorMessage ?? '本地 OAuth 凭据读取失败，请重新登录。',
+        detail: subscriptionResultMessage(state.errorMessage, '本地 OAuth 凭据读取失败，请重新登录。'),
       };
     case 'quota_unavailable':
       return {
         label: '等待获取配额',
         tone: 'warning',
-        detail: state.errorMessage ?? '已登录；配额接口当前没有返回可用数据。',
+        detail: subscriptionResultMessage(state.errorMessage, '已登录；配额接口当前没有返回可用数据。'),
       };
     case 'provider_rejected':
       return {
         label: '订阅 API 拒绝',
         tone: 'destructive',
-        detail: state.errorMessage ?? '订阅端点拒绝了请求，可能需要重新登录。',
+        detail: subscriptionResultMessage(state.errorMessage, '订阅端点拒绝了请求，可能需要重新登录。'),
       };
     default:
       return { label: '未知状态', tone: 'muted', detail: '' };

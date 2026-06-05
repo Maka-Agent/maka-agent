@@ -668,15 +668,28 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
     const claudeCard = src.match(/function ClaudeSubscriptionCard[\s\S]*?function presentSubscriptionState/)?.[0] ?? '';
 
     assert.match(helper, /登录服务暂时不可用，请检查网络后重试。/, 'OAuth thrown-error fallback must be user-facing Chinese copy');
+    assert.match(helper, /redactSecrets\(message \?\? ''\)\.trim\(\)/, 'OAuth service messages must be redacted before reaching visible UI');
+    assert.match(helper, /generalizedErrorMessageChinese\(new Error\(raw\), ''\)/, 'OAuth service messages must pass through Chinese error classification');
+    assert.match(helper, /\/\[\\u4e00-\\u9fff\]\/\.test\(raw\)/, 'already-Chinese OAuth diagnostics may be preserved after redaction');
     assert.match(browserModal, /async function refresh\(\)[\s\S]*catch \(error\) \{[\s\S]*toast\.error\('刷新登录状态失败', message\);[\s\S]*setErrorMessage\(message\);/, 'browser OAuth state refresh must surface thrown failures');
     assert.match(browserModal, /catch \(error\) \{[\s\S]*toast\.error\('登录失败', message\);[\s\S]*setErrorMessage\(message\);/, 'browser OAuth login must toast thrown failures');
     assert.match(browserModal, /catch \(error\) \{[\s\S]*toast\.error\('退出失败', subscriptionActionErrorMessage\(error\)\);/, 'browser OAuth logout must toast thrown failures');
+    assert.doesNotMatch(browserModal, /toast\.error\('[^']+', (?:payload|opened|result)\.message\)/, 'browser OAuth action envelopes must not toast raw service messages');
+    assert.doesNotMatch(browserModal, /setErrorMessage\((?:payload|opened|result)\.message\)/, 'browser OAuth action envelopes must not render raw service messages');
+    assert.match(browserModal, /subscriptionResultMessage\(payload\.message, '无法开始登录，请稍后再试。'\)/, 'browser OAuth getAuthUrl failures must be localized');
+    assert.match(browserModal, /subscriptionResultMessage\(opened\.message, '无法打开浏览器，请稍后重试。'\)/, 'browser OAuth openAuthUrl failures must be localized');
+    assert.match(browserModal, /subscriptionResultMessage\(result\.message, '登录未完成，请重新打开浏览器授权。'\)/, 'browser OAuth completion failures must be localized');
     assert.match(claudeCard, /const refresh = async \(\) => \{[\s\S]*catch \(error\) \{[\s\S]*toast\.error\('刷新登录状态失败', message\);[\s\S]*setPasteError\(message\);/, 'Claude OAuth state refresh must surface thrown failures');
     assert.match(claudeCard, /settingsErrorText" role="alert"\>\{pasteError\}/, 'Claude OAuth refresh failures must be visible in the modal body');
     assert.match(claudeCard, /catch \(error\) \{[\s\S]*toast\.error\('无法开始登录', message\);[\s\S]*setPasteError\(message\);/, 'Claude OAuth start must toast thrown failures');
     assert.match(claudeCard, /catch \(error\) \{[\s\S]*toast\.error\('授权码提交失败', message\);[\s\S]*setPasteError\(message\);/, 'Claude OAuth paste submit must toast thrown failures');
     assert.match(claudeCard, /catch \(error\) \{[\s\S]*toast\.error\('取消登录失败', subscriptionActionErrorMessage\(error\)\);/, 'Claude OAuth cancel must toast thrown failures');
     assert.match(claudeCard, /catch \(error\) \{[\s\S]*toast\.error\('刷新配额失败', subscriptionActionErrorMessage\(error\)\);/, 'Claude OAuth quota refresh must toast thrown failures');
+    assert.doesNotMatch(claudeCard, /toast\.error\('[^']+', (?:payload|opened|result)\.message\)/, 'Claude OAuth action envelopes must not toast raw service messages');
+    assert.doesNotMatch(claudeCard, /setPasteError\(result\.message\)/, 'Claude OAuth paste failures must not render raw service messages');
+    assert.match(claudeCard, /subscriptionResultMessage\(payload\.message, '无法开始登录，请稍后再试。'\)/, 'Claude OAuth getAuthUrl failures must be localized');
+    assert.match(claudeCard, /subscriptionResultMessage\(opened\.message, '无法打开浏览器，请稍后重试。'\)/, 'Claude OAuth openAuthUrl failures must be localized');
+    assert.match(claudeCard, /subscriptionResultMessage\(result\.message, '授权码提交失败，请重新登录后再试。'\)/, 'Claude OAuth paste failures must be localized');
   });
 
   it('OAuth local credential storage failures are visible and repairable', async () => {
