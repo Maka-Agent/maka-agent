@@ -1493,7 +1493,7 @@ function accountConnectionTestFailureFallback(result: ConnectionTestResult): str
   if (result.statusCode === 429) return '当前账号或模型服务触发速率限制，请稍后重试。';
   if (result.errorClass === 'timeout') return '请求超时，请检查网络或代理后重试。';
   if (result.errorClass === 'auth' || result.statusCode === 401 || result.statusCode === 403) {
-    return '鉴权失败，请检查 API key、OAuth 登录或凭据配置后重试。';
+    return '鉴权失败，请检查模型密钥、订阅账号登录或凭据配置后重试。';
   }
   if (result.errorClass === 'provider_unavailable' || (result.statusCode !== undefined && result.statusCode >= 500)) {
     return '模型服务暂时不可用，请稍后重试。';
@@ -1594,12 +1594,12 @@ function AccountSettingsPage(props: {
         />
         <SettingRow
           title="凭据保护"
-          detail="API key 使用 Electron safeStorage 加密（macOS Keychain / Windows DPAPI / Linux libsecret）。"
+          detail="模型密钥和订阅账号令牌会交给系统安全存储加密保存。"
           value="启用"
         />
         <SettingRow
           title="审计日志"
-          detail="每个会话的 JSONL 留存所有消息、tool 调用、权限决策与 mode_change，永不离开本机。"
+          detail="每个会话都会在本机保留消息、工具调用、权限决策与模式变更记录。"
           value="本地"
         />
       </SettingsRows>
@@ -1628,7 +1628,7 @@ function AccountSettingsPage(props: {
         </div>
       )}
       <p className="settingsHelpText">
-        共 {totalCount} 个连接 · {enabledCount} 已启用。修改 API key / baseUrl / 默认模型会清掉「已验证」状态，
+        共 {totalCount} 个连接 · {enabledCount} 已启用。修改模型密钥、服务地址或默认模型会清掉「已验证」状态，
         需要重新测试。失败的测试不会自动禁用连接 —— 禁用始终是用户动作。
       </p>
 
@@ -1676,8 +1676,8 @@ function AccountConnectionRow(props: {
     : {
         label: '凭据状态读取中',
         detail: props.secretStatus === 'loading'
-          ? '正在读取 safeStorage / OAuth 登录状态。'
-          : '读取 safeStorage / OAuth 登录状态失败，当前不会显示为待配置。',
+          ? '正在读取本机凭据和账号登录状态。'
+          : '读取本机凭据和账号登录状态失败，当前不会显示为待配置。',
         stateLabel: props.secretStatus === 'loading' ? '读取中' : '读取失败',
         tone: props.secretStatus === 'loading' ? 'info' as const : 'warning' as const,
       };

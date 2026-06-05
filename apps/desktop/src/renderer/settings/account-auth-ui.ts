@@ -96,8 +96,8 @@ function availableAction(
         executable: true,
         label: contract.setupMode === 'oauth' ? '测试 OAuth' : '测试凭据',
         detail: contract.setupMode === 'oauth'
-          ? '只验证账号 token 和端点，不代表运行通路已完成健康检查。'
-          : '只验证凭据和端点，不代表运行通路已完成健康检查。',
+          ? '只验证账号令牌和端点，不代表发送链路已完成健康检查。'
+          : '只验证凭据和端点，不代表发送链路已完成健康检查。',
         tone: 'info',
       };
     case 'save_secret':
@@ -105,8 +105,8 @@ function availableAction(
         action,
         kind: 'guidance',
         executable: false,
-        label: '在模型设置中保存 API key',
-        detail: 'Account 只展示状态；密钥输入仍在 设置 · 模型。',
+        label: '在模型设置中保存模型密钥',
+        detail: '账号页只展示状态；密钥输入仍在 设置 · 模型。',
         tone: 'neutral',
       };
     case 'fetch_models':
@@ -115,7 +115,7 @@ function availableAction(
         kind: 'guidance',
         executable: false,
         label: contract.setupMode === 'none' ? '在模型设置中探测模型' : '在模型设置中拉取模型',
-        detail: '模型列表刷新由 设置 · 模型 的 provider 编辑器执行。',
+        detail: '模型列表刷新由 设置 · 模型 的连接编辑器执行。',
         tone: 'neutral',
       };
     case 'revoke_auth':
@@ -124,7 +124,7 @@ function availableAction(
         kind: 'guidance',
         executable: false,
         label: contract.setupMode === 'oauth' ? '在模型设置中退出登录' : '在模型设置中替换或移除凭据',
-        detail: '当前页面不直接写入 credential store。',
+        detail: '当前页面不直接写入凭据存储。',
         tone: 'neutral',
       };
     case 'start_oauth':
@@ -150,7 +150,7 @@ function availableAction(
 
 function previewAction(action: ProviderAuthAction): AccountAuthActionPresentation {
   const labels: Record<ProviderAuthAction, string> = {
-    save_secret: 'API key 管理',
+    save_secret: '模型密钥管理',
     test_credentials: '凭据验证',
     fetch_models: '模型同步',
     start_oauth: '订阅账号预览',
@@ -162,7 +162,7 @@ function previewAction(action: ProviderAuthAction): AccountAuthActionPresentatio
     kind: 'preview',
     executable: false,
     label: labels[action],
-    detail: '受控入口当前只展示状态，不会连接 OAuth IPC 或远端登录流程。',
+    detail: '受控入口当前只展示状态，不会连接登录服务或远端登录流程。',
     tone: 'info',
   };
 }

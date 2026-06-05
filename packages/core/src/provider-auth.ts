@@ -127,7 +127,7 @@ export function deriveProviderAuthContract(input: ProviderAuthContractInput): Pr
       },
       copy: {
         label: `${defaults.label} 账号登录预览`,
-        detail: '当前仅展示账号登录状态入口；API key 连接仍是聊天模型的可用路径。',
+        detail: '当前仅展示账号登录状态入口；普通模型密钥连接仍可在聊天模型中使用。',
       },
     };
   }
@@ -147,7 +147,7 @@ export function deriveProviderAuthContract(input: ProviderAuthContractInput): Pr
       },
       copy: {
         label: `${defaults.label} 不需要凭据`,
-        detail: '此 provider 不需要 API key；可用性仍取决于本地服务和模型列表。',
+        detail: '此模型服务不需要密钥；可用性仍取决于本地服务和模型列表。',
       },
     };
   }
@@ -226,13 +226,13 @@ function copyForApiKey(label: string, state: ProviderAuthState): ProviderAuthCon
   switch (state) {
     case 'not_configured':
       return {
-        label: `${label} 等待 API key`,
+        label: `${label} 等待模型密钥`,
         detail: '保存凭据后才能测试连接或拉取模型列表。',
       };
     case 'validated':
       return {
         label: `${label} 凭据验证通过`,
-        detail: '这只代表凭据和端点验证通过，不代表 agent 发送、流式、中断路径已经运行可用。',
+        detail: '这只代表凭据和端点验证通过，不代表消息发送、流式响应或中断恢复已经运行可用。',
       };
     case 'needs_reauth':
       return {
@@ -242,7 +242,7 @@ function copyForApiKey(label: string, state: ProviderAuthState): ProviderAuthCon
     case 'error':
       return {
         label: `${label} 凭据测试失败`,
-        detail: '上次测试未通过；详情必须使用概括后的错误信息，不展示 provider 原始响应。',
+        detail: '上次测试未通过；详情必须使用概括后的错误信息，不展示服务商原始响应。',
       };
     case 'configured':
       return {
@@ -253,7 +253,7 @@ function copyForApiKey(label: string, state: ProviderAuthState): ProviderAuthCon
     case 'preview_only':
       return {
         label,
-        detail: '当前状态不走 API key 凭据流程。',
+        detail: '当前状态不走模型密钥凭据流程。',
       };
   }
 }
@@ -268,7 +268,7 @@ function copyForOAuth(label: string, state: ProviderAuthState): ProviderAuthCont
     case 'validated':
       return {
         label: `${label} OAuth 已验证`,
-        detail: '这只代表账号 token 和端点验证通过，不代表 agent 发送、流式、中断路径已经运行可用。',
+        detail: '这只代表账号令牌和端点验证通过，不代表消息发送、流式响应或中断恢复已经运行可用。',
       };
     case 'needs_reauth':
       return {
@@ -278,12 +278,12 @@ function copyForOAuth(label: string, state: ProviderAuthState): ProviderAuthCont
     case 'error':
       return {
         label: `${label} OAuth 测试失败`,
-        detail: '上次测试未通过；详情必须使用概括后的错误信息，不展示 provider 原始响应或 token。',
+        detail: '上次测试未通过；详情必须使用概括后的错误信息，不展示服务商原始响应或账号令牌。',
       };
     case 'configured':
       return {
         label: `${label} OAuth 已登录`,
-        detail: '账号 token 已保存，等待验证；测试通过前不要把它展示成运行可用。',
+        detail: '账号令牌已保存，等待验证；测试通过前不要把它展示成运行可用。',
       };
     case 'disabled':
     case 'preview_only':

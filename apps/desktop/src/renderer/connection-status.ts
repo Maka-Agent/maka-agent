@@ -33,7 +33,7 @@ export type ConnectionUiStatus =
 
 export interface ConnectionUiStatusInput {
   enabled: boolean;
-  /** Whether a secret is present in the safeStorage credential store. */
+  /** Whether a saved credential is available for this connection. */
   hasSecret: boolean;
   /** Non-empty `defaultModel` is required to call the connection. */
   defaultModel: string | undefined;
@@ -92,12 +92,12 @@ const STATUS_PRESENTATION: Record<ConnectionUiStatus, StatusPresentation> = {
   },
   not_configured: {
     label: '待补齐',
-    detail: '等待填写 API key 或选择默认模型。点开模型设置补全。',
+    detail: '等待填写模型密钥或选择默认模型。点开模型设置补全。',
     tone: 'warning',
   },
   configured: {
     label: '已配置 · 等待验证',
-    detail: '凭据已保存；点测试连接确认 provider 可达。',
+    detail: '凭据已保存；点测试连接确认服务可达。',
     tone: 'info',
   },
   verified: {
@@ -107,17 +107,17 @@ const STATUS_PRESENTATION: Record<ConnectionUiStatus, StatusPresentation> = {
     // send / stream / interrupt readiness is a separate runtime
     // probe, not implied by credential test passing.
     label: '凭据已验证',
-    detail: '最近一次测试成功。修改 key/baseUrl/默认模型会清掉此状态。运行态可达性需独立验证。',
+    detail: '最近一次测试成功。修改模型密钥、服务地址或默认模型会清掉此状态；发送链路需独立验证。',
     tone: 'success',
   },
   needs_reauth: {
     label: '需要重新登录',
-    detail: '上次测试返回 401/403。请更新 API key 或 OAuth token。',
+    detail: '上次测试返回 401/403。请更新模型密钥或重新登录订阅账号。',
     tone: 'warning',
   },
   error: {
     label: '连接出错',
-    detail: '上次测试失败：超时、网络或 provider 返回错误。可重试或检查代理。',
+    detail: '上次测试失败：超时、网络或服务商返回错误。可重试或检查代理。',
     tone: 'destructive',
   },
 };

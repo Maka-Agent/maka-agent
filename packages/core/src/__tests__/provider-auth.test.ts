@@ -9,7 +9,7 @@ import {
 import type { LlmConnection } from '../llm-connections.js';
 
 describe('ProviderAuth contract', () => {
-  test('API key providers expose credential actions only after a secret exists', () => {
+  test('model-key providers expose credential actions only after a secret exists', () => {
     const missing = deriveProviderAuthContract({
       providerType: 'openai',
       hasSecret: false,
@@ -47,9 +47,9 @@ describe('ProviderAuth contract', () => {
 
     expect(contract.state).toBe('validated');
     expect(contract.validationStatus).toBe('verified');
-    expect(contract.copy.detail).toContain('不代表 agent 发送');
-    expect(contract.copy.detail).toContain('流式');
-    expect(contract.copy.detail).toContain('中断路径');
+    expect(contract.copy.detail).toContain('不代表消息发送');
+    expect(contract.copy.detail).toContain('流式响应');
+    expect(contract.copy.detail).toContain('中断恢复');
   });
 
   test('auth failures preserve distinct repair states without raw provider errors', () => {
@@ -91,7 +91,7 @@ describe('ProviderAuth contract', () => {
     expect(contract.actionAvailability.refresh_oauth).toBe('available');
     expect(contract.actionAvailability.revoke_auth).toBe('available');
     expect(contract.copy.label).toContain('OAuth 已验证');
-    expect(contract.copy.detail).toContain('账号 token 和端点验证通过');
+    expect(contract.copy.detail).toContain('账号令牌和端点验证通过');
     expect(contract.copy.detail.includes('API key 连接仍是聊天模型的可用路径')).toBe(false);
   });
 
@@ -130,7 +130,7 @@ describe('ProviderAuth contract', () => {
     expect(contract.actionAvailability.refresh_oauth).toBe('preview_only');
     expect(contract.actionAvailability.revoke_auth).toBe('preview_only');
     expect(contract.copy.label).toContain('账号登录预览');
-    expect(contract.copy.detail).toContain('API key 连接仍是聊天模型的可用路径');
+    expect(contract.copy.detail).toContain('普通模型密钥连接仍可在聊天模型中使用');
     expect(contract.copy.label.includes('待接入')).toBe(false);
     expect(contract.copy.detail.includes('尚未开放')).toBe(false);
   });

@@ -80,7 +80,7 @@ describe('Account auth UI contract mapping', () => {
           assert.equal(action.executable, false);
           assert.match(action.label, /预览/);
           assert.match(action.detail, /受控入口/);
-          assert.match(action.detail, /不会连接 OAuth IPC/);
+          assert.match(action.detail, /不会连接登录服务或远端登录流程/);
           assert.doesNotMatch(action.label, /Roadmap|路线图|即将|TODO/i);
           assert.doesNotMatch(action.detail, /Roadmap|路线图|即将|TODO/i);
         }
@@ -94,7 +94,7 @@ describe('Account auth UI contract mapping', () => {
         const actions = deriveAccountAuthActions(c);
         assert.equal(state.stateLabel, '凭据已验证');
         assert.match(state.detail, /只代表凭据和端点验证通过/);
-        assert.match(state.detail, /不代表 agent 发送、流式、中断路径已经运行可用/);
+        assert.match(state.detail, /不代表消息发送、流式响应或中断恢复已经运行可用/);
         assert.equal(actions.find((action) => action.action === 'test_credentials')?.label, '测试凭据');
         assert.equal(actions.find((action) => action.action === 'test_credentials')?.executable, true);
       },
@@ -139,6 +139,43 @@ describe('Account auth UI contract mapping', () => {
 });
 
 describe('Account settings credential probe UI', () => {
+  it('keeps account overview security and status copy Chinese-first', async () => {
+    const source = await readFile(join(process.cwd(), 'src/renderer/settings/SettingsModal.tsx'), 'utf8');
+    const authUi = await readFile(join(process.cwd(), 'src/renderer/settings/account-auth-ui.ts'), 'utf8');
+    const connectionStatus = await readFile(join(process.cwd(), 'src/renderer/connection-status.ts'), 'utf8');
+    const providerAuth = await readFile(join(process.cwd(), '../../packages/core/src/provider-auth.ts'), 'utf8');
+    const page = source.match(/function AccountSettingsPage[\s\S]*?function AccountConnectionRow/)?.[0] ?? '';
+    const row = source.match(/function AccountConnectionRow[\s\S]*?function AccountAuthActionView/)?.[0] ?? '';
+
+    assert.match(page, /模型密钥和订阅账号令牌会交给系统安全存储加密保存/);
+    assert.match(page, /每个会话都会在本机保留消息、工具调用、权限决策与模式变更记录/);
+    assert.match(page, /修改模型密钥、服务地址或默认模型会清掉「已验证」状态/);
+    assert.match(connectionStatus, /最近一次测试成功。修改模型密钥、服务地址或默认模型会清掉此状态；发送链路需独立验证/);
+    assert.match(row, /正在读取本机凭据和账号登录状态/);
+    assert.match(row, /读取本机凭据和账号登录状态失败/);
+    assert.match(authUi, /在模型设置中保存模型密钥/);
+    assert.match(authUi, /账号页只展示状态；密钥输入仍在 设置 · 模型/);
+    assert.match(authUi, /当前页面不直接写入凭据存储/);
+    assert.match(authUi, /模型密钥管理/);
+
+    for (const block of [page, row, authUi, connectionStatus, providerAuth]) {
+      assert.doesNotMatch(block, /Electron safeStorage/);
+      assert.doesNotMatch(block, /macOS Keychain|Windows DPAPI|Linux libsecret/);
+      assert.doesNotMatch(block, /JSONL/);
+      assert.doesNotMatch(block, /tool 调用/);
+      assert.doesNotMatch(block, /mode_change/);
+      assert.doesNotMatch(block, /API key|OAuth token/);
+      assert.doesNotMatch(block, /等待 API key|API key 连接|此 provider|provider 原始响应|provider 返回错误/);
+      assert.doesNotMatch(block, /API key 管理|在模型设置中保存 API key/);
+      assert.doesNotMatch(block, /credential store/);
+      assert.doesNotMatch(block, /修改 API key \/ baseUrl/);
+      assert.doesNotMatch(block, /修改 key\/baseUrl/);
+      assert.doesNotMatch(block, /读取 safeStorage \/ OAuth 登录状态/);
+      assert.doesNotMatch(block, /agent 发送/);
+      assert.doesNotMatch(block, /运行通路/);
+    }
+  });
+
   it('sanitizes account-page connection test failures before toast', async () => {
     const source = await readFile(join(process.cwd(), 'src/renderer/settings/SettingsModal.tsx'), 'utf8');
     const page = source.match(/function AccountSettingsPage[\s\S]*?function AccountConnectionRow/)?.[0] ?? '';
