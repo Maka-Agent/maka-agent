@@ -1480,7 +1480,7 @@ function waitMs(ms: number): Promise<void> {
 const THEME_OPTIONS: Array<{ value: ThemePreference; label: string; help: string }> = [
   { value: 'light', label: '浅色', help: '始终使用浅色界面。' },
   { value: 'dark', label: '深色', help: '始终使用深色界面。' },
-  { value: 'auto', label: '跟随系统', help: '匹配 macOS 的当前 Light/Dark 偏好。' },
+  { value: 'auto', label: '跟随系统', help: '匹配 macOS 当前浅色或深色偏好。' },
 ];
 
 function accountConnectionTestFailureMessage(result: ConnectionTestResult): string {
@@ -2014,7 +2014,7 @@ function collectPersonalizationWarningCopy(warnings: PersonalizationSettingsWarn
 }
 
 const DENSITY_OPTIONS: Array<{ value: UiDensity; label: string; help: string }> = [
-  { value: 'compact', label: '紧凑', help: '减小行间距与控件高度，更接近 IDE 风格。' },
+  { value: 'compact', label: '紧凑', help: '减小行间距与控件高度，更接近专业编辑器风格。' },
   { value: 'comfortable', label: '舒适', help: '默认。平衡阅读和密度。' },
   { value: 'spacious', label: '宽松', help: '更大留白，适合长会话沉浸阅读。' },
 ];
@@ -2078,14 +2078,14 @@ const PALETTE_LABEL: Record<ThemePalette, string> = {
 };
 
 const PALETTE_HELP: Record<ThemePalette, string> = {
-  'default': 'Maka 原本的紫色 accent',
+  'default': 'Maka 原本的紫色强调色',
   'onedark': '编辑器经典深色',
   'catppuccin-mocha': '紫调柔和深色',
   'tokyo-night': '深蓝主题',
   'nord': '北欧冷色',
-  'coral': '暖粉 / 珊瑚 accent',
-  'azure': '湖蓝 accent，干净冷静',
-  'forest': '深苔绿 + 暖蜂蜜 accent，自然感',
+  'coral': '暖粉 / 珊瑚强调色',
+  'azure': '湖蓝强调色，干净冷静',
+  'forest': '深苔绿 + 暖蜂蜜强调色，自然感',
   'dusk': '深紫罗兰 + 冷调画布，黄昏感',
   'sand': '琥珀沙金 + 暖奶白，复古暖调',
   'mono': '纯灰阶，无彩色干扰',
@@ -2264,7 +2264,7 @@ function ThemeSettingsPage(props: {
       </div>
 
       <p className="settingsHelpText">
-        切换会立即生效，并保存在 <code className="maka-empty-state-code">settings.json</code> 里下次启动延续。通知统一显示在屏幕右下角。
+        切换会立即生效，并保存在本地外观设置里下次启动延续。通知统一显示在屏幕右下角。
       </p>
     </div>
   );

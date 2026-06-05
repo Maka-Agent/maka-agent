@@ -69,4 +69,26 @@ describe('Settings theme page contract', () => {
     assert.match(segmentedBlock, /onKeyDown=\{\(event\) => onSettingsRadioGroupKeyDown\(event, values, props\.value, props\.onChange\)\}/);
     assert.match(segmentedBlock, /data-radio-value=\{value\}[\s\S]*tabIndex=\{radioTabIndex\(value, props\.value, values\)\}/);
   });
+
+  it('keeps theme page copy Chinese-first and user-facing', async () => {
+    const src = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
+    const themePage = src.match(/function ThemeSettingsPage\([\s\S]*?function WebSearchSettingsPage/)?.[0] ?? '';
+    const themeCopy = [
+      src.match(/const THEME_OPTIONS[\s\S]*?\];/)?.[0] ?? '',
+      src.match(/const DENSITY_OPTIONS[\s\S]*?\];/)?.[0] ?? '',
+      src.match(/const PALETTE_HELP[\s\S]*?\};/)?.[0] ?? '',
+      themePage.match(/<p className="settingsHelpText">[\s\S]*?<\/p>/)?.[0] ?? '',
+    ].join('\n');
+
+    assert.match(themeCopy, /匹配 macOS 当前浅色或深色偏好。/);
+    assert.match(themeCopy, /专业编辑器风格。/);
+    assert.match(themeCopy, /Maka 原本的紫色强调色/);
+    assert.match(themeCopy, /湖蓝强调色，干净冷静/);
+    assert.match(themeCopy, /保存在本地外观设置里下次启动延续/);
+    assert.doesNotMatch(
+      themeCopy,
+      /Light\/Dark|settings\.json|safeStorage|API key|accent|IDE/,
+      'Theme settings visible copy must not leak implementation or English UI terms',
+    );
+  });
 });
