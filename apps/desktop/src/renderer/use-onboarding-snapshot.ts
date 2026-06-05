@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { OnboardingState } from '@maka/core';
+import { generalizedErrorMessageChinese, type OnboardingState } from '@maka/core';
 import type { OnboardingSnapshot } from '../global';
 
 /**
@@ -111,10 +111,14 @@ export function createOnboardingSnapshotPoller(
         callbacks.onSnapshot(next);
       } catch (err) {
         if (ticket !== inflightTicket) return;
-        callbacks.onError(err instanceof Error ? err.message : String(err));
+        callbacks.onError(onboardingSnapshotErrorMessage(err));
       }
     },
   };
+}
+
+function onboardingSnapshotErrorMessage(error: unknown): string {
+  return generalizedErrorMessageChinese(error, '首次使用状态暂时不可用，请稍后重试。');
 }
 
 /**

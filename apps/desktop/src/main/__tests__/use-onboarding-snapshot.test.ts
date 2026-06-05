@@ -10,6 +10,8 @@
  */
 
 import { strict as assert } from 'node:assert';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import type { OnboardingState } from '@maka/core';
 import {
@@ -46,12 +48,12 @@ describe('createOnboardingSnapshotPoller', () => {
     assert.deepEqual(events, [{ type: 'snap', payload: READY_SNAPSHOT }]);
   });
 
-  it('routes a getSnapshot rejection to onError', async () => {
+  it('scrubs getSnapshot rejections before routing them to onError', async () => {
     const events: Array<{ type: 'snap' | 'err'; payload: unknown }> = [];
     const poller = createOnboardingSnapshotPoller(
       {
         getSnapshot: async () => {
-          throw new Error('ipc unavailable');
+          throw new Error('IPC failed for /Users/demo/.maka/settings.json Authorization: Bearer sk-live-secret-token-value');
         },
       },
       {
@@ -60,7 +62,9 @@ describe('createOnboardingSnapshotPoller', () => {
       },
     );
     await poller.pull();
-    assert.deepEqual(events, [{ type: 'err', payload: 'ipc unavailable' }]);
+    assert.deepEqual(events, [{ type: 'err', payload: '鉴权失败' }]);
+    assert.notEqual(String(events[0]?.payload).includes('/Users/demo'), true);
+    assert.notEqual(String(events[0]?.payload).includes('sk-live-secret'), true);
   });
 
   it('older inflight response cannot overwrite newer state (ticket guard)', async () => {
@@ -129,6 +133,20 @@ describe('createOnboardingSnapshotPoller', () => {
     await pull1;
     assert.equal(snaps.length, 1);
     assert.equal(errs.length, 0, 'stale error from older pull must NOT emit');
+  });
+});
+
+describe('first-run error boundaries', () => {
+  it('keeps onboarding and checklist probe errors on the shared Chinese scrubber', async () => {
+    const onboarding = await readFile(join(process.cwd(), 'src/renderer/use-onboarding-snapshot.ts'), 'utf8');
+    const checklist = await readFile(join(process.cwd(), 'src/renderer/FirstRunChecklist.tsx'), 'utf8');
+
+    assert.match(onboarding, /function onboardingSnapshotErrorMessage\(error: unknown\): string \{[\s\S]*generalizedErrorMessageChinese\(error, '首次使用状态暂时不可用，请稍后重试。'\)/);
+    assert.match(onboarding, /callbacks\.onError\(onboardingSnapshotErrorMessage\(err\)\)/);
+    assert.doesNotMatch(onboarding, /callbacks\.onError\(err instanceof Error \? err\.message : String\(err\)\)/);
+
+    assert.match(checklist, /function firstRunChecklistErrorMessage\(error: unknown\): string \{[\s\S]*generalizedErrorMessageChinese\(error, '状态服务暂时不可用，请稍后重试。'\)/);
+    assert.doesNotMatch(checklist, /error instanceof Error[\s\S]*error\.message[\s\S]*String\(error\)/);
   });
 });
 

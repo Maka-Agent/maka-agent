@@ -24,7 +24,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, BookOpen, CalendarDays, Check, Clock, FileText, Mic, Search, Sparkles, User } from 'lucide-react';
-import type { AppSettings, PlanReminder, SettingsSection } from '@maka/core';
+import { generalizedErrorMessageChinese, type AppSettings, type PlanReminder, type SettingsSection } from '@maka/core';
 import { useToast } from '@maka/ui';
 
 interface ChecklistItem {
@@ -257,10 +257,5 @@ export function FirstRunChecklist(props: FirstRunChecklistProps) {
 }
 
 function firstRunChecklistErrorMessage(error: unknown): string {
-  const message = error instanceof Error
-    ? error.message
-    : typeof error === 'string'
-      ? error
-      : '';
-  return message.trim() || '状态服务暂时不可用，请稍后重试。';
+  return generalizedErrorMessageChinese(error, '状态服务暂时不可用，请稍后重试。');
 }
