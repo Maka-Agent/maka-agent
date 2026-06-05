@@ -182,10 +182,20 @@ describe('Settings coming-soon cleanup contract', () => {
     assert.match(settings, /not_configured:\s*\{\s*label:\s*'等待配置'/, 'capability not_configured should read as an actionable waiting state');
     assert.match(settings, /case\s+'missing':\s*return\s+'等待补齐配置'/, 'configuration missing should read as an actionable waiting state');
     assert.match(settings, /仍有运行态、权限或子功能需要处理/, 'degraded capability copy should describe a current action state');
+    assert.match(
+      permissionPage![0],
+      /setError\(settingsActionErrorMessage\(err\)\)/,
+      'Permission Center snapshot load failures must use the shared sanitized Settings error copy',
+    );
     assert.doesNotMatch(
       permissionPage![0],
       /原生 helper|上线后|接入后|即将可用|未接入|尚未授权|子功能没有完成/,
       'Permission Center visible copy must not expose implementation roadmap/helper language',
+    );
+    assert.doesNotMatch(
+      permissionPage![0],
+      /setError\(err instanceof Error \? err\.message|setError\(String\(err\)\)/,
+      'Permission Center must not echo raw snapshot load errors into the visible alert',
     );
     assert.doesNotMatch(settings, /not_configured:\s*\{\s*label:\s*'未配置'/, 'capability not_configured must not use raw missing-configuration copy');
     assert.doesNotMatch(settings, /case\s+'missing':\s*return\s+'缺少必要配置'/, 'configuration missing must not use raw missing-field copy');
@@ -229,10 +239,20 @@ describe('Settings coming-soon cleanup contract', () => {
     assert.match(healthPage![0], /aria-label=\{`\$\{copy\.label\}健康信号`\}/, 'Health Center section aria labels should not mix English "signals" into Chinese UI');
     assert.match(healthSignalRow![0], /来源：\{HEALTH_SOURCE_LABEL\[signal\.source\]\}/, 'Health Center row should present localized source labels');
     assert.match(healthSignalRow![0], /读取：<RelativeTime/, 'Health Center row should present localized checked-time labels');
+    assert.match(
+      healthPage![0],
+      /setError\(settingsActionErrorMessage\(err\)\)/,
+      'Health Center snapshot load failures must use the shared sanitized Settings error copy',
+    );
     assert.doesNotMatch(
       healthPage![0],
       /接入后|落地后|即将|路线图|尚未实现|TODO|V0\.1|条 signal|阻塞 capability|settings 里|validation 层|agent 通路|memory contract/,
       'Health Center visible copy must not read like future roadmap, demo-stage, or implementation copy',
+    );
+    assert.doesNotMatch(
+      healthPage![0],
+      /setError\(err instanceof Error \? err\.message|setError\(String\(err\)\)/,
+      'Health Center must not echo raw snapshot load errors into the visible alert',
     );
     assert.doesNotMatch(
       healthSignalRow![0],

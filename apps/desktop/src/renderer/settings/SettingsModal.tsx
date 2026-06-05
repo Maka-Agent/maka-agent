@@ -5066,7 +5066,7 @@ function PermissionCenterPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : '读取权限快照失败');
+        setError(settingsActionErrorMessage(err));
         setLoading(false);
       });
     return () => {
@@ -5443,7 +5443,7 @@ function HealthCenterPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : '读取健康快照失败');
+        setError(settingsActionErrorMessage(err));
         setLoading(false);
       });
     return () => {
