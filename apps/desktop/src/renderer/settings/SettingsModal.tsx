@@ -1827,12 +1827,12 @@ function DataSettingsPage() {
       <SettingsRows>
         <SettingRow
           title="工作区路径"
-          detail="会话、设置、凭据和 Skill 文件都存在这个目录下。"
+          detail="会话、设置、凭据和技能文件都存在这个目录下。"
           value={info?.workspacePath ?? (infoError ? '载入失败' : '正在加载…')}
         />
         <SettingRow
           title="存储引擎"
-          detail="JSONL 会话、settings.json、SQLite 使用统计、safeStorage 加密的 API key。"
+          detail="会话记录、外观与账号设置、本地使用统计，以及系统安全存储加密的模型密钥。"
           value="本地文件"
         />
       </SettingsRows>
@@ -1857,7 +1857,7 @@ function DataSettingsPage() {
       </div>
       <div className="settingsNotice">
         本机数据保存在工作区。需要备份时先退出 Maka，再复制整个目录；恢复时替换同一路径后重启。
-        API key 使用系统 safeStorage 加密，跨设备恢复后需要重新测试连接。
+        模型密钥使用系统安全存储加密，跨设备恢复后需要重新测试连接。
       </div>
       {infoError && (
         <div className="settingsNotice" role="alert">

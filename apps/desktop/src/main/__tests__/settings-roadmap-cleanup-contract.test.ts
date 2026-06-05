@@ -108,7 +108,7 @@ describe('Settings coming-soon cleanup contract', () => {
 
     assert.ok(dataPage, 'Data settings page block must exist');
     assert.match(dataPage![0], /需要备份时先退出 Maka，再复制整个目录/, 'Data settings should give a current manual backup path');
-    assert.match(dataPage![0], /跨设备恢复后需要重新测试连接/, 'Data settings should explain safeStorage restore behavior');
+    assert.match(dataPage![0], /跨设备恢复后需要重新测试连接/, 'Data settings should explain encrypted credential restore behavior');
     assert.doesNotMatch(
       dataPage![0],
       /\.maka\.zip|schemaVersion|V0\.2|阶段开放|导入备份/,

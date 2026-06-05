@@ -60,11 +60,15 @@ describe('Settings app-info loading contract', () => {
     const dataBlock = blockBetween('function DataSettingsPage', 'function PersonalizationSettingsPage');
 
     assert.match(dataBlock, /打开工作区文件夹/);
-    assert.match(dataBlock, /会话、设置、凭据和 Skill 文件/);
-    assert.match(dataBlock, /SQLite 使用统计/);
+    assert.match(dataBlock, /会话、设置、凭据和技能文件/);
+    assert.match(dataBlock, /会话记录、外观与账号设置、本地使用统计，以及系统安全存储加密的模型密钥/);
+    assert.match(dataBlock, /模型密钥使用系统安全存储加密/);
     assert.doesNotMatch(dataBlock, /资源管理器/);
     assert.doesNotMatch(dataBlock, /credentials/);
     assert.doesNotMatch(dataBlock, /usage stats/);
+    assert.doesNotMatch(dataBlock, /settings\.json/);
+    assert.doesNotMatch(dataBlock, /safeStorage/);
+    assert.doesNotMatch(dataBlock, /API key/);
   });
 
   it('keeps About page privacy and storage copy Chinese-first and accessible', () => {
