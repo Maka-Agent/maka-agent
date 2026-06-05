@@ -120,7 +120,7 @@ import {
   applySensitivePatch,
   maskSensitive,
 } from '@maka/core/settings/network-settings';
-import { tryResult, type Result } from '@maka/core/settings/result';
+import { err, ok, tryResult, type Result } from '@maka/core/settings/result';
 import {
   AiSdkBackend,
   BackendRegistry,
@@ -806,6 +806,18 @@ function formatCodexSubscriptionHttpError(statusCode: number, detail: string): s
   return compact
     ? `Codex OAuth request failed: HTTP ${statusCode} ${compact}`
     : `Codex OAuth request failed: HTTP ${statusCode}`;
+}
+
+async function tryWeChatQrResult<T>(fn: () => Promise<T>, errorCode: string): Promise<Result<T>> {
+  try {
+    return ok(await fn());
+  } catch (error) {
+    return err(errorCode, weChatQrFailureMessage(error));
+  }
+}
+
+function weChatQrFailureMessage(error: unknown): string {
+  return generalizedErrorMessageChinese(error, '微信扫码登录暂时不可用，请稍后重试。');
 }
 
 function buildClaudeSubscriptionCloakedFetch(sessionId: string, modelId: string): typeof fetch {
@@ -2526,10 +2538,10 @@ function registerIpc(): void {
   // process owns the actual HTTP calls so the renderer never sees
   // raw response bodies.
   ipcMain.handle('settings:bots:wechat:fetchQrcode', () =>
-    tryResult(async () => fetchWeChatQrcode(), 'WECHAT_QR_FETCH_FAILED'),
+    tryWeChatQrResult(async () => fetchWeChatQrcode(), 'WECHAT_QR_FETCH_FAILED'),
   );
   ipcMain.handle('settings:bots:wechat:pollQrcodeStatus', (_event, qrToken: unknown) =>
-    tryResult(async () => {
+    tryWeChatQrResult(async () => {
       if (typeof qrToken !== 'string' || !qrToken) {
         throw new Error('qrToken must be a non-empty string');
       }

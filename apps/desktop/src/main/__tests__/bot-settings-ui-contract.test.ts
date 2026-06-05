@@ -82,6 +82,9 @@ describe('Bot settings UI contract', () => {
     assert.match(settings, /function WeChatScanLoginModal\b/, 'WeChat direct scan login must render its own QR modal');
     assert.match(settings, /window\.maka\.settings\.bots\.wechat\.fetchQrcode\(\)/, 'Direct scan login must fetch an iLink QR code through main');
     assert.match(settings, /window\.maka\.settings\.bots\.wechat\.pollQrcodeStatus\(qr\.qrToken\)/, 'Direct scan login must poll iLink status');
+    assert.match(settings, /setErrorMessage\(settingsActionErrorMessage\(result\.error\.message\)\)/, 'Direct scan login result failures must use the Settings error scrubber before rendering');
+    assert.doesNotMatch(settings, /setErrorMessage\(result\.error\.message\)/, 'Direct scan login must not render raw Result error messages');
+    assert.doesNotMatch(settings, /setErrorMessage\(error instanceof Error \? error\.message : String\(error\)\)/, 'Direct scan login thrown failures must not render raw Error.message');
     assert.match(settings, /token:\s*credentials\.botToken[\s\S]*webhookUrl:\s*credentials\.baseUrl[\s\S]*botUserId:\s*credentials\.botId/, 'Confirmed iLink credentials must be persisted into the WeChat channel');
     assert.match(settings, /function WechatQrLoginModal\b/, 'WeChat scan login must render its own QR modal');
     assert.match(settings, /window\.maka\.settings\.bots\.wechatQrCode\(\)/, 'QR modal must call the bridge QR IPC');
@@ -100,6 +103,9 @@ describe('Bot settings UI contract', () => {
     assert.match(main, /from '\.\/wechat-scan-login\.js'/, 'Electron ESM main import must include the emitted .js extension');
     assert.match(main, /settings:bots:wechat:fetchQrcode/, 'main process must expose direct WeChat QR fetch');
     assert.match(main, /settings:bots:wechat:pollQrcodeStatus/, 'main process must expose direct WeChat QR status polling');
+    assert.match(main, /function weChatQrFailureMessage\(error: unknown\): string \{[\s\S]*generalizedErrorMessageChinese\(error, '微信扫码登录暂时不可用，请稍后重试。'\)/, 'main QR IPC must localize scan-login failures before crossing into renderer');
+    assert.match(main, /settings:bots:wechat:fetchQrcode[\s\S]*tryWeChatQrResult\(async \(\) => fetchWeChatQrcode\(\), 'WECHAT_QR_FETCH_FAILED'\)/, 'QR fetch IPC must not expose raw iLink response-body errors');
+    assert.match(main, /settings:bots:wechat:pollQrcodeStatus[\s\S]*tryWeChatQrResult\(async \(\) => \{[\s\S]*pollWeChatQrcodeStatus\(qrToken\)/, 'QR status IPC must not expose raw iLink response-body errors');
     assert.match(main, /settings:bots:wechatQrCode/, 'main process must expose the WeChat QR IPC');
     assert.match(preload, /wechatQrCode\(\): Promise<WechatBridgeQrCodeResult>/, 'preload must expose the typed QR bridge');
     assert.match(preload, /fetchQrcode\(\): Promise<Result<\{ qrcodeUrl: string; qrToken: string \}>>/, 'preload must expose typed direct QR fetch');

@@ -417,14 +417,14 @@ function WeChatScanLoginModal(props: {
       const result = await window.maka.settings.bots.wechat.fetchQrcode();
       if (!result.ok) {
         setStatus('error');
-        setErrorMessage(result.error.message);
+        setErrorMessage(settingsActionErrorMessage(result.error.message));
         return;
       }
       setQr(result.data);
       setStatus('waiting');
     } catch (error) {
       setStatus('error');
-      setErrorMessage(error instanceof Error ? error.message : String(error));
+      setErrorMessage(settingsActionErrorMessage(error));
     }
   }
 
@@ -442,7 +442,7 @@ function WeChatScanLoginModal(props: {
         if (cancelled) return;
         if (!result.ok) {
           setStatus('error');
-          setErrorMessage(result.error.message);
+          setErrorMessage(settingsActionErrorMessage(result.error.message));
           return;
         }
         if (result.data.status === 'confirmed') {
@@ -454,7 +454,7 @@ function WeChatScanLoginModal(props: {
       } catch (error) {
         if (cancelled) return;
         setStatus('error');
-        setErrorMessage(error instanceof Error ? error.message : String(error));
+        setErrorMessage(settingsActionErrorMessage(error));
       }
     }, 2500);
     return () => {
