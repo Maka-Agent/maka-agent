@@ -2974,6 +2974,33 @@ button:active {
   z-index: 1;
 }
 
+/* PR-CHAT-MAIN-REDESIGN-0: a very subtle grain overlay over the
+   chat surface. Replaces pure flat color with a touch of organic
+   texture (the "high-end design" trick to defeat the sterile
+   AI-app feel). Opacity is intentionally low — visible at 200%
+   zoom in DevTools, ambient at 100%. SVG-as-data-URL so we don't
+   ship a binary asset. */
+.maka-chat-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.8 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-repeat: repeat;
+  mix-blend-mode: overlay;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Grain on a static surface isn't motion, but users who opt out
+     of motion often also prefer flat surfaces for legibility —
+     respect that by removing the texture entirely. */
+  .maka-chat-shell::after {
+    display: none;
+  }
+}
+
 /* Wraps the scroll surface so the jump-to-bottom button can be absolutely
    positioned over the chat without escaping the column. */
 .maka-chat-shell {
@@ -3633,7 +3660,12 @@ button:active {
   gap: 6px;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  /* PR-CHAT-MAIN-REDESIGN-0: tightened tracking. The previous
+     0.02em positive tracking + uppercase-feel font-weight read as
+     "label small-caps" which is fine for buttons but feels heavy
+     for a per-turn meta. -0.005em pulls characters together just
+     enough to register as a refined inline annotation. */
+  letter-spacing: -0.005em;
   color: var(--foreground-60);
 }
 
@@ -3643,12 +3675,20 @@ button:active {
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 50%;
+  /* PR-CHAT-MAIN-REDESIGN-0: replace the generic-AI perfect circle
+     with a squircle. 30% radius reads as "rounded square" rather
+     than "circle" — softer than a hard rectangle, distinctive vs
+     the default Slack/Discord avatar pattern. */
+  border-radius: 30%;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0;
   user-select: none;
   flex-shrink: 0;
+  /* Subtle inner highlight so the badge feels lit from above
+     instead of perfectly flat — pairs with the colored shadows
+     elsewhere in the theme. */
+  box-shadow: inset 0 1px 0 oklch(from currentColor l c h / 0.18);
 }
 
 .maka-message-avatar[data-role="user"] {
@@ -4173,7 +4213,26 @@ button:active {
 
 .composer .maka-composer-inner {
   padding: 10px 12px;
-  box-shadow: var(--shadow-medium);
+  /* PR-CHAT-MAIN-REDESIGN-0: add a hair-line inset highlight on the
+     top edge so the composer card reads as a lifted surface, not a
+     flat box. The colored shadow underneath inherits via theme
+     tokens; the inset white-on-light / black-on-dark mix is built
+     from `color-mix` so it stays subtle in either density and any
+     palette. */
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, var(--foreground) 5%, transparent),
+    var(--shadow-medium);
+}
+
+.composer .maka-composer-inner:focus-within {
+  /* When the textarea is focused, the existing :focus-within ring
+     comes from the wrapper. Compound with a tighter shadow so the
+     composer literally lifts a hair under focus — small
+     interaction polish, no functional change. */
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, var(--foreground) 8%, transparent),
+    var(--shadow-medium),
+    0 0 0 3px oklch(from var(--accent) l c h / 0.10);
 }
 
 .composer textarea {
