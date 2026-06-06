@@ -4705,9 +4705,12 @@ function useClipboardCopyFeedback(resetDelay = 1400, options: { redact?: boolean
     resetTimerRef.current = null;
   }
 
-  useEffect(() => () => {
-    copyMountedRef.current = false;
-    clearResetTimer();
+  useEffect(() => {
+    copyMountedRef.current = true;
+    return () => {
+      copyMountedRef.current = false;
+      clearResetTimer();
+    };
   }, []);
 
   function settle(key: string, phase: Exclude<ClipboardCopyPhase, 'pending'>) {
@@ -4759,9 +4762,12 @@ function TurnFooterActions(props: {
     copyResetTimerRef.current = null;
   }
 
-  useEffect(() => () => {
-    copyMountedRef.current = false;
-    clearCopyResetTimer();
+  useEffect(() => {
+    copyMountedRef.current = true;
+    return () => {
+      copyMountedRef.current = false;
+      clearCopyResetTimer();
+    };
   }, []);
 
   function settleCopy(phase: Exclude<ClipboardCopyPhase, 'pending'>) {

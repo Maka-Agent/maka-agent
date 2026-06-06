@@ -365,8 +365,8 @@ describe('turn footer copy feedback contract', () => {
     assert.match(hookBlock, /const copyMountedRef = useRef\(true\)/, 'Shared copy feedback must track mounted state.');
     assert.match(
       hookBlock,
-      /useEffect\(\(\) => \(\) => \{\s*copyMountedRef\.current = false;\s*clearResetTimer\(\);\s*\}, \[\]\)/,
-      'Shared copy feedback must cancel timers and mark itself unmounted during cleanup.',
+      /useEffect\(\(\) => \{\s*copyMountedRef\.current = true;\s*return \(\) => \{\s*copyMountedRef\.current = false;\s*clearResetTimer\(\);\s*\};\s*\}, \[\]\)/,
+      'Shared copy feedback must restore mounted state during StrictMode effect replay, then cancel timers and mark itself unmounted during cleanup.',
     );
     assert.match(
       hookBlock,
@@ -383,6 +383,11 @@ describe('turn footer copy feedback contract', () => {
       /useEffect\(\(\) => clearResetTimer, \[\]\)/,
       'Cleanup that only clears the current timer is insufficient because clipboard settlement can happen after unmount.',
     );
+    assert.doesNotMatch(
+      hookBlock,
+      /useEffect\(\(\) => \(\) => \{\s*copyMountedRef\.current = false;/,
+      'A cleanup-only mounted guard breaks React StrictMode effect replay because the ref stays false while the component is still mounted.',
+    );
   });
 
   it('gates the inline footer copy action instead of silently firing raw clipboard writes', async () => {
@@ -393,6 +398,11 @@ describe('turn footer copy feedback contract', () => {
     assert.match(footerBlock, /const \[copyPhase, setCopyPhase\]/, 'Turn footer copy should track visible copy state.');
     assert.match(footerBlock, /copyPendingRef/, 'Turn footer copy should gate duplicate clipboard writes.');
     assert.match(footerBlock, /copyResetTimerRef/, 'Turn footer copy feedback should reset without leaking timers.');
+    assert.match(
+      footerBlock,
+      /useEffect\(\(\) => \{\s*copyMountedRef\.current = true;\s*return \(\) => \{\s*copyMountedRef\.current = false;\s*clearCopyResetTimer\(\);\s*\};\s*\}, \[\]\)/,
+      'Turn footer copy feedback must restore mounted state during StrictMode effect replay, then clear timers on cleanup.',
+    );
     assert.match(
       footerBlock,
       /await navigator\.clipboard\.writeText\(props\.assistantText\)/,
