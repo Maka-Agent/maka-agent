@@ -350,6 +350,7 @@ describe('permission response IPC boundary', () => {
       /async function refreshMessagesUntilTurn\(sessionId: string, turnId: string\): Promise<void> \{[\s\S]*?\n  \}/,
     )?.[0] ?? '';
 
+    assert.match(sendBlock, /const initialSessionId = activeIdRef\.current;/);
     assert.match(sendBlock, /const turnId = crypto\.randomUUID\(\)/);
     assert.match(
       newSessionBranch,
@@ -375,6 +376,16 @@ describe('permission response IPC boundary', () => {
       sendBlock,
       /catch \(error\) \{[\s\S]*removeOptimisticUserMessage\(optimisticSessionId, optimisticTurnId\)[\s\S]*toastApi\.error\('发送失败'/,
       'send readiness failures must remove the optimistic user turn instead of leaving a fake message behind',
+    );
+    assert.match(
+      sendBlock,
+      /const feedbackSessionId = optimisticSessionId \?\? initialSessionId;[\s\S]*const sendStillOwnsCurrentSurface = feedbackSessionId[\s\S]*activeIdRef\.current === feedbackSessionId[\s\S]*activeIdRef\.current === initialSessionId;[\s\S]*if \(!sendStillOwnsCurrentSurface\) return false;/,
+      'send failure feedback must not toast or open setup from a stale session after the user switches chats',
+    );
+    assert.match(
+      sendBlock,
+      /if \(!sendStillOwnsCurrentSurface\) return false;[\s\S]*if \(isNoRealConnectionError\(error\)\) \{[\s\S]*showModelSetupToast[\s\S]*\} else \{[\s\S]*toastApi\.error\('发送失败'/,
+      'both model-setup feedback and generic send-failure toast must be guarded by the active-session owner check',
     );
     assert.match(
       refreshUntilTurn,

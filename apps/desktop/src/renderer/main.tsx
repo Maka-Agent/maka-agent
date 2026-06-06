@@ -1641,6 +1641,7 @@ function AppShell() {
   }
 
   async function send(text: string): Promise<boolean> {
+    const initialSessionId = activeIdRef.current;
     let optimisticSessionId: string | undefined;
     let optimisticTurnId: string | undefined;
     try {
@@ -1672,6 +1673,11 @@ function AppShell() {
       if (optimisticSessionId && optimisticTurnId) {
         removeOptimisticUserMessage(optimisticSessionId, optimisticTurnId);
       }
+      const feedbackSessionId = optimisticSessionId ?? initialSessionId;
+      const sendStillOwnsCurrentSurface = feedbackSessionId
+        ? activeIdRef.current === feedbackSessionId
+        : activeIdRef.current === initialSessionId;
+      if (!sendStillOwnsCurrentSurface) return false;
       if (isNoRealConnectionError(error)) {
         showModelSetupToast(cleanErrorMessage(error), noRealConnectionReasonFromError(error));
       } else {
