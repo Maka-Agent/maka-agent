@@ -36,11 +36,11 @@ describe('Bot restart flow contract (PR-BOT-RESTART-RACE-0)', () => {
     // restart catch must pass through the shared Settings scrubber:
     // it classifies common failures, redacts secrets, and falls
     // back to generic copy for empty / unsafe messages.
-    const restartCatch = src.match(/async function restartChannel\(\)[\s\S]*?\n  \}/);
-    assert.ok(restartCatch, 'restartChannel must exist');
+    const restartCatch = src.match(/async function restartBotProvider\(provider: BotProvider\)[\s\S]*?\n  \}/);
+    assert.ok(restartCatch, 'restartBotProvider must exist');
     assert.match(
       restartCatch[0],
-      /const message = settingsActionErrorMessage\(error\);[\s\S]*toast\.error\(`\$\{BOT_LABELS\[selected\]\.label\} 启动失败`, message\)/,
+      /const message = settingsActionErrorMessage\(error\);[\s\S]*toast\.error\(`\$\{BOT_LABELS\[provider\]\.label\} 启动失败`, message\)/,
       'restart catch must classify, redact, and fall back through settingsActionErrorMessage',
     );
     assert.doesNotMatch(

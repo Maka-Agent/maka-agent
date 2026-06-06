@@ -4305,9 +4305,11 @@ function BotChatSettingsPage(props: {
   onUpdate(patch: Parameters<typeof window.maka.settings.update>[0]): Promise<UpdateAppSettingsResult>;
   onReload(): Promise<void>;
 }) {
+  type BotPendingActionName = 'test' | 'connect' | 'restart' | 'disconnect';
+  type BotPendingAction = { provider: BotProvider; action: BotPendingActionName };
+
   const [selected, setSelected] = useState<BotProvider>('telegram');
-  const [testing, setTesting] = useState(false);
-  const [restarting, setRestarting] = useState(false);
+  const [pendingBotAction, setPendingBotAction] = useState<BotPendingAction | null>(null);
   const [scanLoginOpen, setScanLoginOpen] = useState(false);
   const [wechatQrOpen, setWechatQrOpen] = useState(false);
   const [statuses, setStatuses] = useState<Record<BotProvider, BotStatus> | null>(null);
@@ -4315,15 +4317,39 @@ function BotChatSettingsPage(props: {
   const channel = props.settings.botChat.channels[selected];
   const toast = useToast();
   const selectedStatus = statuses?.[selected];
+  const pendingBotActionRef = useRef<BotPendingAction | null>(null);
+  const botActionBusy = pendingBotAction !== null;
+  const selectedBotActionPending = pendingBotAction?.provider === selected ? pendingBotAction.action : null;
+  const testing = selectedBotActionPending === 'test' || selectedBotActionPending === 'connect';
+  const restarting = selectedBotActionPending === 'restart';
 
-  async function updateChannel(patch: Partial<typeof channel>): Promise<boolean> {
+  function beginBotAction(provider: BotProvider, action: BotPendingActionName): boolean {
+    if (pendingBotActionRef.current !== null) return false;
+    const next = { provider, action };
+    pendingBotActionRef.current = next;
+    setPendingBotAction(next);
+    return true;
+  }
+
+  function finishBotAction(provider: BotProvider, action: BotPendingActionName) {
+    const current = pendingBotActionRef.current;
+    if (!current || current.provider !== provider || current.action !== action) return;
+    pendingBotActionRef.current = null;
+    setPendingBotAction(null);
+  }
+
+  async function updateChannelFor(provider: BotProvider, patch: Partial<typeof channel>): Promise<boolean> {
     try {
-      await props.onUpdate({ botChat: { channels: { [selected]: patch } } });
+      await props.onUpdate({ botChat: { channels: { [provider]: patch } } });
       return true;
     } catch (error) {
-      toast.error(`${BOT_LABELS[selected].label} 保存失败`, settingsActionErrorMessage(error));
+      toast.error(`${BOT_LABELS[provider].label} 保存失败`, settingsActionErrorMessage(error));
       return false;
     }
+  }
+
+  async function updateChannel(patch: Partial<typeof channel>): Promise<boolean> {
+    return updateChannelFor(selected, patch);
   }
 
   useEffect(() => {
@@ -4352,10 +4378,11 @@ function BotChatSettingsPage(props: {
   }, []);
 
   async function testChannel() {
-    setTesting(true);
+    const provider = selected;
+    if (!beginBotAction(provider, 'test')) return;
     try {
-      const result = await window.maka.settings.testBotChannel(selected);
-      const platform = BOT_LABELS[selected].label;
+      const result = await window.maka.settings.testBotChannel(provider);
+      const platform = BOT_LABELS[provider].label;
       if (result.ok) {
         // PR-BOT-CHAT-POLISH-0: title now matches kenji boundary 2's
         // 5-state readiness chain — a successful test PROVES
@@ -4368,9 +4395,9 @@ function BotChatSettingsPage(props: {
       }
       await refreshBotStatuses();
     } catch (error) {
-      toast.error(`${BOT_LABELS[selected].label} 测试出错`, settingsActionErrorMessage(error));
+      toast.error(`${BOT_LABELS[provider].label} 测试出错`, settingsActionErrorMessage(error));
     } finally {
-      setTesting(false);
+      finishBotAction(provider, 'test');
     }
   }
 
@@ -4382,11 +4409,14 @@ function BotChatSettingsPage(props: {
    * flip the toggle, so the user can fix the credentials and retry.
    */
   async function testAndConnect() {
-    setTesting(true);
+    const provider = selected;
+    const providerChannel = props.settings.botChat.channels[provider];
+    const providerSupport = BOT_LABELS[provider].support;
+    if (!beginBotAction(provider, 'connect')) return;
     let testOk = false;
     try {
-      const result = await window.maka.settings.testBotChannel(selected);
-      const platform = BOT_LABELS[selected].label;
+      const result = await window.maka.settings.testBotChannel(provider);
+      const platform = BOT_LABELS[provider].label;
       testOk = result.ok;
       if (result.ok) {
         toast.success(`${platform} 凭据已验证`, result.message);
@@ -4395,22 +4425,25 @@ function BotChatSettingsPage(props: {
       }
       await refreshBotStatuses();
     } catch (error) {
-      toast.error(`${BOT_LABELS[selected].label} 测试出错`, settingsActionErrorMessage(error));
+      toast.error(`${BOT_LABELS[provider].label} 测试出错`, settingsActionErrorMessage(error));
+      finishBotAction(provider, 'connect');
+      return;
+    }
+    try {
+      if (!testOk || providerSupport !== 'runtime') return;
+      if (!providerChannel.enabled) {
+        const saved = await updateChannelFor(provider, { enabled: true });
+        if (!saved) return;
+      }
+      await restartBotProvider(provider);
     } finally {
-      setTesting(false);
+      finishBotAction(provider, 'connect');
     }
-    if (!testOk || support !== 'runtime') return;
-    if (!channel.enabled) {
-      const saved = await updateChannel({ enabled: true });
-      if (!saved) return;
-    }
-    await restartChannel();
   }
 
-  async function restartChannel() {
-    setRestarting(true);
+  async function restartBotProvider(provider: BotProvider): Promise<boolean> {
     try {
-      const status = await window.maka.settings.bots.restart(selected);
+      const status = await window.maka.settings.bots.restart(provider);
       setStatuses((current) => ({
         ...(current ?? ({} as Record<BotProvider, BotStatus>)),
         [status.platform]: status,
@@ -4419,17 +4452,27 @@ function BotChatSettingsPage(props: {
       // the bare fact that the restart command returned. A restarted
       // bot that immediately stops (e.g. token rejected, network
       // down) was previously surfaced as a green success toast.
-      const platform = BOT_LABELS[selected].label;
+      const platform = BOT_LABELS[provider].label;
       if (status.running) {
         toast.success(`${platform} 已开始监听`, botStatusDetail(status));
       } else {
         toast.error(`${platform} 启动后未进入监听`, botStatusDetail(status));
       }
+      return status.running;
     } catch (error) {
       const message = settingsActionErrorMessage(error);
-      toast.error(`${BOT_LABELS[selected].label} 启动失败`, message);
+      toast.error(`${BOT_LABELS[provider].label} 启动失败`, message);
+      return false;
+    }
+  }
+
+  async function restartChannel() {
+    const provider = selected;
+    if (!beginBotAction(provider, 'restart')) return;
+    try {
+      await restartBotProvider(provider);
     } finally {
-      setRestarting(false);
+      finishBotAction(provider, 'restart');
     }
   }
 
@@ -4449,28 +4492,35 @@ function BotChatSettingsPage(props: {
   }
 
   async function disconnectWechatLogin() {
-    const ok = await toast.confirm({
-      title: '断开微信登录？',
-      description: '将清除本机保存的扫码登录凭据，之后需要重新扫码才能继续使用微信机器人。',
-      confirmLabel: '断开登录',
-      cancelLabel: '取消',
-      destructive: true,
-    });
-    if (!ok) return;
-    const isIlink = channel.webhookUrl?.trim().startsWith('https://ilinkai.weixin.qq.com') ?? false;
-    const saved = await updateChannel({
-      token: '',
-      ...(isIlink ? { webhookUrl: '' } : {}),
-      botUserId: undefined,
-      connected: false,
-      readiness: 'scaffolded',
-      readinessReason: undefined,
-      readinessUpdatedAt: Date.now(),
-      lastError: undefined,
-    });
-    if (!saved) return;
-    await refreshBotStatuses();
-    toast.success('微信登录已断开', '本机扫码登录凭据已清除。');
+    const provider = selected;
+    const providerChannel = props.settings.botChat.channels[provider];
+    if (!beginBotAction(provider, 'disconnect')) return;
+    try {
+      const ok = await toast.confirm({
+        title: '断开微信登录？',
+        description: '将清除本机保存的扫码登录凭据，之后需要重新扫码才能继续使用微信机器人。',
+        confirmLabel: '断开登录',
+        cancelLabel: '取消',
+        destructive: true,
+      });
+      if (!ok) return;
+      const isIlink = providerChannel.webhookUrl?.trim().startsWith('https://ilinkai.weixin.qq.com') ?? false;
+      const saved = await updateChannelFor(provider, {
+        token: '',
+        ...(isIlink ? { webhookUrl: '' } : {}),
+        botUserId: undefined,
+        connected: false,
+        readiness: 'scaffolded',
+        readinessReason: undefined,
+        readinessUpdatedAt: Date.now(),
+        lastError: undefined,
+      });
+      if (!saved) return;
+      await refreshBotStatuses();
+      toast.success('微信登录已断开', '本机扫码登录凭据已清除。');
+    } finally {
+      finishBotAction(provider, 'disconnect');
+    }
   }
 
   const support = BOT_LABELS[selected].support;
@@ -4513,6 +4563,7 @@ function BotChatSettingsPage(props: {
               data-active={selected === provider}
               data-support={providerSupport}
               aria-current={selected === provider ? 'page' : undefined}
+              disabled={botActionBusy}
               onClick={() => {
                 setSelected(provider);
               }}
@@ -4566,7 +4617,7 @@ function BotChatSettingsPage(props: {
             ariaDescribedBy={enableSwitchHint ? enableSwitchHintId : undefined}
             checked={channel.enabled}
             onChange={(enabled) => updateChannel({ enabled })}
-            disabled={enableSwitchDisabled}
+            disabled={enableSwitchDisabled || botActionBusy}
           />
         </div>
 
@@ -4777,6 +4828,7 @@ function BotChatSettingsPage(props: {
               <button
                 className="settingsBotAction"
                 type="button"
+                disabled={botActionBusy}
                 onClick={() => setScanLoginOpen(true)}
               >
                 扫码登录
@@ -4785,14 +4837,16 @@ function BotChatSettingsPage(props: {
                 <button
                   className="settingsBotAction"
                   type="button"
+                  disabled={botActionBusy}
                   onClick={() => void disconnectWechatLogin()}
                 >
-                  断开微信登录
+                  {selectedBotActionPending === 'disconnect' ? '断开中…' : '断开微信登录'}
                 </button>
               )}
               <button
                 className="settingsBotAction"
                 type="button"
+                disabled={botActionBusy}
                 onClick={() => setWechatQrOpen(true)}
               >
                 本机桥接二维码
@@ -4800,24 +4854,24 @@ function BotChatSettingsPage(props: {
               <button
                 className="settingsBotAction"
                 type="button"
-                disabled={testing}
+                disabled={botActionBusy}
                 onClick={testChannel}
               >
-                {testing ? '测试中…' : '测试连接'}
+                {selectedBotActionPending === 'test' ? '测试中…' : '测试连接'}
               </button>
             </>
           ) : support === 'runtime' && !selectedStatus?.running ? (
             <button
               className="settingsBotAction"
               type="button"
-              disabled={testing || restarting}
+              disabled={botActionBusy}
               onClick={testAndConnect}
             >
-              {testing ? '测试中…' : restarting ? '启动中…' : '测试并连接'}
+              {selectedBotActionPending === 'connect' ? '连接中…' : '测试并连接'}
             </button>
           ) : (
-            <button className="settingsBotAction" type="button" disabled={testing || support === 'planned'} onClick={testChannel}>
-              {testing ? '测试中…' : support === 'runtime' ? '测试连接' : '测试并连接'}
+            <button className="settingsBotAction" type="button" disabled={botActionBusy || support === 'planned'} onClick={testChannel}>
+              {selectedBotActionPending === 'test' ? '测试中…' : support === 'runtime' ? '测试连接' : '测试并连接'}
             </button>
           )}
           {/* PR-BOT-RESTART-RACE-0: keep the restart button mounted
@@ -4828,7 +4882,7 @@ function BotChatSettingsPage(props: {
               button unmounts mid-click and the user sees no
               resolution feedback. */}
           {support === 'runtime' && (selectedStatus?.running || restarting) && selected !== 'wechat' && (
-            <button className="settingsBotAction" type="button" disabled={restarting} onClick={restartChannel}>
+            <button className="settingsBotAction" type="button" disabled={botActionBusy} onClick={restartChannel}>
               {restarting ? '重启中…' : '重启监听'}
             </button>
           )}
