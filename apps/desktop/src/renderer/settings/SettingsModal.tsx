@@ -2339,12 +2339,28 @@ function WebSearchSettingsPage(props: {
   const credentialSource = tavily.credentialSource;
   const usingEnvKey = credentialSource === 'env';
   const [draftKey, setDraftKey] = useState('');
+  const [pendingCredentialAction, setPendingCredentialAction] = useState<'save' | 'clear' | null>(null);
   const [testing, setTesting] = useState(false);
   const [liveQuery, setLiveQuery] = useState('');
   const [liveQueryRunning, setLiveQueryRunning] = useState(false);
   const [liveQueryResults, setLiveQueryResults] = useState<readonly { title: string; url: string; snippet: string; source: string }[] | null>(null);
   const [liveQueryError, setLiveQueryError] = useState<string | null>(null);
+  const pendingCredentialActionRef = useRef<'save' | 'clear' | null>(null);
+  const testingRef = useRef(false);
+  const liveQueryRunningRef = useRef(false);
   const toast = useToast();
+
+  async function runCredentialAction(action: 'save' | 'clear', run: () => Promise<void>) {
+    if (pendingCredentialActionRef.current !== null || testingRef.current) return;
+    pendingCredentialActionRef.current = action;
+    setPendingCredentialAction(action);
+    try {
+      await run();
+    } finally {
+      pendingCredentialActionRef.current = null;
+      setPendingCredentialAction(null);
+    }
+  }
 
   async function updateWebSearch(
     patch: NonNullable<Parameters<typeof window.maka.settings.update>[0]['webSearch']>,
@@ -2380,20 +2396,26 @@ function WebSearchSettingsPage(props: {
 
   async function saveDraftKey() {
     if (usingEnvKey || draftKey.length === 0) return;
-    const saved = await updateWebSearch({ providers: { tavily: { apiKey: draftKey } } });
-    if (!saved) return;
-    setDraftKey('');
-    toast.success('已保存 Tavily API key', '可点击「测试」做一次真实请求验证。');
+    await runCredentialAction('save', async () => {
+      const saved = await updateWebSearch({ providers: { tavily: { apiKey: draftKey } } });
+      if (!saved) return;
+      setDraftKey('');
+      toast.success('已保存 Tavily API key', '可点击「测试」做一次真实请求验证。');
+    });
   }
 
   async function clearKey() {
-    const saved = await updateWebSearch({ enabled: false, providers: { tavily: { apiKey: '' } } });
-    if (!saved) return;
-    setDraftKey('');
-    toast.success('已清空 Tavily 凭据', '联网搜索已自动关闭。');
+    await runCredentialAction('clear', async () => {
+      const saved = await updateWebSearch({ enabled: false, providers: { tavily: { apiKey: '' } } });
+      if (!saved) return;
+      setDraftKey('');
+      toast.success('已清空 Tavily 凭据', '联网搜索已自动关闭。');
+    });
   }
 
   async function runTest() {
+    if (testingRef.current || pendingCredentialActionRef.current !== null) return;
+    testingRef.current = true;
     setTesting(true);
     const usesDraftKey = draftKey.trim().length > 0;
     const testedCredentialVersion = tavily.credentialVersion;
@@ -2413,13 +2435,16 @@ function WebSearchSettingsPage(props: {
     } catch (err) {
       toast.error('Tavily 测试出错', settingsActionErrorMessage(err));
     } finally {
+      testingRef.current = false;
       setTesting(false);
     }
   }
 
   async function runLiveQuery() {
+    if (liveQueryRunningRef.current) return;
     const trimmed = liveQuery.trim();
     if (trimmed.length === 0) return;
+    liveQueryRunningRef.current = true;
     setLiveQueryRunning(true);
     setLiveQueryError(null);
     setLiveQueryResults(null);
@@ -2444,6 +2469,7 @@ function WebSearchSettingsPage(props: {
     } catch (err) {
       setLiveQueryError(settingsActionErrorMessage(err));
     } finally {
+      liveQueryRunningRef.current = false;
       setLiveQueryRunning(false);
     }
   }
@@ -2464,6 +2490,7 @@ function WebSearchSettingsPage(props: {
     ? Date.parse(tavily.credentialCheckedAt)
     : Number.NaN;
   const hasCheckedAt = Number.isFinite(checkedAtMs);
+  const credentialActionBusy = pendingCredentialAction !== null || testing;
 
   return (
     <div className="settingsStructuredPage">
@@ -2497,7 +2524,7 @@ function WebSearchSettingsPage(props: {
           <PasswordInput
             value={draftKey}
             onChange={setDraftKey}
-            disabled={usingEnvKey}
+            disabled={usingEnvKey || credentialActionBusy}
             placeholder={usingEnvKey ? '由环境变量提供' : hasStoredKey ? '已保存（输入新 key 可替换）' : 'tvly-xxxxxxxx'}
             ariaLabel="Tavily API key"
           />
@@ -2513,15 +2540,15 @@ function WebSearchSettingsPage(props: {
         <button
           type="button"
           className="maka-button"
-          disabled={usingEnvKey || draftKey.length === 0}
+          disabled={credentialActionBusy || usingEnvKey || draftKey.length === 0}
           onClick={() => void saveDraftKey()}
         >
-          保存 key
+          {pendingCredentialAction === 'save' ? '保存中…' : '保存 key'}
         </button>
         <button
           type="button"
           className="maka-button maka-button-ghost"
-          disabled={testing || (draftKey.length === 0 && !hasUsableKey)}
+          disabled={credentialActionBusy || (draftKey.length === 0 && !hasUsableKey)}
           onClick={() => void runTest()}
         >
           {testing ? '测试中…' : '测试凭据'}
@@ -2530,9 +2557,10 @@ function WebSearchSettingsPage(props: {
           <button
             type="button"
             className="maka-button maka-button-ghost"
+            disabled={credentialActionBusy}
             onClick={() => void clearKey()}
           >
-            清空 key
+            {pendingCredentialAction === 'clear' ? '清空中…' : '清空 key'}
           </button>
         )}
       </div>

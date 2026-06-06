@@ -156,6 +156,40 @@ describe('web-search renderer boundary (PR-WEB-SEARCH-TAVILY-0)', () => {
     );
   });
 
+  it('Settings gates web-search credential actions and live query with visible pending feedback', async () => {
+    const settings = await readFile(join(REPO_ROOT, 'apps/desktop/src/renderer/settings/SettingsModal.tsx'), 'utf8');
+    const page = settings.match(/function WebSearchSettingsPage[\s\S]*?function webSearchQueryDisabledReason/);
+
+    assert.ok(page, 'Web search settings page block must exist');
+    assert.match(page![0], /const \[pendingCredentialAction, setPendingCredentialAction\] = useState<'save' \| 'clear' \| null>\(null\)/);
+    assert.match(page![0], /const pendingCredentialActionRef = useRef<'save' \| 'clear' \| null>\(null\)/);
+    assert.match(page![0], /const testingRef = useRef\(false\)/);
+    assert.match(page![0], /const liveQueryRunningRef = useRef\(false\)/);
+    assert.match(
+      page![0],
+      /async function runCredentialAction\([\s\S]*if \(pendingCredentialActionRef\.current !== null \|\| testingRef\.current\) return;[\s\S]*pendingCredentialActionRef\.current = action;[\s\S]*setPendingCredentialAction\(action\);[\s\S]*await run\(\);[\s\S]*pendingCredentialActionRef\.current = null;[\s\S]*setPendingCredentialAction\(null\);/,
+      'Saving or clearing Tavily credentials must reject duplicate clicks synchronously and expose pending state.',
+    );
+    assert.match(page![0], /runCredentialAction\('save', async \(\) => \{/);
+    assert.match(page![0], /runCredentialAction\('clear', async \(\) => \{/);
+    assert.match(
+      page![0],
+      /if \(testingRef\.current \|\| pendingCredentialActionRef\.current !== null\) return;[\s\S]*testingRef\.current = true;[\s\S]*setTesting\(true\);[\s\S]*testingRef\.current = false;[\s\S]*setTesting\(false\);/,
+      'Credential tests must also have a ref-backed duplicate-click guard.',
+    );
+    assert.match(
+      page![0],
+      /if \(liveQueryRunningRef\.current\) return;[\s\S]*liveQueryRunningRef\.current = true;[\s\S]*setLiveQueryRunning\(true\);[\s\S]*liveQueryRunningRef\.current = false;[\s\S]*setLiveQueryRunning\(false\);/,
+      'Live query verification must have a ref-backed duplicate-submit guard.',
+    );
+    assert.match(page![0], /const credentialActionBusy = pendingCredentialAction !== null \|\| testing/);
+    assert.match(page![0], /disabled=\{usingEnvKey \|\| credentialActionBusy\}/, 'Credential input should freeze while save, clear, or test is pending.');
+    assert.match(page![0], /disabled=\{credentialActionBusy \|\| usingEnvKey \|\| draftKey\.length === 0\}/);
+    assert.match(page![0], /pendingCredentialAction === 'save' \? '保存中…' : '保存 key'/);
+    assert.match(page![0], /disabled=\{credentialActionBusy \|\| \(draftKey\.length === 0 && !hasUsableKey\)\}/);
+    assert.match(page![0], /disabled=\{credentialActionBusy\}[\s\S]*pendingCredentialAction === 'clear' \? '清空中…' : '清空 key'/);
+  });
+
   it('Settings web-search thrown errors pass through the shared Settings scrubber', async () => {
     const settings = await readFile(join(REPO_ROOT, 'apps/desktop/src/renderer/settings/SettingsModal.tsx'), 'utf8');
     const page = settings.match(/function WebSearchSettingsPage[\s\S]*?function webSearchQueryDisabledReason/);
@@ -215,7 +249,7 @@ describe('web-search renderer boundary (PR-WEB-SEARCH-TAVILY-0)', () => {
     assert.match(page![0], /const usingEnvKey = credentialSource === 'env'/);
     assert.match(page![0], /由环境变量提供/);
     assert.match(page![0], /TAVILY_API_KEY \/ MAKA_TAVILY_API_KEY/);
-    assert.match(page![0], /disabled=\{usingEnvKey\}/);
+    assert.match(page![0], /disabled=\{usingEnvKey \|\| credentialActionBusy\}/);
     assert.doesNotMatch(page![0], /process\.env|TAVILY_API_KEY[\s\S]{0,40}apiKey/);
   });
 
