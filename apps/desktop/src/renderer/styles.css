@@ -1100,6 +1100,22 @@ button:active {
   box-shadow: 0 0 0 3px oklch(from var(--destructive) l c h / 0.18);
 }
 
+.maka-list-row-action:disabled,
+.maka-list-row-action:disabled:hover,
+.maka-list-row-action:disabled:focus-visible {
+  color: var(--foreground-45);
+  background: transparent;
+  box-shadow: none;
+  cursor: default;
+}
+
+.maka-list-row-action[data-pending="true"] {
+  color: var(--foreground);
+  background: var(--foreground-5);
+  cursor: progress;
+  opacity: 0.78;
+}
+
 .maka-list-row-rename-input {
   width: 100%;
   border: 0;

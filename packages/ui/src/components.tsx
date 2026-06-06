@@ -277,16 +277,18 @@ type PlanReminderUpdatePatch = {
   enabled?: boolean;
 };
 
+type SessionRowActionId = 'flag' | 'archive' | 'rename' | 'delete';
+
 export interface SessionRowActions {
   /** Flag (pin) state toggle. */
-  onToggleFlag(sessionId: string, next: boolean): void;
+  onToggleFlag(sessionId: string, next: boolean): void | Promise<void>;
   /** Move to / out of the archive bucket. */
-  onArchive(sessionId: string): void;
-  onUnarchive(sessionId: string): void;
+  onArchive(sessionId: string): void | Promise<void>;
+  onUnarchive(sessionId: string): void | Promise<void>;
   /** Rename via inline prompt. Receives the new (trimmed) name. */
-  onRename(sessionId: string, name: string): void;
+  onRename(sessionId: string, name: string): void | Promise<void>;
   /** Permanent removal — caller is responsible for the confirm gate. */
-  onDelete(sessionId: string): void;
+  onDelete(sessionId: string): void | Promise<void>;
 }
 
 export function SessionListPanel(props: {
@@ -405,7 +407,7 @@ export function SessionListPanel(props: {
       const sessionId = row?.querySelector<HTMLButtonElement>('.maka-list-row-main')?.dataset.sessionId;
       if (sessionId && props.rowActions) {
         event.preventDefault();
-        props.rowActions.onDelete(sessionId);
+        void props.rowActions.onDelete(sessionId);
       }
       return;
     }
@@ -2664,7 +2666,10 @@ function SessionRow(props: {
   const { session, active, streaming, stale, actions, onSelect } = props;
   const [editing, setEditing] = useState(false);
   const [actionsVisible, setActionsVisible] = useState(false);
+  const [pendingAction, setPendingAction] = useState<SessionRowActionId | null>(null);
+  const pendingActionRef = useRef<SessionRowActionId | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const actionBusy = pendingAction !== null;
   const actionTabIndex = actionsVisible ? 0 : -1;
 
   // Auto-focus + select-all when the row enters edit mode so the user can
@@ -2683,15 +2688,26 @@ function SessionRow(props: {
 
   function startRename(event: MouseEvent<HTMLButtonElement>) {
     stopPropagation(event);
-    if (!actions) return;
+    if (!actions || pendingActionRef.current) return;
     setEditing(true);
+  }
+
+  function runRowAction(actionId: SessionRowActionId, action: () => void | Promise<void>) {
+    if (pendingActionRef.current) return;
+    pendingActionRef.current = actionId;
+    setPendingAction(actionId);
+    void Promise.resolve().then(action).finally(() => {
+      pendingActionRef.current = null;
+      setPendingAction(null);
+    });
   }
 
   function commitRename(rawValue: string) {
     const trimmed = rawValue.trim();
     setEditing(false);
     if (!trimmed || trimmed === session.name) return;
-    actions?.onRename(session.id, trimmed);
+    if (!actions) return;
+    runRowAction('rename', () => actions.onRename(session.id, trimmed));
   }
 
   function handleDelete(event: MouseEvent<HTMLButtonElement>) {
@@ -2699,7 +2715,7 @@ function SessionRow(props: {
     if (!actions) return;
     // Delegation: the App-level handler owns the confirmation flow via the
     // toast system (PR24), so SessionRow stays presentation-only.
-    actions.onDelete(session.id);
+    runRowAction('delete', () => actions.onDelete(session.id));
   }
 
   function handleRowBlur(event: FocusEvent<HTMLDivElement>) {
@@ -2780,7 +2796,7 @@ function SessionRow(props: {
           onClick={() => onSelect(session.id)}
           onDoubleClick={(event) => {
             event.stopPropagation();
-            if (actions) setEditing(true);
+            if (actions && !pendingActionRef.current) setEditing(true);
           }}
         >
           {/*
@@ -2850,10 +2866,13 @@ function SessionRow(props: {
             tabIndex={actionTabIndex}
             onClick={(event) => {
               stopPropagation(event);
-              actions.onToggleFlag(session.id, !session.isFlagged);
+              runRowAction('flag', () => actions.onToggleFlag(session.id, !session.isFlagged));
             }}
             aria-label={session.isFlagged ? '取消置顶对话' : '置顶对话'}
+            aria-busy={pendingAction === 'flag' ? 'true' : undefined}
             data-active={session.isFlagged}
+            data-pending={pendingAction === 'flag' ? 'true' : undefined}
+            disabled={actionBusy}
             title={session.isFlagged ? '取消置顶对话' : '置顶对话'}
           >
             {session.isFlagged
@@ -2866,6 +2885,9 @@ function SessionRow(props: {
             tabIndex={actionTabIndex}
             onClick={startRename}
             aria-label="重命名对话"
+            aria-busy={pendingAction === 'rename' ? 'true' : undefined}
+            data-pending={pendingAction === 'rename' ? 'true' : undefined}
+            disabled={actionBusy}
             title="重命名（双击行名也可）"
           >
             <Pencil size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -2876,11 +2898,16 @@ function SessionRow(props: {
             tabIndex={actionTabIndex}
             onClick={(event) => {
               stopPropagation(event);
-              session.isArchived
-                ? actions.onUnarchive(session.id)
-                : actions.onArchive(session.id);
+              runRowAction('archive', () => (
+                session.isArchived
+                  ? actions.onUnarchive(session.id)
+                  : actions.onArchive(session.id)
+              ));
             }}
             aria-label={session.isArchived ? '取消归档对话' : '归档对话'}
+            aria-busy={pendingAction === 'archive' ? 'true' : undefined}
+            data-pending={pendingAction === 'archive' ? 'true' : undefined}
+            disabled={actionBusy}
             title={session.isArchived ? '取消归档' : '归档'}
           >
             {session.isArchived
@@ -2893,6 +2920,9 @@ function SessionRow(props: {
             tabIndex={actionTabIndex}
             onClick={handleDelete}
             aria-label="删除对话"
+            aria-busy={pendingAction === 'delete' ? 'true' : undefined}
+            data-pending={pendingAction === 'delete' ? 'true' : undefined}
+            disabled={actionBusy}
             title="删除"
           >
             <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />

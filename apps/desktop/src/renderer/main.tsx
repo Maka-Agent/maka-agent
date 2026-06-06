@@ -456,6 +456,7 @@ function AppShell() {
   const [pendingTurnActions, setPendingTurnActions] = useState<Set<string>>(() => new Set());
   const pendingTurnActionsRef = useRef<Set<string>>(new Set());
   const pendingTurnActionTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const pendingSessionRowActionsRef = useRef<Set<string>>(new Set());
   const pendingKeyOf = (sessionId: string, turnId: string, actionId: TurnFooterActionMeta['id']) =>
     `${sessionId}:${turnId}:${actionId}`;
   function addPendingTurnAction(key: string): boolean {
@@ -478,6 +479,21 @@ function AppShell() {
     const prefix = `${sessionId}:`;
     for (const key of Array.from(pendingTurnActionsRef.current)) {
       if (key.startsWith(prefix)) clearPendingTurnAction(key);
+    }
+  }
+  async function runSessionRowAction(
+    sessionId: string,
+    actionId: 'flag' | 'archive' | 'rename' | 'delete',
+    action: () => Promise<void>,
+  ): Promise<void> {
+    const sessionPrefix = `${sessionId}:`;
+    if (Array.from(pendingSessionRowActionsRef.current).some((key) => key.startsWith(sessionPrefix))) return;
+    const key = `${sessionId}:${actionId}`;
+    pendingSessionRowActionsRef.current.add(key);
+    try {
+      await action();
+    } finally {
+      pendingSessionRowActionsRef.current.delete(key);
     }
   }
   function addPendingMessageRetry(sessionId: string): boolean {
@@ -1245,46 +1261,54 @@ function AppShell() {
   // corresponding IPC and then refreshes the session list so the sidebar
   // reflects the new state immediately.
   async function flagSession(sessionId: string, flagged: boolean) {
-    try {
-      await window.maka.sessions.setFlagged(sessionId, flagged);
-      await refreshSessions();
-    } catch (error) {
-      toastApi.error(flagged ? '标记会话失败' : '取消标记失败', cleanErrorMessage(error));
-    }
+    await runSessionRowAction(sessionId, 'flag', async () => {
+      try {
+        await window.maka.sessions.setFlagged(sessionId, flagged);
+        await refreshSessions();
+      } catch (error) {
+        toastApi.error(flagged ? '标记会话失败' : '取消标记失败', cleanErrorMessage(error));
+      }
+    });
   }
   async function archiveSession(sessionId: string) {
-    try {
-      await window.maka.sessions.archive(sessionId);
-      if (activeIdRef.current === sessionId) {
-        setActiveId(undefined);
-        setMessages([]);
-        clearPendingMessageRetry(sessionId);
-        setMessageLoadErrorBySession((current) => {
-          const next = { ...current };
-          delete next[sessionId];
-          return next;
-        });
+    await runSessionRowAction(sessionId, 'archive', async () => {
+      try {
+        await window.maka.sessions.archive(sessionId);
+        if (activeIdRef.current === sessionId) {
+          setActiveId(undefined);
+          setMessages([]);
+          clearPendingMessageRetry(sessionId);
+          setMessageLoadErrorBySession((current) => {
+            const next = { ...current };
+            delete next[sessionId];
+            return next;
+          });
+        }
+        await refreshSessions();
+      } catch (error) {
+        toastApi.error('归档会话失败', cleanErrorMessage(error));
       }
-      await refreshSessions();
-    } catch (error) {
-      toastApi.error('归档会话失败', cleanErrorMessage(error));
-    }
+    });
   }
   async function unarchiveSession(sessionId: string) {
-    try {
-      await window.maka.sessions.unarchive(sessionId);
-      await refreshSessions();
-    } catch (error) {
-      toastApi.error('恢复会话失败', cleanErrorMessage(error));
-    }
+    await runSessionRowAction(sessionId, 'archive', async () => {
+      try {
+        await window.maka.sessions.unarchive(sessionId);
+        await refreshSessions();
+      } catch (error) {
+        toastApi.error('恢复会话失败', cleanErrorMessage(error));
+      }
+    });
   }
   async function renameSession(sessionId: string, name: string) {
-    try {
-      await window.maka.sessions.rename(sessionId, name);
-      await refreshSessions();
-    } catch (error) {
-      toastApi.error('重命名会话失败', cleanErrorMessage(error));
-    }
+    await runSessionRowAction(sessionId, 'rename', async () => {
+      try {
+        await window.maka.sessions.rename(sessionId, name);
+        await refreshSessions();
+      } catch (error) {
+        toastApi.error('重命名会话失败', cleanErrorMessage(error));
+      }
+    });
   }
   async function setPermissionMode(mode: PermissionMode) {
     if (!activeId) return;
@@ -1326,33 +1350,35 @@ function AppShell() {
   }
 
   async function deleteSession(sessionId: string) {
-    const session = sessions.find((entry) => entry.id === sessionId);
-    const name = session?.name ?? '当前会话';
-    const ok = await toastApi.confirm({
-      title: `删除 "${name}"`,
-      description: '会话和全部消息会从磁盘上永久移除。该操作不可撤销。',
-      confirmLabel: '删除',
-      cancelLabel: '取消',
-      destructive: true,
-    });
-    if (!ok) return;
-    try {
-      await window.maka.sessions.remove(sessionId);
-      if (activeIdRef.current === sessionId) {
-        setActiveId(undefined);
-        setMessages([]);
-        clearPendingMessageRetry(sessionId);
-      }
-      setMessageLoadErrorBySession((current) => {
-        const next = { ...current };
-        delete next[sessionId];
-        return next;
+    await runSessionRowAction(sessionId, 'delete', async () => {
+      const session = sessionsRef.current.find((entry) => entry.id === sessionId);
+      const name = session?.name ?? '当前会话';
+      const ok = await toastApi.confirm({
+        title: `删除 "${name}"`,
+        description: '会话和全部消息会从磁盘上永久移除。该操作不可撤销。',
+        confirmLabel: '删除',
+        cancelLabel: '取消',
+        destructive: true,
       });
-      await refreshSessions();
-      toastApi.success(`已删除 ${name}`);
-    } catch (error) {
-      toastApi.error('删除会话失败', cleanErrorMessage(error));
-    }
+      if (!ok) return;
+      try {
+        await window.maka.sessions.remove(sessionId);
+        if (activeIdRef.current === sessionId) {
+          setActiveId(undefined);
+          setMessages([]);
+          clearPendingMessageRetry(sessionId);
+        }
+        setMessageLoadErrorBySession((current) => {
+          const next = { ...current };
+          delete next[sessionId];
+          return next;
+        });
+        await refreshSessions();
+        toastApi.success(`已删除 ${name}`);
+      } catch (error) {
+        toastApi.error('删除会话失败', cleanErrorMessage(error));
+      }
+    });
   }
 
   async function refreshConnections() {
@@ -2465,11 +2491,11 @@ function AppShell() {
             onSaveDailyReviewMarkdown={(input) => saveDailyReviewMarkdown(input)}
             dailyReviewBridge={dailyReviewBridge}
             rowActions={{
-              onToggleFlag: (sessionId, next) => void flagSession(sessionId, next),
-              onArchive: (sessionId) => void archiveSession(sessionId),
-              onUnarchive: (sessionId) => void unarchiveSession(sessionId),
-              onRename: (sessionId, name) => void renameSession(sessionId, name),
-              onDelete: (sessionId) => void deleteSession(sessionId),
+              onToggleFlag: (sessionId, next) => flagSession(sessionId, next),
+              onArchive: (sessionId) => archiveSession(sessionId),
+              onUnarchive: (sessionId) => unarchiveSession(sessionId),
+              onRename: (sessionId, name) => renameSession(sessionId, name),
+              onDelete: (sessionId) => deleteSession(sessionId),
             }}
           />
         </div>
