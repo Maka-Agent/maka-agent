@@ -135,13 +135,13 @@ describe('Settings usage dashboard contract', () => {
     );
     assert.match(
       settingsModal!,
-      /async function reloadUsage\(range: UsageRange = settings\.usage\.range\) \{[\s\S]*const ticket = usageReloadTicketRef\.current \+ 1;[\s\S]*usageReloadTicketRef\.current = ticket;[\s\S]*const next = await window\.maka\.settings\.usageStats\(range\);[\s\S]*if \(ticket === usageReloadTicketRef\.current\) \{[\s\S]*setUsageStats\(next\);[\s\S]*\}/,
-      'Usage stats reloads must only apply the newest response',
+      /async function reloadUsage\(range: UsageRange = settings\.usage\.range\) \{[\s\S]*const ticket = usageReloadTicketRef\.current \+ 1;[\s\S]*usageReloadTicketRef\.current = ticket;[\s\S]*const next = await window\.maka\.settings\.usageStats\(range\);[\s\S]*if \(settingsModalMountedRef\.current && ticket === usageReloadTicketRef\.current\) \{[\s\S]*setUsageStats\(next\);[\s\S]*\}/,
+      'Usage stats reloads must only apply the newest response while Settings is still mounted',
     );
     assert.match(
       settingsModal!,
-      /catch \(error\) \{[\s\S]*if \(ticket === usageReloadTicketRef\.current\) \{[\s\S]*toast\.error\('载入使用统计失败', settingsActionErrorMessage\(error\)\);[\s\S]*\}/,
-      'Stale usage reload failures must not toast over a newer range',
+      /catch \(error\) \{[\s\S]*if \(settingsModalMountedRef\.current && ticket === usageReloadTicketRef\.current\) \{[\s\S]*toast\.error\('载入使用统计失败', settingsActionErrorMessage\(error\)\);[\s\S]*\}/,
+      'Stale or unmounted usage reload failures must not toast over a newer range',
     );
   });
 

@@ -25,8 +25,8 @@ describe('Settings network and gateway persistence contract', () => {
     );
     assert.match(
       settingsSource,
-      /async function updateSettings\(patch: Parameters<typeof window\.maka\.settings\.update>\[0\]\) \{[\s\S]*const ticket = settingsUpdateTicketRef\.current \+ 1;[\s\S]*settingsUpdateTicketRef\.current = ticket;[\s\S]*const result = await window\.maka\.settings\.update\(patch\);[\s\S]*if \(ticket === settingsUpdateTicketRef\.current\) \{[\s\S]*setSettings\(next\);[\s\S]*props\.onUserLabelChange\?\.\(next\.personalization\.displayName\);[\s\S]*\}/,
-      'Settings update responses should only refresh parent state when they belong to the latest save',
+      /async function updateSettings\(patch: Parameters<typeof window\.maka\.settings\.update>\[0\]\) \{[\s\S]*const ticket = settingsUpdateTicketRef\.current \+ 1;[\s\S]*settingsUpdateTicketRef\.current = ticket;[\s\S]*const result = await window\.maka\.settings\.update\(patch\);[\s\S]*if \(settingsModalMountedRef\.current && ticket === settingsUpdateTicketRef\.current\) \{[\s\S]*setSettings\(next\);[\s\S]*props\.onUserLabelChange\?\.\(next\.personalization\.displayName\);[\s\S]*\}/,
+      'Settings update responses should only refresh parent state when they belong to the latest save and the modal is still mounted',
     );
   });
 

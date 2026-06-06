@@ -110,14 +110,34 @@ describe('renderer startup fail-soft contract', () => {
     const reloadSettingsBlock = modalBlock.match(/async function reloadSettings\(\)[\s\S]*?async function updateSettings/)?.[0] ?? '';
     const reloadUsageBlock = modalBlock.match(/async function reloadUsage[\s\S]*?useEffect\(\(\) => \{[\s\S]*?void reloadSettings/)?.[0] ?? '';
 
+    assert.match(modalBlock, /const settingsModalMountedRef = useRef\(false\);/);
+    assert.match(modalBlock, /const settingsReloadTicketRef = useRef\(0\);/);
+    assert.match(
+      modalBlock,
+      /useEffect\(\(\) => \{[\s\S]*settingsModalMountedRef\.current = true;[\s\S]*return \(\) => \{[\s\S]*settingsModalMountedRef\.current = false;[\s\S]*settingsReloadTicketRef\.current \+= 1;[\s\S]*settingsUpdateTicketRef\.current \+= 1;[\s\S]*usageReloadTicketRef\.current \+= 1;[\s\S]*\};[\s\S]*\}, \[\]\);/,
+      'Settings root async work must be invalidated on close and StrictMode effect cleanup',
+    );
     assert.match(reloadSettingsBlock, /try \{[\s\S]*window\.maka\.settings\.get\(\)/);
-    assert.match(reloadSettingsBlock, /catch \(error\) \{[\s\S]*toast\.error\('载入设置失败', settingsActionErrorMessage\(error\)\)/);
-    assert.match(reloadSettingsBlock, /finally \{[\s\S]*setLoading\(false\)/);
+    assert.match(
+      reloadSettingsBlock,
+      /const ticket = settingsReloadTicketRef\.current \+ 1;[\s\S]*settingsReloadTicketRef\.current = ticket;[\s\S]*if \(settingsModalMountedRef\.current && ticket === settingsReloadTicketRef\.current\) \{[\s\S]*setSettings\(next\);[\s\S]*\}/,
+      'root settings load must not write state after close or after a newer reload',
+    );
+    assert.match(
+      reloadSettingsBlock,
+      /catch \(error\) \{[\s\S]*if \(settingsModalMountedRef\.current && ticket === settingsReloadTicketRef\.current\) \{[\s\S]*toast\.error\('载入设置失败', settingsActionErrorMessage\(error\)\)/,
+      'root settings load failures must not toast after close',
+    );
+    assert.match(
+      reloadSettingsBlock,
+      /finally \{[\s\S]*if \(settingsModalMountedRef\.current && ticket === settingsReloadTicketRef\.current\) \{[\s\S]*setLoading\(false\)/,
+      'root settings loading state must not update after close',
+    );
     assert.match(reloadUsageBlock, /try \{[\s\S]*window\.maka\.settings\.usageStats\(range\)/);
     assert.match(
       reloadUsageBlock,
-      /catch \(error\) \{[\s\S]*toast\.error\('载入使用统计失败', settingsActionErrorMessage\(error\)\)/,
-      'usage stats reload failures must be visible',
+      /catch \(error\) \{[\s\S]*if \(settingsModalMountedRef\.current && ticket === usageReloadTicketRef\.current\) \{[\s\S]*toast\.error\('载入使用统计失败', settingsActionErrorMessage\(error\)\)/,
+      'usage stats reload failures must be visible only while Settings is still open',
     );
     assert.doesNotMatch(
       reloadUsageBlock,

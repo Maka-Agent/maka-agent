@@ -803,18 +803,38 @@ function SettingsSurface(props: {
   const [settings, setSettings] = useState<AppSettings>(() => createDefaultSettings());
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const settingsModalMountedRef = useRef(false);
+  const settingsReloadTicketRef = useRef(0);
   const settingsUpdateTicketRef = useRef(0);
   const usageReloadTicketRef = useRef(0);
   const toast = useToast();
 
+  useEffect(() => {
+    settingsModalMountedRef.current = true;
+    return () => {
+      settingsModalMountedRef.current = false;
+      settingsReloadTicketRef.current += 1;
+      settingsUpdateTicketRef.current += 1;
+      usageReloadTicketRef.current += 1;
+    };
+  }, []);
+
   async function reloadSettings() {
+    const ticket = settingsReloadTicketRef.current + 1;
+    settingsReloadTicketRef.current = ticket;
     try {
       const next = await window.maka.settings.get();
-      setSettings(next);
+      if (settingsModalMountedRef.current && ticket === settingsReloadTicketRef.current) {
+        setSettings(next);
+      }
     } catch (error) {
-      toast.error('载入设置失败', settingsActionErrorMessage(error));
+      if (settingsModalMountedRef.current && ticket === settingsReloadTicketRef.current) {
+        toast.error('载入设置失败', settingsActionErrorMessage(error));
+      }
     } finally {
-      setLoading(false);
+      if (settingsModalMountedRef.current && ticket === settingsReloadTicketRef.current) {
+        setLoading(false);
+      }
     }
   }
 
@@ -823,7 +843,7 @@ function SettingsSurface(props: {
     settingsUpdateTicketRef.current = ticket;
     const result = await window.maka.settings.update(patch);
     const next = result.settings;
-    if (ticket === settingsUpdateTicketRef.current) {
+    if (settingsModalMountedRef.current && ticket === settingsUpdateTicketRef.current) {
       setSettings(next);
       props.onUserLabelChange?.(next.personalization.displayName);
     }
@@ -835,11 +855,11 @@ function SettingsSurface(props: {
     usageReloadTicketRef.current = ticket;
     try {
       const next = await window.maka.settings.usageStats(range);
-      if (ticket === usageReloadTicketRef.current) {
+      if (settingsModalMountedRef.current && ticket === usageReloadTicketRef.current) {
         setUsageStats(next);
       }
     } catch (error) {
-      if (ticket === usageReloadTicketRef.current) {
+      if (settingsModalMountedRef.current && ticket === usageReloadTicketRef.current) {
         toast.error('载入使用统计失败', settingsActionErrorMessage(error));
       }
     }
