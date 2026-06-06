@@ -792,34 +792,37 @@ function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClo
   const [stateHint, setStateHint] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<BrowserSubscriptionPendingAction | null>(null);
   const pendingActionRef = useRef<BrowserSubscriptionPendingAction | null>(null);
+  const authRequestIdRef = useRef<string | null>(null);
+  const browserSubscriptionMountedRef = useRef(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const display = subscriptionDisplay(props.serviceId);
 
-  async function refresh() {
+  async function refresh(): Promise<boolean> {
     try {
       const next = (await bridge.getAccountState()) as SubscriptionSnapshot;
+      if (!browserSubscriptionMountedRef.current) return false;
       setState(next);
       setErrorMessage(null);
     } catch (error) {
+      if (!browserSubscriptionMountedRef.current) return false;
       const message = subscriptionActionErrorMessage(error);
       toast.error('刷新登录状态失败', message);
       setErrorMessage(message);
     }
+    return true;
   }
 
   useEffect(() => {
+    browserSubscriptionMountedRef.current = true;
     void refresh();
-  }, []);
-
-  // Cancel any pending authorization if the modal closes mid-flow.
-  useEffect(() => {
     return () => {
-      if (authRequestId) {
-        void bridge.cancelAuthorization(authRequestId);
-      }
+      browserSubscriptionMountedRef.current = false;
+      pendingActionRef.current = null;
+      const pendingAuthRequestId = authRequestIdRef.current;
+      authRequestIdRef.current = null;
+      if (pendingAuthRequestId) void bridge.cancelAuthorization(pendingAuthRequestId);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authRequestId]);
+  }, []);
 
   function beginPendingAction(action: BrowserSubscriptionPendingAction): boolean {
     if (pendingActionRef.current !== null) return false;
@@ -830,7 +833,7 @@ function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClo
 
   function finishPendingAction() {
     pendingActionRef.current = null;
-    setPendingAction(null);
+    if (browserSubscriptionMountedRef.current) setPendingAction(null);
   }
 
   async function startLogin() {
@@ -839,25 +842,38 @@ function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClo
     try {
       const payload = await bridge.getAuthUrl();
       if ('ok' in payload) {
+        if (!browserSubscriptionMountedRef.current) return;
         const failureMessage = payload.ok ? '请稍后再试。' : subscriptionResultMessage(payload.message, '无法开始登录，请稍后再试。');
         toast.error('无法开始登录', failureMessage);
         setErrorMessage(failureMessage);
         return;
       }
+      authRequestIdRef.current = payload.authRequestId;
+      if (!browserSubscriptionMountedRef.current) {
+        authRequestIdRef.current = null;
+        void bridge.cancelAuthorization(payload.authRequestId);
+        return;
+      }
       setAuthRequestId(payload.authRequestId);
       setStateHint(payload.stateHint);
       const opened = await bridge.openAuthUrl(payload.authRequestId);
+      if (!browserSubscriptionMountedRef.current) return;
       if (!opened.ok) {
         const message = subscriptionResultMessage(opened.message, '无法打开浏览器，请稍后重试。');
         toast.error('无法打开浏览器', message);
         setErrorMessage(message);
+        void bridge.cancelAuthorization(payload.authRequestId);
+        authRequestIdRef.current = null;
         setAuthRequestId(null);
         setStateHint(null);
         return;
       }
-      await refresh();
+      const refreshed = await refresh();
+      if (!browserSubscriptionMountedRef.current || !refreshed) return;
       // Loopback / polling — wait for the backend to complete.
       const result = await bridge.completeAuthorization(payload.authRequestId);
+      if (!browserSubscriptionMountedRef.current) return;
+      authRequestIdRef.current = null;
       setAuthRequestId(null);
       setStateHint(null);
       if (result.ok) {
@@ -869,6 +885,12 @@ function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClo
         setErrorMessage(message);
       }
     } catch (error) {
+      if (!browserSubscriptionMountedRef.current) return;
+      const pendingAuthRequestId = authRequestIdRef.current;
+      authRequestIdRef.current = null;
+      if (pendingAuthRequestId) void bridge.cancelAuthorization(pendingAuthRequestId);
+      setAuthRequestId(null);
+      setStateHint(null);
       const message = subscriptionActionErrorMessage(error);
       toast.error('登录失败', message);
       setErrorMessage(message);
@@ -889,6 +911,7 @@ function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClo
       });
       if (!ok) return;
       const result = await bridge.logout();
+      if (!browserSubscriptionMountedRef.current) return;
       if (result.ok) {
         toast.success('已退出登录', '本地凭据已清除。');
         await refresh();
@@ -896,6 +919,7 @@ function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClo
         toast.error('退出失败', subscriptionResultMessage(result.message, '退出登录失败，请稍后重试。'));
       }
     } catch (error) {
+      if (!browserSubscriptionMountedRef.current) return;
       toast.error('退出失败', subscriptionActionErrorMessage(error));
     } finally {
       finishPendingAction();

@@ -896,7 +896,7 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
     assert.match(helper, /redactSecrets\(message \?\? ''\)\.trim\(\)/, 'OAuth service messages must be redacted before reaching visible UI');
     assert.match(helper, /generalizedErrorMessageChinese\(new Error\(raw\), ''\)/, 'OAuth service messages must pass through Chinese error classification');
     assert.match(helper, /\/\[\\u4e00-\\u9fff\]\/\.test\(raw\)/, 'already-Chinese OAuth diagnostics may be preserved after redaction');
-    assert.match(browserModal, /async function refresh\(\)[\s\S]*catch \(error\) \{[\s\S]*toast\.error\('刷新登录状态失败', message\);[\s\S]*setErrorMessage\(message\);/, 'browser OAuth state refresh must surface thrown failures');
+    assert.match(browserModal, /async function refresh\(\)(?:: Promise<boolean>)?[\s\S]*catch \(error\) \{[\s\S]*toast\.error\('刷新登录状态失败', message\);[\s\S]*setErrorMessage\(message\);/, 'browser OAuth state refresh must surface thrown failures');
     assert.match(browserModal, /catch \(error\) \{[\s\S]*toast\.error\('登录失败', message\);[\s\S]*setErrorMessage\(message\);/, 'browser OAuth login must toast thrown failures');
     assert.match(browserModal, /catch \(error\) \{[\s\S]*toast\.error\('退出失败', subscriptionActionErrorMessage\(error\)\);/, 'browser OAuth logout must toast thrown failures');
     assert.doesNotMatch(browserModal, /toast\.error\('[^']+', (?:payload|opened|result)\.message\)/, 'browser OAuth action envelopes must not toast raw service messages');
@@ -916,11 +916,56 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
     );
     assert.match(
       browserModal,
+      /const browserSubscriptionMountedRef = useRef\(false\)/,
+      'browser OAuth modal must own mounted state before writing async feedback',
+    );
+    assert.match(
+      browserModal,
+      /const authRequestIdRef = useRef<string \| null>\(null\)/,
+      'browser OAuth modal must keep the pending authorization request in a ref for cleanup',
+    );
+    assert.match(
+      browserModal,
+      /async function refresh\(\): Promise<boolean> \{[\s\S]*const next = \(await bridge\.getAccountState\(\)\) as SubscriptionSnapshot;[\s\S]*if \(!browserSubscriptionMountedRef\.current\) return false;[\s\S]*setState\(next\);[\s\S]*catch \(error\) \{[\s\S]*if \(!browserSubscriptionMountedRef\.current\) return false;[\s\S]*toast\.error\('刷新登录状态失败', message\);[\s\S]*return true;/,
+      'browser OAuth refresh must drop late state/error writes after modal close',
+    );
+    assert.match(
+      browserModal,
+      /useEffect\(\(\) => \{[\s\S]*browserSubscriptionMountedRef\.current = true;[\s\S]*void refresh\(\);[\s\S]*return \(\) => \{[\s\S]*browserSubscriptionMountedRef\.current = false;[\s\S]*pendingActionRef\.current = null;[\s\S]*const pendingAuthRequestId = authRequestIdRef\.current;[\s\S]*authRequestIdRef\.current = null;[\s\S]*if \(pendingAuthRequestId\) void bridge\.cancelAuthorization\(pendingAuthRequestId\);[\s\S]*\};[\s\S]*\}, \[\]\);/,
+      'browser OAuth modal cleanup must invalidate async feedback and cancel pending authorization',
+    );
+    assert.match(
+      browserModal,
+      /function finishPendingAction\(\) \{[\s\S]*pendingActionRef\.current = null;[\s\S]*if \(browserSubscriptionMountedRef\.current\) setPendingAction\(null\);[\s\S]*\}/,
+      'browser OAuth pending cleanup must not set state after unmount',
+    );
+    assert.match(
+      browserModal,
       /function beginPendingAction\(action: BrowserSubscriptionPendingAction\): boolean \{[\s\S]*if \(pendingActionRef\.current !== null\) return false;[\s\S]*pendingActionRef\.current = action;[\s\S]*setPendingAction\(action\);[\s\S]*return true;/,
       'browser OAuth duplicate clicks must be rejected before React re-renders disabled buttons',
     );
     assert.match(browserModal, /if \(!beginPendingAction\('login'\)\) return;/, 'browser OAuth login must use the ref-backed action guard');
     assert.match(browserModal, /if \(!beginPendingAction\('logout'\)\) return;/, 'browser OAuth logout must use the ref-backed action guard');
+    assert.match(
+      browserModal,
+      /const payload = await bridge\.getAuthUrl\(\);[\s\S]*authRequestIdRef\.current = payload\.authRequestId;[\s\S]*if \(!browserSubscriptionMountedRef\.current\) \{[\s\S]*authRequestIdRef\.current = null;[\s\S]*void bridge\.cancelAuthorization\(payload\.authRequestId\);[\s\S]*return;[\s\S]*\}[\s\S]*const opened = await bridge\.openAuthUrl\(payload\.authRequestId\);[\s\S]*if \(!browserSubscriptionMountedRef\.current\) return;[\s\S]*const refreshed = await refresh\(\);[\s\S]*if \(!browserSubscriptionMountedRef\.current \|\| !refreshed\) return;[\s\S]*const result = await bridge\.completeAuthorization\(payload\.authRequestId\);[\s\S]*if \(!browserSubscriptionMountedRef\.current\) return;[\s\S]*authRequestIdRef\.current = null;/,
+      'browser OAuth login must stop each async continuation after modal close',
+    );
+    assert.match(
+      browserModal,
+      /if \(!opened\.ok\) \{[\s\S]*void bridge\.cancelAuthorization\(payload\.authRequestId\);[\s\S]*authRequestIdRef\.current = null;[\s\S]*setAuthRequestId\(null\);[\s\S]*setStateHint\(null\);/,
+      'browser OAuth open-browser failures must clear and cancel the pending authorization request',
+    );
+    assert.match(
+      browserModal,
+      /catch \(error\) \{[\s\S]*const pendingAuthRequestId = authRequestIdRef\.current;[\s\S]*authRequestIdRef\.current = null;[\s\S]*if \(pendingAuthRequestId\) void bridge\.cancelAuthorization\(pendingAuthRequestId\);[\s\S]*setAuthRequestId\(null\);[\s\S]*setStateHint\(null\);/,
+      'browser OAuth thrown login failures must clear and cancel the pending authorization request',
+    );
+    assert.match(
+      browserModal,
+      /const result = await bridge\.logout\(\);[\s\S]*if \(!browserSubscriptionMountedRef\.current\) return;[\s\S]*catch \(error\) \{[\s\S]*if \(!browserSubscriptionMountedRef\.current\) return;[\s\S]*toast\.error\('退出失败', subscriptionActionErrorMessage\(error\)\);/,
+      'browser OAuth logout must not toast after modal close',
+    );
     assert.match(browserModal, /const actionBusy = pendingAction !== null/, 'browser OAuth modal needs a shared busy flag derived from the named action');
     assert.match(browserModal, /disabled=\{actionBusy\}/, 'browser OAuth action buttons must disable while another one-shot action is pending');
     assert.match(browserModal, /pendingAction === 'login' \? '打开浏览器…' : `登录 \$\{display\.shortName\}`/, 'browser OAuth login start must expose specific pending copy');
