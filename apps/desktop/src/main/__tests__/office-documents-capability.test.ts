@@ -52,9 +52,29 @@ describe('Office document capability contract', () => {
     assert.match(settings, /复制 macOS\/Linux 安装命令/);
     assert.match(settings, /copyingOfficeCliInstallRef\.current/, 'OfficeCLI install copy action must have a ref-backed double-click guard');
     assert.match(settings, /if \(copyingOfficeCliInstallRef\.current\) return;/);
+    assert.match(settings, /const capabilityRowMountedRef = useRef\(false\);/);
+    assert.match(
+      settings,
+      /useEffect\(\(\) => \{[\s\S]*capabilityRowMountedRef\.current = true;[\s\S]*return \(\) => \{[\s\S]*capabilityRowMountedRef\.current = false;[\s\S]*copyingOfficeCliInstallRef\.current = false;/,
+      'OfficeCLI install copy action must release ownership when its capability row unmounts',
+    );
     assert.match(settings, /disabled=\{copyingOfficeCliInstall\}/);
     assert.match(settings, /copyingOfficeCliInstall \? '复制中…' : '复制 macOS\/Linux 安装命令'/);
-    assert.match(settings, /toast\.error\('复制失败', '剪贴板不可用或被系统拒绝。'\)/);
+    assert.match(
+      settings,
+      /await navigator\.clipboard\.writeText\(OFFICECLI_INSTALL_COMMAND\);[\s\S]*if \(capabilityRowMountedRef\.current\) \{[\s\S]*toast\.success\('已复制安装命令', '在终端执行后点击刷新重新探测。'\);/,
+      'OfficeCLI install copy success toast must not fire after the row unmounts',
+    );
+    assert.match(
+      settings,
+      /catch \{[\s\S]*if \(capabilityRowMountedRef\.current\) \{[\s\S]*toast\.error\('复制失败', '剪贴板不可用或被系统拒绝。'\);/,
+      'OfficeCLI install copy failure toast must not fire after the row unmounts',
+    );
+    assert.match(
+      settings,
+      /finally \{[\s\S]*copyingOfficeCliInstallRef\.current = false;[\s\S]*if \(capabilityRowMountedRef\.current\) \{[\s\S]*setCopyingOfficeCliInstall\(false\);/,
+      'OfficeCLI install copy cleanup must not write React pending state after unmount',
+    );
     assert.match(settings, /iOfficeAI\/OfficeCLI\/releases/);
     assert.doesNotMatch(settings, /execFile\(|spawn\(|child_process/);
     assert.match(styles, /\.settingsCapabilityGuidance/);

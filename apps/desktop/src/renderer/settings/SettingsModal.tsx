@@ -5677,9 +5677,18 @@ function CapabilityRow(props: { capability: CapabilitySnapshot }) {
   const toast = useToast();
   const [copyingOfficeCliInstall, setCopyingOfficeCliInstall] = useState(false);
   const copyingOfficeCliInstallRef = useRef(false);
+  const capabilityRowMountedRef = useRef(false);
   const readinessCopy = CAPABILITY_READINESS_COPY[capability.readiness];
   const showOfficeCliInstallActions =
     capability.id === 'office_documents' && capability.runtimeProbe.state !== 'healthy';
+
+  useEffect(() => {
+    capabilityRowMountedRef.current = true;
+    return () => {
+      capabilityRowMountedRef.current = false;
+      copyingOfficeCliInstallRef.current = false;
+    };
+  }, []);
 
   async function copyOfficeCliInstallCommand() {
     if (copyingOfficeCliInstallRef.current) return;
@@ -5687,12 +5696,18 @@ function CapabilityRow(props: { capability: CapabilitySnapshot }) {
     setCopyingOfficeCliInstall(true);
     try {
       await navigator.clipboard.writeText(OFFICECLI_INSTALL_COMMAND);
-      toast.success('已复制安装命令', '在终端执行后点击刷新重新探测。');
+      if (capabilityRowMountedRef.current) {
+        toast.success('已复制安装命令', '在终端执行后点击刷新重新探测。');
+      }
     } catch {
-      toast.error('复制失败', '剪贴板不可用或被系统拒绝。');
+      if (capabilityRowMountedRef.current) {
+        toast.error('复制失败', '剪贴板不可用或被系统拒绝。');
+      }
     } finally {
       copyingOfficeCliInstallRef.current = false;
-      setCopyingOfficeCliInstall(false);
+      if (capabilityRowMountedRef.current) {
+        setCopyingOfficeCliInstall(false);
+      }
     }
   }
 
