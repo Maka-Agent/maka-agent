@@ -147,7 +147,8 @@ describe('workspace instructions prompt fragment', () => {
     assert.match(main, /createWorkspaceInstructionFile\(process\.cwd\(\), typeof file === 'string' \? file : ''\)/);
     assert.match(preload, /createFile\(file: string\)/);
     assert.match(settings, /file\.status === 'missing'/);
-    assert.match(settings, />\s*创建\s*<\/button>/);
+    assert.match(settings, /createWorkspaceInstructionFile\(file\.file\)/);
+    assert.match(settings, /isMemoryActionPending\(`instruction:\$\{file\.file\}:create`\) \? '创建中…' : '创建'/);
   });
 });
 

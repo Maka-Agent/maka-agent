@@ -169,6 +169,38 @@ describe('local MEMORY.md Settings UI contract', () => {
     assert.match(memoryPage, /createWorkspaceInstructionFile\(file\.file\)/);
   });
 
+  it('gates local memory file actions with visible per-action pending feedback', async () => {
+    const src = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
+    const memoryPage = src.match(/function MemorySettingsPage\([\s\S]*?function MemoryEntryList/)?.[0] ?? '';
+
+    assert.match(memoryPage, /pendingMemoryActionKeysRef = useRef<Set<string>>\(new Set\(\)\)/);
+    assert.match(memoryPage, /async function runMemoryAction<T>\(key: string, action: \(\) => Promise<T>\)/);
+    assert.match(memoryPage, /if \(pendingMemoryActionKeysRef\.current\.has\(key\)\) return undefined/);
+    assert.match(memoryPage, /pendingMemoryActionKeysRef\.current\.add\(key\)/);
+    assert.match(memoryPage, /pendingMemoryActionKeysRef\.current\.delete\(key\)/);
+    assert.match(memoryPage, /const isMemoryActionPending = \(key: string\) => pendingMemoryActions\.has\(key\)/);
+
+    assert.match(memoryPage, /runMemoryAction\(`instruction:\$\{file\}:open`/);
+    assert.match(memoryPage, /runMemoryAction\(`instruction:\$\{file\}:create`/);
+    assert.match(memoryPage, /runMemoryAction\(`backup:\$\{backup\.kind\}:open`/);
+    assert.match(memoryPage, /runMemoryAction\(`backup:\$\{backup\.kind\}:restore`/);
+    assert.match(memoryPage, /runMemoryAction\(`backup:\$\{backup\.kind\}:copy`/);
+    assert.match(memoryPage, /runMemoryAction\('memory:file:open'/);
+    assert.match(memoryPage, /runMemoryAction\('memory:folder:open'/);
+    assert.match(memoryPage, /runMemoryAction\('backup:latest:open'/);
+    assert.match(memoryPage, /runMemoryAction\('backup:latest:restore'/);
+    assert.match(memoryPage, /runMemoryAction\('memory:path:copy'/);
+
+    assert.match(memoryPage, /disabled=\{memoryControlsDisabled \|\| isMemoryActionPending\(`instruction:\$\{file\.file\}:open`\)\}/);
+    assert.match(memoryPage, /isMemoryActionPending\(`instruction:\$\{file\.file\}:open`\) \? '打开中…' : '打开'/);
+    assert.match(memoryPage, /isMemoryActionPending\(`instruction:\$\{file\.file\}:create`\) \? '创建中…' : '创建'/);
+    assert.match(memoryPage, /isMemoryActionPending\(`backup:\$\{backup\.kind\}:open`\) \? '打开中…' : '打开'/);
+    assert.match(memoryPage, /isMemoryActionPending\(`backup:\$\{backup\.kind\}:restore`\) \? '恢复中…' : '恢复'/);
+    assert.match(memoryPage, /isMemoryActionPending\(`backup:\$\{backup\.kind\}:copy`\) \? '复制中…' : '复制引用'/);
+    assert.match(memoryPage, /isMemoryActionPending\('memory:file:open'\) \? '打开中…' : '打开 MEMORY\.md'/);
+    assert.match(memoryPage, /isMemoryActionPending\('backup:latest:restore'\) \? '恢复中…' : '恢复上一版'/);
+  });
+
   it('manual add stays draft-only and routes through the core helper', async () => {
     const src = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
     const manualAddBlock = src.match(/function addManualMemoryDraftEntry\(\) \{[\s\S]*?\n  \}\n\n  async function updateMemoryEntryStatus/)?.[0] ?? '';
@@ -504,7 +536,7 @@ describe('local MEMORY.md Settings UI contract', () => {
     assert.match(pageBlock, /async function openLatestBackup/);
     assert.match(pageBlock, /window\.maka\.memory\.openLatestBackup\(\)/);
     assert.match(pageBlock, /打开上一版失败/);
-    assert.match(pageBlock, />\s*打开上一版\s*<\/button>/);
+    assert.match(pageBlock, /isMemoryActionPending\('backup:latest:open'\) \? '打开中…' : '打开上一版'/);
     assert.match(pageBlock, /!\s*effective\.latestBackup/);
   });
 
@@ -529,7 +561,7 @@ describe('local MEMORY.md Settings UI contract', () => {
     assert.match(pageBlock, /window\.maka\.memory\.openBackup\(backup\.kind\)/);
     assert.match(pageBlock, /打开\$\{localMemoryBackupKindLabel\(backup\.kind\)\}失败/);
     assert.match(pageBlock, /openBackupCandidate\(backup\)/);
-    assert.match(pageBlock, />\s*打开\s*<\/button>/);
+    assert.match(pageBlock, /isMemoryActionPending\(`backup:\$\{backup\.kind\}:open`\) \? '打开中…' : '打开'/);
     assert.doesNotMatch(pageBlock, /openBackup\((backup\.path|.*path)/);
   });
 
@@ -555,7 +587,7 @@ describe('local MEMORY.md Settings UI contract', () => {
     assert.match(pageBlock, /title: '恢复这个 MEMORY\.md 备份？'/);
     assert.match(pageBlock, /会先备份当前 MEMORY\.md，再用选中的备份覆盖当前文件/);
     assert.match(pageBlock, /restoreBackupCandidate\(backup\)/);
-    assert.match(pageBlock, />\s*恢复\s*<\/button>/);
+    assert.match(pageBlock, /isMemoryActionPending\(`backup:\$\{backup\.kind\}:restore`\) \? '恢复中…' : '恢复'/);
     assert.doesNotMatch(pageBlock, /restoreBackup\((backup\.path|.*path)/);
   });
 
@@ -575,7 +607,7 @@ describe('local MEMORY.md Settings UI contract', () => {
     assert.match(copyBackupBlock, /Safe mode: \$\{backup\.reason \?\? 'oversize'\}/);
     assert.match(copyBackupBlock, /navigator\.clipboard\.writeText\(reference\)/);
     assert.match(copyBackupBlock, /已复制上一版引用/);
-    assert.match(pageBlock, />\s*复制上一版引用\s*<\/button>/);
+    assert.match(pageBlock, /isMemoryActionPending\(`backup:\$\{effective\.latestBackup\.kind\}:copy`\) \? '复制中…' : '复制上一版引用'/);
     assert.doesNotMatch(copyBackupBlock, /backup\.content|readFile\(backup/);
   });
 });
