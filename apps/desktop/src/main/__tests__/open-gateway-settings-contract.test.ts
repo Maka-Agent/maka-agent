@@ -66,8 +66,8 @@ describe('Open Gateway Settings endpoint contract', () => {
     assert.match(helper, /setCopyingGatewayAction\(action\)/);
     assert.match(helper, /setCopyingGatewayAction\(null\)/);
     assert.match(helper, /try \{[\s\S]*navigator\.clipboard\.writeText\(text\)[\s\S]*toast\.success\(successTitle, successDetail\)/);
-    assert.match(helper, /catch \{[\s\S]*toast\.error\('复制失败', '剪贴板不可用或被系统拒绝'\)/);
-    assert.match(helper, /剪贴板不可用或被系统拒绝/);
+    assert.match(helper, /catch \{[\s\S]*toast\.error\('复制失败', '剪贴板不可用或被系统拒绝。'\)/);
+    assert.match(helper, /剪贴板不可用或被系统拒绝。/);
     assert.doesNotMatch(
       helper,
       /error instanceof Error|error\.message|String\(error\)/,

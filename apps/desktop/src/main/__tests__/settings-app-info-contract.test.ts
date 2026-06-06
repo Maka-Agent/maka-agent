@@ -84,6 +84,8 @@ describe('Settings app-info loading contract', () => {
     assert.match(dataBlock, /disabled=\{!info \|\| dataActionDisabled\}/);
     assert.match(dataBlock, /isDataActionPending\('workspace:open'\) \? '打开中…' : '打开工作区文件夹'/);
     assert.match(dataBlock, /isDataActionPending\('workspace:path:copy'\) \? '复制中…' : '复制路径'/);
+    assert.match(dataBlock, /toast\.error\('复制失败', '剪贴板不可用或被系统拒绝。'\)/);
+    assert.doesNotMatch(dataBlock, /toast\.error\('复制失败', '剪贴板不可用'\)/);
   });
 
   it('keeps About page privacy and storage copy Chinese-first and accessible', () => {
@@ -120,5 +122,7 @@ describe('Settings app-info loading contract', () => {
     );
     assert.match(aboutBlock, /disabled=\{copyingEnvSummary\}/);
     assert.match(aboutBlock, /copyingEnvSummary \? '复制中…' : '复制环境信息'/);
+    assert.match(aboutBlock, /toast\.error\('复制失败', '剪贴板不可用或被系统拒绝。'\)/);
+    assert.doesNotMatch(aboutBlock, /toast\.error\('复制失败', '剪贴板不可用'\)/);
   });
 });

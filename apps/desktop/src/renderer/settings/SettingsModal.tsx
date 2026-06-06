@@ -1135,7 +1135,7 @@ function AboutSettingsPage() {
       await navigator.clipboard.writeText(summary);
       toast.success('已复制环境信息', '可直接粘贴到问题报告');
     } catch {
-      toast.error('复制失败', '剪贴板不可用');
+      toast.error('复制失败', '剪贴板不可用或被系统拒绝。');
     } finally {
       copyingEnvSummaryRef.current = false;
       setCopyingEnvSummary(false);
@@ -1864,7 +1864,7 @@ function DataSettingsPage() {
         await navigator.clipboard.writeText(info.workspacePath);
         toast.success('已复制工作区路径');
       } catch {
-        toast.error('复制失败', '剪贴板不可用');
+        toast.error('复制失败', '剪贴板不可用或被系统拒绝。');
       }
     });
   }
@@ -4030,7 +4030,7 @@ function OpenGatewaySettingsPage(props: {
       await navigator.clipboard.writeText(text);
       toast.success(successTitle, successDetail);
     } catch {
-      toast.error('复制失败', '剪贴板不可用或被系统拒绝');
+      toast.error('复制失败', '剪贴板不可用或被系统拒绝。');
     } finally {
       copyingGatewayActionRef.current = null;
       setCopyingGatewayAction(null);
