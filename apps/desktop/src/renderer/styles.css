@@ -5239,6 +5239,12 @@ button:active {
   line-height: 1.35;
 }
 
+.settingsFieldWarning {
+  display: block;
+  margin-top: 4px;
+  color: var(--warning-text, var(--info-text));
+}
+
 .settingsSwitch {
   width: 34px;
   height: 20px;

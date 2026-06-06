@@ -88,6 +88,28 @@ describe('Bot settings UI contract', () => {
     assert.match(actionRowBlock, /support === 'runtime' && \(?selectedStatus\?\.running/, 'Already-running channels must keep separate test/restart actions');
   });
 
+  it('keeps bot allowlist validation copy text-only and Chinese-first', async () => {
+    const settings = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
+    const styles = await readRepo('apps/desktop/src/renderer/styles.css');
+    const allowlistBlock = settings.match(/function BotAllowedUserIdsField[\s\S]*?function botConnectionLabel/)?.[0] ?? '';
+
+    assert.match(
+      allowlistBlock,
+      /className="settingsFieldWarning"[\s\S]*data-tone="warning"[\s\S]*下列不是数字 ID，可能是用户名之类的输入/,
+      'Invalid bot allowlist entries should render as styled Chinese warning text',
+    );
+    assert.doesNotMatch(
+      allowlistBlock,
+      /⚠|⚠️|@username/,
+      'Bot allowlist validation must not rely on emoji or English placeholder copy',
+    );
+    assert.match(
+      styles,
+      /\.settingsFieldWarning\s*\{[\s\S]*color:\s*var\(--warning-text, var\(--info-text\)\);/,
+      'Bot allowlist warning should use the design token instead of a decorative glyph',
+    );
+  });
+
   it('drops late bot action feedback after Settings is closed', async () => {
     const settings = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
     const pageBlock = settings.match(/function BotChatSettingsPage\([\s\S]*?function BotAllowedUserIdsField/)?.[0] ?? '';

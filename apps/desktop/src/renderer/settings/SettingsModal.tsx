@@ -5296,8 +5296,8 @@ function BotAllowedUserIdsField(props: {
         Telegram 用户 ID 是 64 位整数；填入后只接收列表里这些 ID 的来信，其它人发的消息会被静默忽略（不会回弹任何提示）。
         {atCap && <strong>（已达到上限）</strong>}
         {invalidEntries.length > 0 && (
-          <span data-tone="warning" style={{ display: 'block', marginTop: 4 }}>
-            ⚠️ 下列不是数字 ID，可能是 @username 之类的输入，匹配不到任何人：{invalidEntries.slice(0, 3).join('、')}
+          <span className="settingsFieldWarning" data-tone="warning">
+            下列不是数字 ID，可能是用户名之类的输入，匹配不到任何人：{invalidEntries.slice(0, 3).join('、')}
             {invalidEntries.length > 3 && ` 等 ${invalidEntries.length} 项`}
           </span>
         )}
