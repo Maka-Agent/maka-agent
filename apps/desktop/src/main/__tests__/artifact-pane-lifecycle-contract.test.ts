@@ -28,6 +28,16 @@ describe('ArtifactPane async lifecycle contract', () => {
     );
     assert.match(
       src,
+      /const artifactPaneMountedRef = useRef\(true\)/,
+      'ArtifactPane must track whether async artifact work still owns a mounted surface',
+    );
+    assert.match(
+      src,
+      /useEffect\(\(\) => \{[\s\S]*artifactPaneMountedRef\.current = true;[\s\S]*return \(\) => \{[\s\S]*artifactPaneMountedRef\.current = false;[\s\S]*artifactListRequestSeqRef\.current \+= 1;[\s\S]*pendingArtifactListRetryRef\.current = false;[\s\S]*pendingArtifactActionRef\.current = null;[\s\S]*\};[\s\S]*\}, \[\]\)/,
+      'ArtifactPane unmount must invalidate list responses, release pending owners, and be StrictMode replay safe',
+    );
+    assert.match(
+      src,
       /const recordsSessionIdRef = useRef<string \| undefined>\(undefined\)/,
       'ArtifactPane must track which session owns the currently rendered records',
     );
@@ -38,13 +48,13 @@ describe('ArtifactPane async lifecycle contract', () => {
     );
     assert.match(
       refreshBlock,
-      /const next = await window\.maka\.artifacts\.list\(sessionId\)[\s\S]*if \(requestSeq === artifactListRequestSeqRef\.current\) \{[\s\S]*recordsSessionIdRef\.current = sessionId[\s\S]*setRecordsSessionId\(sessionId\)[\s\S]*setRecords\(next\)/,
-      'artifact list responses may set records only if they are still the latest request and must stamp the owning session',
+      /const next = await window\.maka\.artifacts\.list\(sessionId\)[\s\S]*if \(artifactPaneMountedRef\.current && requestSeq === artifactListRequestSeqRef\.current\) \{[\s\S]*recordsSessionIdRef\.current = sessionId[\s\S]*setRecordsSessionId\(sessionId\)[\s\S]*setRecords\(next\)/,
+      'artifact list responses may set records only if the pane is still mounted and they are still the latest request',
     );
     assert.match(
       refreshBlock,
-      /catch \(error\) \{[\s\S]*const message = artifactActionErrorMessage\(error\);[\s\S]*setListError\(\{ sessionId, message \}\)[\s\S]*recordsSessionIdRef\.current !== sessionId[\s\S]*setRecords\(\[\]\)[\s\S]*toast\.error\('刷新生成文件失败', message\)/,
-      'artifact list failures must keep a scoped visible error and clear only previous-session stale records',
+      /catch \(error\) \{[\s\S]*if \(artifactPaneMountedRef\.current && requestSeq === artifactListRequestSeqRef\.current\) \{[\s\S]*const message = artifactActionErrorMessage\(error\);[\s\S]*setListError\(\{ sessionId, message \}\)[\s\S]*recordsSessionIdRef\.current !== sessionId[\s\S]*setRecords\(\[\]\)[\s\S]*toast\.error\('刷新生成文件失败', message\)/,
+      'artifact list failures must update UI only while mounted and only for the latest request',
     );
     assert.match(
       src,
@@ -70,7 +80,7 @@ describe('ArtifactPane async lifecycle contract', () => {
     assert.match(src, /const pendingArtifactListRetryRef = useRef\(false\)/);
     assert.match(
       retryBlock,
-      /if \(pendingArtifactListRetryRef\.current\) return;[\s\S]*pendingArtifactListRetryRef\.current = true[\s\S]*setPendingArtifactListRetry\(true\)[\s\S]*await refresh\(\)[\s\S]*pendingArtifactListRetryRef\.current = false[\s\S]*setPendingArtifactListRetry\(false\)/,
+      /if \(pendingArtifactListRetryRef\.current\) return;[\s\S]*pendingArtifactListRetryRef\.current = true[\s\S]*setPendingArtifactListRetry\(true\)[\s\S]*await refresh\(\)[\s\S]*pendingArtifactListRetryRef\.current = false[\s\S]*if \(artifactPaneMountedRef\.current\) setPendingArtifactListRetry\(false\)/,
       'manual artifact-list retry must use a ref-backed pending gate so repeated clicks cannot fan out list IPC calls',
     );
     assert.match(src, /onClick=\{\(\) => void retryArtifactListRefresh\(\)\}/);
@@ -122,9 +132,13 @@ describe('ArtifactPane async lifecycle contract', () => {
       'artifact action failure helper must not directly echo raw Error.message',
     );
     assert.match(openBlock, /catch \(error\) \{[\s\S]*toast\.error\('无法在 Finder 中打开生成文件', artifactActionErrorMessage\(error\)\)/);
+    assert.match(openBlock, /const result = await window\.maka\.app\.openArtifactPath\(artifactId\);[\s\S]*if \(!artifactPaneMountedRef\.current\) return;/);
     assert.match(copyBlock, /catch \(error\) \{[\s\S]*toast\.error\('复制失败', artifactActionErrorMessage\(error\)\)/);
+    assert.match(copyBlock, /const result = await window\.maka\.artifacts\.readText\(artifactId\);[\s\S]*if \(!artifactPaneMountedRef\.current\) return;[\s\S]*await navigator\.clipboard\.writeText\(result\.text\);[\s\S]*if \(!artifactPaneMountedRef\.current\) return;/);
     assert.match(saveBlock, /catch \(error\) \{[\s\S]*toast\.error\('另存失败', artifactActionErrorMessage\(error\)\)/);
+    assert.match(saveBlock, /const result = await window\.maka\.app\.saveArtifactAs\(artifactId\);[\s\S]*if \(!artifactPaneMountedRef\.current\) return;/);
     assert.match(deleteBlock, /catch \(error\) \{[\s\S]*toast\.error\(`删除 \$\{name\} 失败`, artifactActionErrorMessage\(error\)\)/);
+    assert.match(deleteBlock, /if \(!artifactPaneMountedRef\.current\) return;[\s\S]*await window\.maka\.artifacts\.delete\(artifactId\);[\s\S]*await refresh\(\);[\s\S]*if \(!artifactPaneMountedRef\.current\) return;/);
   });
 
   it('gates artifact toolbar actions while async work is pending', async () => {
@@ -135,10 +149,11 @@ describe('ArtifactPane async lifecycle contract', () => {
 
     assert.match(src, /const \[pendingArtifactAction, setPendingArtifactAction\] = useState<string \| null>\(null\)/);
     assert.match(src, /const pendingArtifactActionRef = useRef<string \| null>\(null\)/);
+    assert.match(src, /const artifactPaneMountedRef = useRef\(true\)/);
     assert.match(src, /const artifactActionBusy = pendingArtifactAction !== null/);
     assert.match(
       gateBlock,
-      /if \(pendingArtifactActionRef\.current !== null\) return;[\s\S]*pendingArtifactActionRef\.current = actionKey[\s\S]*setPendingArtifactAction\(actionKey\)[\s\S]*await action\(\)[\s\S]*pendingArtifactActionRef\.current = null[\s\S]*setPendingArtifactAction\(null\)/,
+      /if \(pendingArtifactActionRef\.current !== null\) return;[\s\S]*pendingArtifactActionRef\.current = actionKey[\s\S]*setPendingArtifactAction\(actionKey\)[\s\S]*await action\(\)[\s\S]*pendingArtifactActionRef\.current = null[\s\S]*if \(artifactPaneMountedRef\.current\) setPendingArtifactAction\(null\)/,
       'Artifact actions must use a ref-backed pending gate so same-frame double clicks cannot run two IPC calls',
     );
     assert.match(
