@@ -12,7 +12,10 @@ describe('Daily Review copy feedback contract', () => {
 
     assert.match(ui, /onCopyDailyReviewMarkdown\?\(input:/);
     assert.match(ui, /onCopyMarkdown\?: \(input:/);
-    assert.match(ui, /props\.onCopyMarkdown\(\{\s*markdown:\s*md,\s*label:\s*dayLabel,\s*summary\s*\}\)/);
+    assert.match(ui, /props\.onCopyMarkdown\?\.\(\{\s*markdown:\s*md,\s*label:\s*dayLabel,\s*summary\s*\}\)/);
+    assert.match(ui, /const hasDailyReviewActions = Boolean\(props\.onCopyMarkdown \|\| props\.onAppendMarkdown \|\| props\.onSaveMarkdown\)/);
+    assert.match(ui, /summary && summary\.totals\.sessionCount \+ summary\.totals\.requestCount > 0 && hasDailyReviewActions/);
+    assert.doesNotMatch(ui, /navigator\.clipboard\.writeText\(md\)\.catch\(\(\) => \{\}\)/);
     assert.match(main, /onCopyDailyReviewMarkdown=\{async \(\{ markdown, label, summary \}\) => \{/);
     assert.match(main, /await navigator\.clipboard\.writeText\(markdown\)/);
     assert.match(main, /toastApi\.success\(\s*`已复制\$\{label\}回顾`/);
@@ -52,6 +55,7 @@ describe('Daily Review copy feedback contract', () => {
     assert.match(panelBlock, /const \[pendingDailyReviewAction, setPendingDailyReviewAction\] = useState<string \| null>\(null\)/);
     assert.match(panelBlock, /const pendingDailyReviewActionRef = useRef<string \| null>\(null\)/);
     assert.match(panelBlock, /const dailyReviewActionBusy = pendingDailyReviewAction !== null/);
+    assert.match(panelBlock, /\{props\.onCopyMarkdown && \(/);
     assert.match(
       gateBlock,
       /if \(pendingDailyReviewActionRef\.current !== null\) return;[\s\S]*pendingDailyReviewActionRef\.current = actionKey[\s\S]*setPendingDailyReviewAction\(actionKey\)[\s\S]*await action\(\)[\s\S]*pendingDailyReviewActionRef\.current = null[\s\S]*setPendingDailyReviewAction\(null\)/,

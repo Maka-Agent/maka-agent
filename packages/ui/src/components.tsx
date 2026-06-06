@@ -956,6 +956,7 @@ function DailyReviewPanel(props: {
   }
 
   const dailyReviewActionBusy = pendingDailyReviewAction !== null;
+  const hasDailyReviewActions = Boolean(props.onCopyMarkdown || props.onAppendMarkdown || props.onSaveMarkdown);
 
   return (
     <div className="maka-daily-review-panel" data-loading={loading ? 'true' : undefined}>
@@ -997,26 +998,24 @@ function DailyReviewPanel(props: {
             </button>
           ))}
         </div>
-        {summary && summary.totals.sessionCount + summary.totals.requestCount > 0 && (
+        {summary && summary.totals.sessionCount + summary.totals.requestCount > 0 && hasDailyReviewActions && (
           <div className="maka-daily-review-actions" aria-label="回顾导出操作">
-            <button
-              type="button"
-              className="maka-button maka-button-ghost maka-daily-review-copy"
-              onClick={() => void runDailyReviewAction('copy', async () => {
-                const md = formatDailyReviewMarkdown(summary, dayLabel);
-                if (props.onCopyMarkdown) {
-                  await props.onCopyMarkdown({ markdown: md, label: dayLabel, summary });
-                  return;
-                }
-                await navigator.clipboard.writeText(md).catch(() => {});
-              })}
-              disabled={dailyReviewActionBusy}
-              data-pending={pendingDailyReviewAction === 'copy' ? 'true' : undefined}
-              aria-busy={pendingDailyReviewAction === 'copy' ? 'true' : undefined}
-              title="复制为 Markdown 摘要，方便分享 / 贴到笔记"
-            >
-              {pendingDailyReviewAction === 'copy' ? '复制中…' : '复制'}
-            </button>
+            {props.onCopyMarkdown && (
+              <button
+                type="button"
+                className="maka-button maka-button-ghost maka-daily-review-copy"
+                onClick={() => void runDailyReviewAction('copy', async () => {
+                  const md = formatDailyReviewMarkdown(summary, dayLabel);
+                  await props.onCopyMarkdown?.({ markdown: md, label: dayLabel, summary });
+                })}
+                disabled={dailyReviewActionBusy}
+                data-pending={pendingDailyReviewAction === 'copy' ? 'true' : undefined}
+                aria-busy={pendingDailyReviewAction === 'copy' ? 'true' : undefined}
+                title="复制为 Markdown 摘要，方便分享 / 贴到笔记"
+              >
+                {pendingDailyReviewAction === 'copy' ? '复制中…' : '复制'}
+              </button>
+            )}
             {props.onAppendMarkdown && (
               <button
                 type="button"
