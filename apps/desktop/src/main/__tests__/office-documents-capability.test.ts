@@ -50,6 +50,8 @@ describe('Office document capability contract', () => {
     assert.match(settings, /处理建议/);
     assert.match(settings, /OFFICECLI_INSTALL_COMMAND/);
     assert.match(settings, /复制 macOS\/Linux 安装命令/);
+    assert.match(settings, /<div className="settingsCapabilityGuidanceActions" role="group" aria-label="Office 文档安装辅助">/);
+    assert.doesNotMatch(settings, /<div className="settingsCapabilityGuidanceActions" aria-label="Office 文档安装辅助">/);
     assert.match(settings, /copyingOfficeCliInstallRef\.current/, 'OfficeCLI install copy action must have a ref-backed double-click guard');
     assert.match(settings, /if \(copyingOfficeCliInstallRef\.current\) return;/);
     assert.match(settings, /const capabilityRowMountedRef = useRef\(false\);/);

@@ -5928,7 +5928,7 @@ function CapabilityRow(props: { capability: CapabilitySnapshot }) {
             ))}
           </ul>
           {showOfficeCliInstallActions && (
-            <div className="settingsCapabilityGuidanceActions" aria-label="Office 文档安装辅助">
+            <div className="settingsCapabilityGuidanceActions" role="group" aria-label="Office 文档安装辅助">
               <code>{OFFICECLI_INSTALL_COMMAND}</code>
               <div>
                 <button
