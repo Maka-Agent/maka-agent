@@ -162,8 +162,13 @@ describe('permission response IPC boundary', () => {
     assert.match(stop[0], /await window\.maka\.sessions\.stop\(sessionId, \{ source: 'stop_button' \}\);/);
     assert.match(
       stop[0],
-      /catch \(error\)[\s\S]*?if \(activeIdRef\.current === sessionId\) toastApi\.error\(['"]停止失败['"]/,
+      /catch \(error\)[\s\S]*?if \(activeIdRef\.current === sessionId\) toastApi\.error\('停止失败', sessionControlActionErrorMessage\(error\)\);/,
       'stop failure feedback must not leak onto a different active session',
+    );
+    assert.doesNotMatch(
+      stop[0],
+      /toastApi\.error\('停止失败', cleanErrorMessage\(error\)\)/,
+      'stop failure feedback must not expose raw IPC/provider/storage details',
     );
     assert.match(stop[0], /finally \{[\s\S]*?clearPendingStop\(sessionId\);[\s\S]*?\}/);
     const respond = renderer.match(/async function respondToPermission\([\s\S]*?\n  \}/);
@@ -178,8 +183,18 @@ describe('permission response IPC boundary', () => {
     );
     assert.match(
       respond[0],
-      /catch \(error\)[\s\S]*?if \(activeIdRef\.current === sessionId\) toastApi\.error\(['"]响应失败['"]/,
+      /catch \(error\)[\s\S]*?if \(activeIdRef\.current === sessionId\) toastApi\.error\('响应失败', sessionControlActionErrorMessage\(error\)\);/,
       'permission response failure feedback must not leak onto a different active session',
+    );
+    assert.doesNotMatch(
+      respond[0],
+      /toastApi\.error\('响应失败', cleanErrorMessage\(error\)\)/,
+      'permission response failure feedback must not expose raw IPC/provider/storage details',
+    );
+    assert.match(
+      renderer,
+      /function sessionControlActionErrorMessage\(error: unknown\): string \{[\s\S]*generalizedErrorMessageChinese\(error, '会话操作失败，请稍后重试。'\)/,
+      'session control visible failures must use a generalized Chinese fallback',
     );
   });
 

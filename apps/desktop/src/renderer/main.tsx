@@ -1876,7 +1876,7 @@ function AppShell() {
       // UnhandledPromiseRejection and the user would see nothing.
       // Surface it as a toast so the user knows the model wasn't
       // actually interrupted and can retry.
-      if (activeIdRef.current === sessionId) toastApi.error('停止失败', cleanErrorMessage(error));
+      if (activeIdRef.current === sessionId) toastApi.error('停止失败', sessionControlActionErrorMessage(error));
     } finally {
       clearPendingStop(sessionId);
     }
@@ -1891,7 +1891,7 @@ function AppShell() {
       // Same fire-and-forget call site as stop() — wrap so a failed
       // permission response (main process busy / session dropped)
       // surfaces instead of dying as UnhandledPromiseRejection.
-      if (activeIdRef.current === sessionId) toastApi.error('响应失败', cleanErrorMessage(error));
+      if (activeIdRef.current === sessionId) toastApi.error('响应失败', sessionControlActionErrorMessage(error));
     }
   }
 
@@ -3290,6 +3290,10 @@ function sessionRowActionErrorMessage(error: unknown): string {
 
 function sessionModelActionErrorMessage(error: unknown): string {
   return generalizedErrorMessageChinese(error, '模型暂时无法切换，请稍后重试。');
+}
+
+function sessionControlActionErrorMessage(error: unknown): string {
+  return generalizedErrorMessageChinese(error, '会话操作失败，请稍后重试。');
 }
 
 function cleanErrorMessage(error: unknown): string {
