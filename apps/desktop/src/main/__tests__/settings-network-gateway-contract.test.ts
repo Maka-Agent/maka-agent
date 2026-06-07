@@ -196,10 +196,20 @@ describe('Settings network and gateway persistence contract', () => {
       /<div className="settingsUsageSummary" role="group" aria-label="开放网关状态">/,
       'Open Gateway runtime metric cards must expose an accessible group name',
     );
+    assert.match(
+      gatewayBlock,
+      /<div className="settingsActionRow" role="group" aria-label="开放网关操作">/,
+      'Open Gateway token and curl actions must expose an accessible group name',
+    );
     assert.doesNotMatch(
       gatewayBlock,
       /<div className="settingsUsageSummary" aria-label="开放网关状态">/,
       'Open Gateway runtime metrics must not regress to an anonymous status summary',
+    );
+    assert.doesNotMatch(
+      gatewayBlock,
+      /<div className="settingsActionRow">\s*<button className="maka-button" type="button" disabled=\{saving\} onClick=\{\(\) => void generateToken\(\)\}>/,
+      'Open Gateway action row must not regress to an anonymous button cluster',
     );
     assert.match(
       gatewayBlock,

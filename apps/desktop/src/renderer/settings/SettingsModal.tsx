@@ -4498,7 +4498,7 @@ function OpenGatewaySettingsPage(props: {
         </div>
       )}
 
-      <div className="settingsActionRow">
+      <div className="settingsActionRow" role="group" aria-label="开放网关操作">
         <button className="maka-button" type="button" disabled={saving} onClick={() => void generateToken()}>
           生成 token
         </button>
