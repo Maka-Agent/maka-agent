@@ -5081,7 +5081,7 @@ function BotChatSettingsPage(props: {
           </div>
         )}
 
-        <dl className="settingsBotStatusGrid">
+        <dl className="settingsBotStatusGrid" aria-label={`${BOT_LABELS[selected].label}运行状态`}>
           <div>
             <dt>运行状态</dt>
             <dd>{selectedStatus?.running ? '监听中' : '未监听'}</dd>
