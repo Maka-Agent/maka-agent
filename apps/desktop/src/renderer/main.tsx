@@ -1099,7 +1099,7 @@ function AppShell() {
       setSessions(next);
       return next;
     } catch (error) {
-      toastApi.error('刷新会话列表失败', cleanErrorMessage(error));
+      toastApi.error('刷新会话列表失败', sessionListActionErrorMessage(error));
       return sessionsRef.current;
     }
   }
@@ -3308,6 +3308,10 @@ function turnFooterActionErrorMessage(error: unknown): string {
 
 function sessionRowActionErrorMessage(error: unknown): string {
   return generalizedErrorMessageChinese(error, '会话操作失败，请稍后重试。');
+}
+
+function sessionListActionErrorMessage(error: unknown): string {
+  return generalizedErrorMessageChinese(error, '刷新会话列表失败，请稍后重试。');
 }
 
 function sessionModelActionErrorMessage(error: unknown): string {

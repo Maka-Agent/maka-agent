@@ -304,10 +304,16 @@ describe('permission response IPC boundary', () => {
     );
     assert.ok(refreshSessions, 'refreshSessions() must exist');
     assert.match(
+      renderer,
+      /function sessionListActionErrorMessage\(error: unknown\): string \{[\s\S]*generalizedErrorMessageChinese\(error, '刷新会话列表失败，请稍后重试。'\)/,
+      'session list refresh failures should use generalized fallback copy instead of raw backend/path details',
+    );
+    assert.match(
       refreshSessions[0],
-      /try \{[\s\S]*window\.maka\.sessions\.list\(\)[\s\S]*sessionsRef\.current = next[\s\S]*setSessions\(next\)[\s\S]*return next[\s\S]*\} catch \(error\) \{[\s\S]*toastApi\.error\('刷新会话列表失败', cleanErrorMessage\(error\)\)[\s\S]*return sessionsRef\.current/,
+      /try \{[\s\S]*window\.maka\.sessions\.list\(\)[\s\S]*sessionsRef\.current = next[\s\S]*setSessions\(next\)[\s\S]*return next[\s\S]*\} catch \(error\) \{[\s\S]*toastApi\.error\('刷新会话列表失败', sessionListActionErrorMessage\(error\)\)[\s\S]*return sessionsRef\.current/,
       'refreshSessions() is called fire-and-forget and must catch list failures without dropping the current list',
     );
+    assert.doesNotMatch(refreshSessions[0], /toastApi\.error\('刷新会话列表失败', cleanErrorMessage\(error\)\)/);
     assert.doesNotMatch(
       refreshSessions[0],
       /setActiveId\(/,
