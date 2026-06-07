@@ -44,10 +44,16 @@ describe('renderer startup fail-soft contract', () => {
     );
     assert.match(mountEffect, /void refreshShellSettings\(\)/);
     assert.match(
-      refreshShellSettings,
-      /try \{[\s\S]*window\.maka\.settings\.get\(\)[\s\S]*applyUiLocale\(uiLocale\)[\s\S]*applyTheme\(pref\)[\s\S]*applyDensity\(den\)[\s\S]*applyThemePalette\(palette\)[\s\S]*\} catch \(error\) \{[\s\S]*toastApi\.error\('载入外观设置失败', cleanErrorMessage\(error\)\)/,
-      'startup shell settings load failures must surface visibly instead of silently applying default appearance values',
+      main,
+      /function shellSettingsActionErrorMessage\(error: unknown\): string \{[\s\S]*generalizedErrorMessageChinese\(error, '外观设置暂时无法载入，请稍后重试。'\)/,
+      'startup shell settings failures should use generalized fallback copy instead of raw storage/system details',
     );
+    assert.match(
+      refreshShellSettings,
+      /try \{[\s\S]*window\.maka\.settings\.get\(\)[\s\S]*applyUiLocale\(uiLocale\)[\s\S]*applyTheme\(pref\)[\s\S]*applyDensity\(den\)[\s\S]*applyThemePalette\(palette\)[\s\S]*\} catch \(error\) \{[\s\S]*toastApi\.error\('载入外观设置失败', shellSettingsActionErrorMessage\(error\)\)/,
+      'startup shell settings load failures must surface visibly without exposing raw storage/system details',
+    );
+    assert.doesNotMatch(refreshShellSettings, /toastApi\.error\('载入外观设置失败', cleanErrorMessage\(error\)\)/);
     assert.doesNotMatch(
       refreshShellSettings,
       /catch \(error\) \{[\s\S]*applyUiLocale\('auto'\)|catch \(error\) \{[\s\S]*applyTheme\('auto'\)|catch \(error\) \{[\s\S]*applyDensity\('comfortable'\)|catch \(error\) \{[\s\S]*applyThemePalette\('default'\)/,

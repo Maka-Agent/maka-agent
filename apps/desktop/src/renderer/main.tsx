@@ -142,6 +142,10 @@ function appInfoActionErrorMessage(error: unknown): string {
   return generalizedErrorMessageChinese(error, '项目路径暂时无法读取，请稍后重试。');
 }
 
+function shellSettingsActionErrorMessage(error: unknown): string {
+  return generalizedErrorMessageChinese(error, '外观设置暂时无法载入，请稍后重试。');
+}
+
 function commandPaletteConnectionTestFailureMessage(result: ConnectionTestResult): string {
   const fallback = commandPaletteConnectionTestFailureFallback(result);
   if (!result.errorMessage) return fallback;
@@ -1129,7 +1133,7 @@ function AppShell() {
       applyDensity(den);
       applyThemePalette(palette);
     } catch (error) {
-      toastApi.error('载入外观设置失败', cleanErrorMessage(error));
+      toastApi.error('载入外观设置失败', shellSettingsActionErrorMessage(error));
     }
   }
 
