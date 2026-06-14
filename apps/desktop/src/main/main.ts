@@ -408,34 +408,90 @@ async function resolveConnectionSecret(slug: string): Promise<string | null> {
   return credentialStore.getSecret(slug, 'api_key');
 }
 
-function normalizeCreateConnectionInput(input: CreateConnectionInput): CreateConnectionInput {
-  const defaults = PROVIDER_DEFAULTS[input.providerType];
-  if (defaults.authKind === 'oauth_token') {
-    return { ...input, baseUrl: defaults.baseUrl };
+const IPC_CONNECTION_SLUG_MAX_LENGTH = 64;
+const IPC_CONNECTION_SECRET_MAX_LENGTH = 4096;
+const IPC_CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
+const IPC_CONNECTION_SLUG_PATTERN = /^[A-Za-z0-9._-]+$/;
+
+function hasTraversalLookingSlugSegment(value: string): boolean {
+  return value.split('.').some((segment) => segment.length === 0);
+}
+
+function normalizeConnectionSlugForIpc(value: unknown, label: string): string {
+  if (typeof value !== 'string') {
+    throw new Error(`${label} must be a string`);
   }
-  if (input.baseUrl === undefined) return input;
-  const result = normalizeConnectionBaseUrl(input.baseUrl);
+  if (value.length === 0) {
+    throw new Error(`${label} is required`);
+  }
+  if (value.length > IPC_CONNECTION_SLUG_MAX_LENGTH) {
+    throw new Error(`${label} must be ${IPC_CONNECTION_SLUG_MAX_LENGTH} characters or fewer`);
+  }
+  if (!IPC_CONNECTION_SLUG_PATTERN.test(value) || IPC_CONTROL_CHARACTER_PATTERN.test(value)) {
+    throw new Error(`${label} contains invalid characters`);
+  }
+  if (hasTraversalLookingSlugSegment(value)) {
+    throw new Error(`${label} contains invalid path traversal segments`);
+  }
+  return value;
+}
+
+function normalizeConnectionApiKeyForIpc(value: unknown, label: string): string {
+  if (typeof value !== 'string') {
+    throw new Error(`${label} must be a string`);
+  }
+  if (value.length > IPC_CONNECTION_SECRET_MAX_LENGTH) {
+    throw new Error(`${label} must be ${IPC_CONNECTION_SECRET_MAX_LENGTH} characters or fewer`);
+  }
+  if (IPC_CONTROL_CHARACTER_PATTERN.test(value)) {
+    throw new Error(`${label} contains invalid characters`);
+  }
+  return value;
+}
+
+function normalizeCreateConnectionInput(input: CreateConnectionInput): CreateConnectionInput {
+  const apiKey = input.apiKey === undefined
+    ? undefined
+    : normalizeConnectionApiKeyForIpc(input.apiKey, 'apiKey');
+  const slug = normalizeConnectionSlugForIpc(input.slug, 'connection slug');
+  const normalizedInput = { ...input, slug, ...(apiKey !== undefined ? { apiKey } : {}) };
+  const defaults = PROVIDER_DEFAULTS[normalizedInput.providerType];
+  if (defaults.authKind === 'oauth_token') {
+    return { ...normalizedInput, baseUrl: defaults.baseUrl };
+  }
+  if (normalizedInput.baseUrl === undefined) return normalizedInput;
+  const result = normalizeConnectionBaseUrl(normalizedInput.baseUrl);
   if (!result.ok) {
     throw new Error(result.error);
   }
-  return { ...input, baseUrl: result.value };
+  return { ...normalizedInput, baseUrl: result.value };
+}
+
+function normalizeConnectionPatchSecretsForIpc(patch: UpdateConnectionInput): UpdateConnectionInput {
+  if (!Object.prototype.hasOwnProperty.call(patch, 'apiKey')) return patch;
+  if (patch.apiKey === undefined) return patch;
+  return {
+    ...patch,
+    apiKey: normalizeConnectionApiKeyForIpc(patch.apiKey, 'apiKey'),
+  };
 }
 
 async function normalizeUpdateConnectionInput(
   slug: string,
   patch: UpdateConnectionInput,
 ): Promise<UpdateConnectionInput> {
+  const normalizedPatch = normalizeConnectionPatchSecretsForIpc(patch);
   const existing = await connectionStore.get(slug);
   const providerType = existing?.providerType;
   if (providerType && PROVIDER_DEFAULTS[providerType].authKind === 'oauth_token') {
-    return { ...patch, baseUrl: PROVIDER_DEFAULTS[providerType].baseUrl };
+    return { ...normalizedPatch, baseUrl: PROVIDER_DEFAULTS[providerType].baseUrl };
   }
-  if (patch.baseUrl === undefined) return patch;
-  const result = normalizeConnectionBaseUrl(patch.baseUrl);
+  if (normalizedPatch.baseUrl === undefined) return normalizedPatch;
+  const result = normalizeConnectionBaseUrl(normalizedPatch.baseUrl);
   if (!result.ok) {
     throw new Error(result.error);
   }
-  return { ...patch, baseUrl: result.value };
+  return { ...normalizedPatch, baseUrl: result.value };
 }
 
 const planReminderStore = createPlanReminderStore(workspaceRoot);
@@ -2326,10 +2382,11 @@ function registerIpc(): void {
   });
   ipcMain.handle('connections:getDefault', () => connectionStore.getDefault());
   ipcMain.handle('connections:setDefault', async (_event, slug: string | null) => {
-    if (slug && !(await connectionStore.get(slug))) {
-      throw new Error(`No such connection: ${slug}`);
+    const normalizedSlug = slug === null ? null : normalizeConnectionSlugForIpc(slug, 'connection slug');
+    if (normalizedSlug && !(await connectionStore.get(normalizedSlug))) {
+      throw new Error(`No such connection: ${normalizedSlug}`);
     }
-    await connectionStore.setDefault(slug);
+    await connectionStore.setDefault(normalizedSlug);
     emitConnectionListChanged();
   });
   ipcMain.handle('connections:create', async (_event, input: CreateConnectionInput) => {
@@ -2374,6 +2431,7 @@ function registerIpc(): void {
     // Same OAuth-boundary rule as create: if the current/new provider
     // uses an OAuth token, force the canonical provider endpoint and
     // ignore renderer-provided baseUrl text entirely.
+    slug = normalizeConnectionSlugForIpc(slug, 'connection slug');
     const normalizedPatch = await normalizeUpdateConnectionInput(slug, patch);
     const connection = await connectionStore.update(slug, normalizedPatch);
     if (normalizedPatch.apiKey !== undefined) {
@@ -2384,11 +2442,13 @@ function registerIpc(): void {
     return connection;
   });
   ipcMain.handle('connections:delete', async (_event, slug: string) => {
+    slug = normalizeConnectionSlugForIpc(slug, 'connection slug');
     await connectionStore.delete(slug);
     await credentialStore.deleteSecret(slug);
     emitConnectionListChanged();
   });
   ipcMain.handle('connections:test', async (_event, slug: string, opts?: { model?: string }) => {
+    slug = normalizeConnectionSlugForIpc(slug, 'connection slug');
     const connection = await connectionStore.get(slug);
     if (!connection) return { ok: false, errorMessage: `找不到模型连接：${slug}` };
     const apiKey = await resolveConnectionSecret(slug);
@@ -2407,6 +2467,7 @@ function registerIpc(): void {
     return result;
   });
   ipcMain.handle('connections:fetchModels', async (_event, slug: string) => {
+    slug = normalizeConnectionSlugForIpc(slug, 'connection slug');
     const connection = await connectionStore.get(slug);
     if (!connection) throw new Error(`找不到模型连接：${slug}`);
     const apiKey = await resolveConnectionSecret(slug);
@@ -2433,9 +2494,10 @@ function registerIpc(): void {
       throw new Error(generalizedErrorMessageChinese(error, '拉取模型列表失败'));
     }
   });
-  ipcMain.handle('connections:hasSecret', async (_event, slug: string) =>
-    Boolean(await resolveConnectionSecret(slug)),
-  );
+  ipcMain.handle('connections:hasSecret', async (_event, slug: string) => {
+    slug = normalizeConnectionSlugForIpc(slug, 'connection slug');
+    return Boolean(await resolveConnectionSecret(slug));
+  });
 
   // PR110b: Onboarding snapshot + milestone IPCs. Renderer polls via
   // these on app load and whenever `sessions:changed` /
