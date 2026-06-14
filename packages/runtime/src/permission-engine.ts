@@ -221,6 +221,21 @@ export class PermissionEngine {
     return { category: parked.category, toolUseId: parked.toolUseId };
   }
 
+  /**
+   * Fail one parked request without ending the whole turn.
+   * Used by runtime-level permission timeouts so late UI responses do not
+   * resolve a tool call that has already failed closed.
+   */
+  expireRequest(turnId: string, requestId: string, reason: string): { category: ToolCategory; toolUseId: string } | null {
+    const state = this.turns.get(turnId);
+    if (!state) return null;
+    const parked = state.parked.get(requestId);
+    if (!parked) return null;
+    state.parked.delete(requestId);
+    parked.reject(new Error(reason));
+    return { category: parked.category, toolUseId: parked.toolUseId };
+  }
+
   /** Test/debug accessor. */
   pendingCount(turnId: string): number {
     return this.turns.get(turnId)?.parked.size ?? 0;

@@ -152,6 +152,7 @@ export type ModelFactory = (input: ModelFactoryInput) => unknown;
 export const TOOL_ERROR_RESULT_MAX_CHARS = 4000;
 export const INVALID_TOOL_NAME = 'invalid';
 export const MAX_ACTIVE_SUBAGENT_TOOLS_PER_TURN = 5;
+export const DEFAULT_PERMISSION_TIMEOUT_MS = 300_000;
 const SUBAGENT_TOOL_LIMIT_MESSAGE = '只读探索并发过多：同一轮最多 5 个子代理。请等待已有探索完成后再继续。';
 
 export interface RepairableAiSdkToolCall {
@@ -204,6 +205,8 @@ export interface AiSdkBackendInput {
   streamConnectTimeoutMs?: number;
   /** Timeout between SDK/tool events; paused while waiting on permission. Default 120s. */
   streamIdleTimeoutMs?: number;
+  /** Timeout for a renderer/user permission decision. Default 300s. */
+  permissionTimeoutMs?: number;
   /** Optional system prompt (skills + workspace AGENTS.md merged upstream). */
   systemPrompt?: string | ((context: SystemPromptContext) => string | undefined | Promise<string | undefined>);
   /** Provider-native options passed through to ai-sdk. */
@@ -275,7 +278,7 @@ export class AiSdkBackend implements AgentBackend {
     let thinkingText = '';
     let thinkingSignature: string | undefined;
     const startedAt = this.now();
-    let tokenUsage: { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined;
+    let tokenUsage: NormalizedAiSdkUsage | undefined;
     let streamStatus: LlmCallRecord['status'] = 'success';
     let streamErrorClass: string | undefined;
 
@@ -434,17 +437,17 @@ export class AiSdkBackend implements AgentBackend {
 
         // Final usage event (await result.usage which resolves once stream ends).
         try {
-          const usage = await result.usage;
-          tokenUsage = usage;
-          if (usage) {
+          tokenUsage = normalizeAiSdkUsage(await result.usage);
+          if (tokenUsage) {
             const tu: TokenUsageMessage = {
               type: 'token_usage',
               id: this.newId(),
               turnId,
               ts: this.now(),
-              input: usage.promptTokens ?? 0,
-              output: usage.completionTokens ?? 0,
-              ...(usage.totalTokens !== undefined ? {} : {}),
+              input: tokenUsage.inputTokens,
+              output: tokenUsage.outputTokens,
+              ...(tokenUsage.cachedInputTokens > 0 ? { cacheRead: tokenUsage.cachedInputTokens } : {}),
+              ...(tokenUsage.cacheWriteInputTokens > 0 ? { cacheCreation: tokenUsage.cacheWriteInputTokens } : {}),
             };
             await this.input.appendMessage(tu).catch(() => {});
             queue.push({
@@ -452,8 +455,10 @@ export class AiSdkBackend implements AgentBackend {
               id: this.newId(),
               turnId,
               ts: this.now(),
-              input: usage.promptTokens ?? 0,
-              output: usage.completionTokens ?? 0,
+              input: tokenUsage.inputTokens,
+              output: tokenUsage.outputTokens,
+              ...(tokenUsage.cachedInputTokens > 0 ? { cacheRead: tokenUsage.cachedInputTokens } : {}),
+              ...(tokenUsage.cacheWriteInputTokens > 0 ? { cacheCreation: tokenUsage.cacheWriteInputTokens } : {}),
             } satisfies TokenUsageEvent);
           }
         } catch {
@@ -507,8 +512,11 @@ export class AiSdkBackend implements AgentBackend {
           connectionSlug: this.input.connection.slug,
           providerId: this.input.connection.providerType,
           modelId: this.input.modelId,
-          inputTokens: tokenUsage?.promptTokens ?? 0,
-          outputTokens: tokenUsage?.completionTokens ?? 0,
+          inputTokens: tokenUsage?.inputTokens ?? 0,
+          outputTokens: tokenUsage?.outputTokens ?? 0,
+          cachedInputTokens: tokenUsage?.cachedInputTokens ?? 0,
+          cacheWriteInputTokens: tokenUsage?.cacheWriteInputTokens ?? 0,
+          reasoningTokens: tokenUsage?.reasoningTokens ?? 0,
           totalTokens: tokenUsage?.totalTokens,
           latencyMs: Math.max(0, this.now() - startedAt),
           status: streamStatus,
@@ -595,11 +603,8 @@ export class AiSdkBackend implements AgentBackend {
         queue.push(verdict.event);
         let response: PermissionDecision;
         try {
-          this.currentWatchdog?.pause();
-          response = await verdict.parked;
-          this.currentWatchdog?.resume();
+          response = await this.awaitPermissionDecision(verdict, turnId);
         } catch (err) {
-          this.currentWatchdog?.resume();
           const msg = formatSyntheticToolErrorText(err);
           const reason = formatSyntheticToolErrorText(`Permission flow aborted: ${msg}`);
           await this.writeSyntheticToolResult(toolUseId, turnId, reason, queue);
@@ -1040,6 +1045,32 @@ export class AiSdkBackend implements AgentBackend {
     for await (const ev of queue) yield ev;
   }
 
+  private async awaitPermissionDecision(
+    verdict: Extract<ReturnType<PermissionEngine['evaluate']>, { kind: 'prompt' }>,
+    turnId: string,
+  ): Promise<PermissionDecision> {
+    const timeoutMs = this.input.permissionTimeoutMs ?? DEFAULT_PERMISSION_TIMEOUT_MS;
+    this.currentWatchdog?.pause();
+    try {
+      if (timeoutMs <= 0) return await verdict.parked;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          const reason = `Permission request ${verdict.event.requestId} timed out after ${timeoutMs}ms`;
+          this.input.permissionEngine.expireRequest(turnId, verdict.event.requestId, reason);
+          reject(new Error(reason));
+        }, timeoutMs);
+      });
+      try {
+        return await Promise.race([verdict.parked, timeout]);
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+      }
+    } finally {
+      this.currentWatchdog?.resume();
+    }
+  }
+
   private cleanupAfterTurn(turnId: string): void {
     this.input.permissionEngine.endTurn(turnId, this.aborted ? 'aborted' : 'completed');
     this.abortController = null;
@@ -1063,15 +1094,81 @@ interface AiSdkStreamChunk {
   toolName?: string;
   args?: unknown;
   result?: unknown;
-  usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
+  usage?: AiSdkUsageLike;
   finishReason?: string;
   error?: unknown;
 }
 
 interface StreamTextResult {
   fullStream: AsyncIterable<AiSdkStreamChunk>;
-  usage: Promise<{ promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined>;
+  usage: Promise<AiSdkUsageLike | undefined>;
   finishReason: Promise<string>;
+}
+
+interface AiSdkUsageLike {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedInputTokens?: number;
+  cacheWriteInputTokens?: number;
+  reasoningTokens?: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  inputTokenDetails?: {
+    cachedTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+    reasoningTokens?: number;
+  };
+  outputTokenDetails?: {
+    reasoningTokens?: number;
+  };
+}
+
+interface NormalizedAiSdkUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  cacheWriteInputTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+}
+
+export function normalizeAiSdkUsage(usage: AiSdkUsageLike | undefined): NormalizedAiSdkUsage | undefined {
+  if (!usage) return undefined;
+  const inputTokens = finiteToken(usage.inputTokens) ?? finiteToken(usage.promptTokens) ?? 0;
+  const outputTokens = finiteToken(usage.outputTokens) ?? finiteToken(usage.completionTokens) ?? 0;
+  const cachedInputTokens =
+    finiteToken(usage.cachedInputTokens)
+    ?? finiteToken(usage.cacheReadInputTokens)
+    ?? finiteToken(usage.inputTokenDetails?.cacheReadTokens)
+    ?? finiteToken(usage.inputTokenDetails?.cachedTokens)
+    ?? 0;
+  const cacheWriteInputTokens =
+    finiteToken(usage.cacheWriteInputTokens)
+    ?? finiteToken(usage.cacheCreationInputTokens)
+    ?? finiteToken(usage.inputTokenDetails?.cacheWriteTokens)
+    ?? 0;
+  const reasoningTokens =
+    finiteToken(usage.reasoningTokens)
+    ?? finiteToken(usage.outputTokenDetails?.reasoningTokens)
+    ?? finiteToken(usage.inputTokenDetails?.reasoningTokens)
+    ?? 0;
+  const totalTokens = finiteToken(usage.totalTokens) ?? inputTokens + outputTokens;
+  return {
+    inputTokens,
+    outputTokens,
+    cachedInputTokens,
+    cacheWriteInputTokens,
+    reasoningTokens,
+    totalTokens,
+  };
+}
+
+function finiteToken(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 function classifyError(error: unknown): string {
@@ -1114,7 +1211,9 @@ function deriveToolResultStatus(content: ToolResultContent): ToolInvocationRecor
   }
   if (content.kind === 'rive_workflow' && content.ok === false) return 'error';
   if (content.kind === 'web_search_error') return 'error';
-  if (content.kind === 'office_document' && content.ok === false) return 'error';
+  if (content.kind === 'office_document' && content.ok === false) {
+    return content.reason === 'officecli_aborted' ? 'aborted' : 'error';
+  }
   return 'success';
 }
 

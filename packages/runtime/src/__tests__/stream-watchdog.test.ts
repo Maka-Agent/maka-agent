@@ -74,6 +74,36 @@ describe('StreamWatchdog', () => {
     expect(fired).toEqual([{ phase: 'idle', elapsedMs: 10_000 }]);
   });
 
+  test('nested pauses require matching resumes before idle timeout restarts', () => {
+    const timers = fakeTimers(3_500);
+    const fired: StreamWatchdogTimeout[] = [];
+    const watchdog = new StreamWatchdog({
+      now: timers.now,
+      setTimer: timers.setTimer,
+      clearTimer: timers.clearTimer,
+      connectTimeoutMs: 30_000,
+      idleTimeoutMs: 10_000,
+      onTimeout: (timeout) => fired.push(timeout),
+    });
+
+    watchdog.start();
+    watchdog.markActivity();
+    watchdog.pause();
+    watchdog.pause();
+    timers.advance(600_000);
+    expect(fired).toEqual([]);
+
+    watchdog.resume();
+    timers.advance(60_000);
+    expect(fired).toEqual([]);
+
+    watchdog.resume();
+    timers.advance(9_999);
+    expect(fired).toEqual([]);
+    timers.advance(1);
+    expect(fired).toEqual([{ phase: 'idle', elapsedMs: 10_000 }]);
+  });
+
   test('stop cancels the active timer', () => {
     const timers = fakeTimers(4_000);
     const fired: StreamWatchdogTimeout[] = [];

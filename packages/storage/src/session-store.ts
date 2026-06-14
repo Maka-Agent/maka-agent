@@ -223,10 +223,23 @@ class FileSessionStore implements SessionStore {
 
   private async readFilePartsUnlocked(sessionId: string): Promise<{ header: SessionHeader; messages: StoredMessage[] }> {
     const text = await readFile(this.sessionPath(sessionId), 'utf8');
-    const lines = text.split('\n').filter((line) => line.trim().length > 0);
+    const rawLines = text.split('\n');
+    const endsWithNewline = text.endsWith('\n');
+    const lines = rawLines
+      .map((line, index) => ({ line, lineNumber: index + 1 }))
+      .filter((entry) => entry.line.trim().length > 0);
     if (lines.length === 0 || !lines[0]) throw new Error(`Session ${sessionId} is empty`);
-    const header = migrateHeader(JSON.parse(lines[0]) as StoredSessionHeader);
-    const messages = lines.slice(1).map((line) => JSON.parse(line) as StoredMessage);
+    const header = migrateHeader(JSON.parse(lines[0].line) as StoredSessionHeader);
+    const messages: StoredMessage[] = [];
+    const lastLineNumber = lines.at(-1)?.lineNumber;
+    for (const entry of lines.slice(1)) {
+      try {
+        messages.push(JSON.parse(entry.line) as StoredMessage);
+      } catch (error) {
+        if (!endsWithNewline && entry.lineNumber === lastLineNumber) continue;
+        messages.push(createJsonlCorruptionNote(header, entry.lineNumber, error));
+      }
+    }
     return { header, messages };
   }
 
@@ -268,6 +281,20 @@ type StoredSessionHeader = Omit<SessionHeader, 'backend' | 'model' | 'permission
   status?: unknown;
   blockedReason?: unknown;
 };
+
+function createJsonlCorruptionNote(header: SessionHeader, lineNumber: number, error: unknown): StoredMessage {
+  return {
+    type: 'system_note',
+    id: `jsonl-corrupt-${lineNumber}`,
+    ts: header.lastUsedAt ?? header.createdAt,
+    kind: 'error',
+    data: {
+      code: 'jsonl_parse_error',
+      lineNumber,
+      message: error instanceof Error ? error.message : 'Invalid JSONL message line',
+    },
+  };
+}
 
 function migrateHeader(header: StoredSessionHeader): SessionHeader {
   const permissionMode = isPermissionMode(header.permissionMode) ? header.permissionMode : 'ask';

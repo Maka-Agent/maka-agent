@@ -228,6 +228,31 @@ describe('PermissionEngine — turn lifecycle', () => {
     expect(engine.pendingCount('t1')).toBe(0);
   });
 
+  test('expireRequest rejects one parked request and ignores late responses', async () => {
+    const { engine } = makeEngine();
+    engine.beginTurn('t1');
+    const r = engine.evaluate({
+      sessionId: 's1',
+      turnId: 't1',
+      toolUseId: 'tu1',
+      toolName: 'Write',
+      args: {},
+      mode: 'ask',
+    });
+    if (r.kind !== 'prompt') throw new Error('expected prompt');
+    const parkedPromise = r.parked.then(
+      () => 'resolved',
+      (error: Error) => `rejected:${error.message}`,
+    );
+
+    const expired = engine.expireRequest('t1', r.event.requestId, 'permission timed out');
+
+    assert.deepEqual(expired, { category: 'file_write', toolUseId: 'tu1' });
+    expect(engine.pendingCount('t1')).toBe(0);
+    expect(await parkedPromise).toBe('rejected:permission timed out');
+    expect(engine.recordResponse('t1', { requestId: r.event.requestId, decision: 'allow' })).toBeNull();
+  });
+
   test('beginTurn is idempotent', () => {
     const { engine } = makeEngine();
     engine.beginTurn('t1');

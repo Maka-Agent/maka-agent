@@ -408,34 +408,90 @@ async function resolveConnectionSecret(slug: string): Promise<string | null> {
   return credentialStore.getSecret(slug, 'api_key');
 }
 
-function normalizeCreateConnectionInput(input: CreateConnectionInput): CreateConnectionInput {
-  const defaults = PROVIDER_DEFAULTS[input.providerType];
-  if (defaults.authKind === 'oauth_token') {
-    return { ...input, baseUrl: defaults.baseUrl };
+const IPC_CONNECTION_SLUG_MAX_LENGTH = 64;
+const IPC_CONNECTION_SECRET_MAX_LENGTH = 4096;
+const IPC_CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
+const IPC_CONNECTION_SLUG_PATTERN = /^[A-Za-z0-9._-]+$/;
+
+function hasTraversalLookingSlugSegment(value: string): boolean {
+  return value.split('.').some((segment) => segment.length === 0);
+}
+
+function normalizeConnectionSlugForIpc(value: unknown, label: string): string {
+  if (typeof value !== 'string') {
+    throw new Error(`${label} must be a string`);
   }
-  if (input.baseUrl === undefined) return input;
-  const result = normalizeConnectionBaseUrl(input.baseUrl);
+  if (value.length === 0) {
+    throw new Error(`${label} is required`);
+  }
+  if (value.length > IPC_CONNECTION_SLUG_MAX_LENGTH) {
+    throw new Error(`${label} must be ${IPC_CONNECTION_SLUG_MAX_LENGTH} characters or fewer`);
+  }
+  if (!IPC_CONNECTION_SLUG_PATTERN.test(value) || IPC_CONTROL_CHARACTER_PATTERN.test(value)) {
+    throw new Error(`${label} contains invalid characters`);
+  }
+  if (hasTraversalLookingSlugSegment(value)) {
+    throw new Error(`${label} contains invalid path traversal segments`);
+  }
+  return value;
+}
+
+function normalizeConnectionApiKeyForIpc(value: unknown, label: string): string {
+  if (typeof value !== 'string') {
+    throw new Error(`${label} must be a string`);
+  }
+  if (value.length > IPC_CONNECTION_SECRET_MAX_LENGTH) {
+    throw new Error(`${label} must be ${IPC_CONNECTION_SECRET_MAX_LENGTH} characters or fewer`);
+  }
+  if (IPC_CONTROL_CHARACTER_PATTERN.test(value)) {
+    throw new Error(`${label} contains invalid characters`);
+  }
+  return value;
+}
+
+function normalizeCreateConnectionInput(input: CreateConnectionInput): CreateConnectionInput {
+  const apiKey = input.apiKey === undefined
+    ? undefined
+    : normalizeConnectionApiKeyForIpc(input.apiKey, 'apiKey');
+  const slug = normalizeConnectionSlugForIpc(input.slug, 'connection slug');
+  const normalizedInput = { ...input, slug, ...(apiKey !== undefined ? { apiKey } : {}) };
+  const defaults = PROVIDER_DEFAULTS[normalizedInput.providerType];
+  if (defaults.authKind === 'oauth_token') {
+    return { ...normalizedInput, baseUrl: defaults.baseUrl };
+  }
+  if (normalizedInput.baseUrl === undefined) return normalizedInput;
+  const result = normalizeConnectionBaseUrl(normalizedInput.baseUrl);
   if (!result.ok) {
     throw new Error(result.error);
   }
-  return { ...input, baseUrl: result.value };
+  return { ...normalizedInput, baseUrl: result.value };
+}
+
+function normalizeConnectionPatchSecretsForIpc(patch: UpdateConnectionInput): UpdateConnectionInput {
+  if (!Object.prototype.hasOwnProperty.call(patch, 'apiKey')) return patch;
+  if (patch.apiKey === undefined) return patch;
+  return {
+    ...patch,
+    apiKey: normalizeConnectionApiKeyForIpc(patch.apiKey, 'apiKey'),
+  };
 }
 
 async function normalizeUpdateConnectionInput(
   slug: string,
   patch: UpdateConnectionInput,
 ): Promise<UpdateConnectionInput> {
+  const normalizedPatch = normalizeConnectionPatchSecretsForIpc(patch);
   const existing = await connectionStore.get(slug);
   const providerType = existing?.providerType;
   if (providerType && PROVIDER_DEFAULTS[providerType].authKind === 'oauth_token') {
-    return { ...patch, baseUrl: PROVIDER_DEFAULTS[providerType].baseUrl };
+    return { ...normalizedPatch, baseUrl: PROVIDER_DEFAULTS[providerType].baseUrl };
   }
-  if (patch.baseUrl === undefined) return patch;
-  const result = normalizeConnectionBaseUrl(patch.baseUrl);
+  if (normalizedPatch.baseUrl === undefined) return normalizedPatch;
+  const result = normalizeConnectionBaseUrl(normalizedPatch.baseUrl);
   if (!result.ok) {
     throw new Error(result.error);
   }
-  return { ...patch, baseUrl: result.value };
+  return { ...normalizedPatch, baseUrl: result.value };
 }
 
 const planReminderStore = createPlanReminderStore(workspaceRoot);
@@ -894,7 +950,19 @@ const runtime = new SessionManager({
 const botConversationSessions = new Map<string, string>();
 const botConversationQueues = new Map<string, Promise<void>>();
 const botRecentSourceEventKeys = new Map<string, number>();
+const botConversationRateBuckets = new Map<string, BotConversationRateBucket>();
 const BOT_RECENT_SOURCE_EVENT_LIMIT = 1_000;
+const BOT_RECENT_SOURCE_EVENT_TTL_MS = 60 * 60 * 1_000;
+const BOT_CONVERSATION_SESSION_LIMIT = 500;
+const BOT_CONVERSATION_RATE_BURST = 8;
+const BOT_CONVERSATION_RATE_REFILL_MS = 5_000;
+const BOT_CONVERSATION_RATE_BUCKET_TTL_MS = 60 * 60 * 1_000;
+const BOT_CONVERSATION_RATE_BUCKET_LIMIT = 1_000;
+
+interface BotConversationRateBucket {
+  tokens: number;
+  updatedAt: number;
+}
 
 // PR110b: onboarding service composes existing stores + runtime to
 // derive `OnboardingState` and manage `OnboardingMilestone[]`.
@@ -2314,10 +2382,11 @@ function registerIpc(): void {
   });
   ipcMain.handle('connections:getDefault', () => connectionStore.getDefault());
   ipcMain.handle('connections:setDefault', async (_event, slug: string | null) => {
-    if (slug && !(await connectionStore.get(slug))) {
-      throw new Error(`No such connection: ${slug}`);
+    const normalizedSlug = slug === null ? null : normalizeConnectionSlugForIpc(slug, 'connection slug');
+    if (normalizedSlug && !(await connectionStore.get(normalizedSlug))) {
+      throw new Error(`No such connection: ${normalizedSlug}`);
     }
-    await connectionStore.setDefault(slug);
+    await connectionStore.setDefault(normalizedSlug);
     emitConnectionListChanged();
   });
   ipcMain.handle('connections:create', async (_event, input: CreateConnectionInput) => {
@@ -2362,6 +2431,7 @@ function registerIpc(): void {
     // Same OAuth-boundary rule as create: if the current/new provider
     // uses an OAuth token, force the canonical provider endpoint and
     // ignore renderer-provided baseUrl text entirely.
+    slug = normalizeConnectionSlugForIpc(slug, 'connection slug');
     const normalizedPatch = await normalizeUpdateConnectionInput(slug, patch);
     const connection = await connectionStore.update(slug, normalizedPatch);
     if (normalizedPatch.apiKey !== undefined) {
@@ -2372,11 +2442,13 @@ function registerIpc(): void {
     return connection;
   });
   ipcMain.handle('connections:delete', async (_event, slug: string) => {
+    slug = normalizeConnectionSlugForIpc(slug, 'connection slug');
     await connectionStore.delete(slug);
     await credentialStore.deleteSecret(slug);
     emitConnectionListChanged();
   });
   ipcMain.handle('connections:test', async (_event, slug: string, opts?: { model?: string }) => {
+    slug = normalizeConnectionSlugForIpc(slug, 'connection slug');
     const connection = await connectionStore.get(slug);
     if (!connection) return { ok: false, errorMessage: `找不到模型连接：${slug}` };
     const apiKey = await resolveConnectionSecret(slug);
@@ -2395,6 +2467,7 @@ function registerIpc(): void {
     return result;
   });
   ipcMain.handle('connections:fetchModels', async (_event, slug: string) => {
+    slug = normalizeConnectionSlugForIpc(slug, 'connection slug');
     const connection = await connectionStore.get(slug);
     if (!connection) throw new Error(`找不到模型连接：${slug}`);
     const apiKey = await resolveConnectionSecret(slug);
@@ -2421,9 +2494,10 @@ function registerIpc(): void {
       throw new Error(generalizedErrorMessageChinese(error, '拉取模型列表失败'));
     }
   });
-  ipcMain.handle('connections:hasSecret', async (_event, slug: string) =>
-    Boolean(await resolveConnectionSecret(slug)),
-  );
+  ipcMain.handle('connections:hasSecret', async (_event, slug: string) => {
+    slug = normalizeConnectionSlugForIpc(slug, 'connection slug');
+    return Boolean(await resolveConnectionSecret(slug));
+  });
 
   // PR110b: Onboarding snapshot + milestone IPCs. Renderer polls via
   // these on app load and whenever `sessions:changed` /
@@ -2808,14 +2882,69 @@ async function handleBotIncomingMessage(message: BotIncomingMessage): Promise<vo
 function rememberBotSourceEvent(message: BotIncomingMessage): boolean {
   const key = botSourceEventKey(message);
   if (!key) return false;
+  const now = Date.now();
+  pruneExpiredBotSourceEvents(now);
   if (botRecentSourceEventKeys.has(key)) return true;
-  botRecentSourceEventKeys.set(key, Date.now());
+  botRecentSourceEventKeys.set(key, now);
   while (botRecentSourceEventKeys.size > BOT_RECENT_SOURCE_EVENT_LIMIT) {
     const oldest = botRecentSourceEventKeys.keys().next().value;
     if (!oldest) break;
     botRecentSourceEventKeys.delete(oldest);
   }
   return false;
+}
+
+function pruneExpiredBotSourceEvents(now: number): void {
+  for (const [key, seenAt] of botRecentSourceEventKeys) {
+    if (now - seenAt <= BOT_RECENT_SOURCE_EVENT_TTL_MS) break;
+    botRecentSourceEventKeys.delete(key);
+  }
+}
+
+function consumeBotConversationToken(conversationKey: string, now = Date.now()): boolean {
+  pruneExpiredBotConversationRateBuckets(now);
+  const bucket = botConversationRateBuckets.get(conversationKey) ?? {
+    tokens: BOT_CONVERSATION_RATE_BURST,
+    updatedAt: now,
+  };
+  const elapsed = Math.max(0, now - bucket.updatedAt);
+  const refilled = Math.floor(elapsed / BOT_CONVERSATION_RATE_REFILL_MS);
+  if (refilled > 0) {
+    bucket.tokens = Math.min(BOT_CONVERSATION_RATE_BURST, bucket.tokens + refilled);
+    bucket.updatedAt += refilled * BOT_CONVERSATION_RATE_REFILL_MS;
+  }
+  if (bucket.tokens <= 0) {
+    botConversationRateBuckets.set(conversationKey, bucket);
+    return false;
+  }
+  bucket.tokens -= 1;
+  botConversationRateBuckets.set(conversationKey, bucket);
+  while (botConversationRateBuckets.size > BOT_CONVERSATION_RATE_BUCKET_LIMIT) {
+    const oldest = botConversationRateBuckets.keys().next().value;
+    if (!oldest) break;
+    botConversationRateBuckets.delete(oldest);
+  }
+  return true;
+}
+
+function pruneExpiredBotConversationRateBuckets(now: number): void {
+  for (const [key, bucket] of botConversationRateBuckets) {
+    if (now - bucket.updatedAt > BOT_CONVERSATION_RATE_BUCKET_TTL_MS) {
+      botConversationRateBuckets.delete(key);
+    }
+  }
+}
+
+async function sendTransientBotNotice(message: BotIncomingMessage, text: string, ttlMs: number): Promise<void> {
+  await botRegistry.sendMessage(
+    message.platform,
+    message.chatId,
+    text,
+    {
+      ...(message.sourceMessageId ? { replyToMessageId: message.sourceMessageId } : {}),
+      ephemeralTtlMs: ttlMs,
+    },
+  ).catch(() => null);
 }
 
 async function processBotIncomingMessage(
@@ -2852,6 +2981,7 @@ async function processBotIncomingMessage(
   // member would otherwise be able to wipe everyone else's context.
   if (isPlaintextResetCommand({ text, isGroup: message.isGroup })) {
     const had = botConversationSessions.delete(conversationKey);
+    botConversationRateBuckets.delete(conversationKey);
     const replyOptions = {
       ...(message.sourceMessageId ? { replyToMessageId: message.sourceMessageId } : {}),
       ephemeralTtlMs: SYSTEM_NOTICE_TTL_MS,
@@ -2865,6 +2995,22 @@ async function processBotIncomingMessage(
   let sessionId = botConversationSessions.get(conversationKey);
   try {
     if (!sessionId) {
+      if (botConversationSessions.size >= BOT_CONVERSATION_SESSION_LIMIT) {
+        await sendTransientBotNotice(
+          message,
+          'Maka 当前机器人会话数量已达上限，请重置或清理旧会话后再试。',
+          SYSTEM_NOTICE_TTL_MS,
+        );
+        return;
+      }
+      if (!consumeBotConversationToken(conversationKey)) {
+        await sendTransientBotNotice(
+          message,
+          'Maka 收到的机器人消息过于频繁，请稍后再试。',
+          SYSTEM_NOTICE_TTL_MS,
+        );
+        return;
+      }
       const ready = await getReadyConnection(await connectionStore.getDefault(), undefined);
       const summary = await runtime.createSession({
         cwd: process.cwd(),
@@ -2881,7 +3027,17 @@ async function processBotIncomingMessage(
       botConversationSessions.set(conversationKey, sessionId);
       emitSessionsChanged('created', sessionId);
     } else {
+      const permissionModeOk = await ensureBotSessionExploreMode(sessionId, message, SYSTEM_NOTICE_TTL_MS);
+      if (!permissionModeOk) return;
       await ensureSessionCanSend(sessionId);
+      if (!consumeBotConversationToken(conversationKey)) {
+        await sendTransientBotNotice(
+          message,
+          'Maka 收到的机器人消息过于频繁，请稍后再试。',
+          SYSTEM_NOTICE_TTL_MS,
+        );
+        return;
+      }
     }
 
     const turnId = randomUUID();
@@ -2957,6 +3113,27 @@ async function processBotIncomingMessage(
       `Maka 暂时无法处理这条消息：${detail}`,
       replyOptions,
     ).catch(() => null);
+  }
+}
+
+async function ensureBotSessionExploreMode(
+  sessionId: string,
+  message: BotIncomingMessage,
+  noticeTtlMs: number,
+): Promise<boolean> {
+  const header = await store.readHeader(sessionId);
+  if (header.permissionMode === 'explore') return true;
+  try {
+    await runtime.updateSession(sessionId, { permissionMode: 'explore' });
+    emitSessionsChanged('updated', sessionId);
+    return true;
+  } catch {
+    await sendTransientBotNotice(
+      message,
+      'Maka 已拒绝这条机器人消息：绑定会话当前不是只读探索模式，请先在桌面端切回 explore 后再试。',
+      noticeTtlMs,
+    );
+    return false;
   }
 }
 

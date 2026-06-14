@@ -38,7 +38,7 @@ export class StreamWatchdog {
   private startedAt = 0;
   private lastActivityAt = 0;
   private sawActivity = false;
-  private paused = false;
+  private pauseCount = 0;
   private stopped = false;
   private timer: unknown;
 
@@ -57,7 +57,7 @@ export class StreamWatchdog {
     this.startedAt = now;
     this.lastActivityAt = now;
     this.sawActivity = false;
-    this.paused = false;
+    this.pauseCount = 0;
     this.schedule(this.connectTimeoutMs);
   }
 
@@ -65,18 +65,19 @@ export class StreamWatchdog {
     if (this.stopped) return;
     this.sawActivity = true;
     this.lastActivityAt = this.now();
-    if (!this.paused) this.schedule(this.idleTimeoutMs);
+    if (this.pauseCount === 0) this.schedule(this.idleTimeoutMs);
   }
 
   pause(): void {
     if (this.stopped) return;
-    this.paused = true;
+    this.pauseCount += 1;
     this.clear();
   }
 
   resume(): void {
     if (this.stopped) return;
-    this.paused = false;
+    this.pauseCount = Math.max(0, this.pauseCount - 1);
+    if (this.pauseCount > 0) return;
     this.markActivity();
   }
 
@@ -99,7 +100,7 @@ export class StreamWatchdog {
   }
 
   private fire(): void {
-    if (this.stopped || this.paused) return;
+    if (this.stopped || this.pauseCount > 0) return;
     this.stopped = true;
     this.clear();
     const phase: StreamWatchdogPhase = this.sawActivity ? 'idle' : 'connect';

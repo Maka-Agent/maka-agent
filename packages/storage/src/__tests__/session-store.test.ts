@@ -222,6 +222,94 @@ describe('FileSessionStore CRUD', () => {
     });
   });
 
+  test('recovers readable messages around a corrupt JSONL message line', async () => {
+    await withStore(async (store, workspaceRoot) => {
+      const sessionId = 'corrupt-middle-line';
+      const sessionDir = join(workspaceRoot, 'sessions', sessionId);
+      await mkdir(sessionDir, { recursive: true });
+      await writeFile(
+        join(sessionDir, 'session.jsonl'),
+        [
+          JSON.stringify(makeRawHeader({ id: sessionId, workspaceRoot, name: 'Corrupt middle' })),
+          JSON.stringify({ type: 'user', id: 'u1', turnId: 't1', ts: 2, text: 'hello' }),
+          '{"type":"assistant","id":"broken"',
+          JSON.stringify({ type: 'assistant', id: 'a1', turnId: 't1', ts: 4, text: 'recovered answer', modelId: 'fake' }),
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+
+      const messages = await store.readMessages(sessionId);
+      assert.equal(messages.length, 3);
+      assert.equal(messages[0]?.type, 'user');
+      const note = messages[1];
+      assert.equal(note?.type, 'system_note');
+      if (note?.type !== 'system_note') throw new Error('corruption note missing');
+      assert.equal(note.kind, 'error');
+      assert.equal((note.data as { code?: unknown }).code, 'jsonl_parse_error');
+      assert.equal((note.data as { lineNumber?: unknown }).lineNumber, 3);
+      assert.equal(typeof (note.data as { message?: unknown }).message, 'string');
+      assert.ok(((note.data as { message?: string }).message ?? '').length > 0);
+      assert.equal(messages[2]?.type, 'assistant');
+
+      const [summary] = await store.list();
+      assert.equal(summary?.id, sessionId);
+      assert.equal(summary?.lastMessagePreview, 'recovered answer');
+    });
+  });
+
+  test('silently drops a truncated tail JSONL message line', async () => {
+    await withStore(async (store, workspaceRoot) => {
+      const sessionId = 'truncated-tail-line';
+      const sessionDir = join(workspaceRoot, 'sessions', sessionId);
+      await mkdir(sessionDir, { recursive: true });
+      await writeFile(
+        join(sessionDir, 'session.jsonl'),
+        [
+          JSON.stringify(makeRawHeader({ id: sessionId, workspaceRoot, name: 'Truncated tail' })),
+          JSON.stringify({ type: 'user', id: 'u1', turnId: 't1', ts: 2, text: 'survives' }),
+          '{"type":"assistant","id":"partial"',
+        ].join('\n'),
+        'utf8',
+      );
+
+      const messages = await store.readMessages(sessionId);
+      assert.deepEqual(messages.map((message) => message.type), ['user']);
+
+      const [summary] = await store.list();
+      assert.equal(summary?.id, sessionId);
+      assert.equal(summary?.lastMessagePreview, 'survives');
+    });
+  });
+
+  test('reports a corrupt tail JSONL message line when it was newline-terminated', async () => {
+    await withStore(async (store, workspaceRoot) => {
+      const sessionId = 'corrupt-terminated-tail-line';
+      const sessionDir = join(workspaceRoot, 'sessions', sessionId);
+      await mkdir(sessionDir, { recursive: true });
+      await writeFile(
+        join(sessionDir, 'session.jsonl'),
+        [
+          JSON.stringify(makeRawHeader({ id: sessionId, workspaceRoot, name: 'Corrupt terminated tail' })),
+          JSON.stringify({ type: 'user', id: 'u1', turnId: 't1', ts: 2, text: 'survives' }),
+          '{"type":"assistant","id":"durably-broken"',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+
+      const messages = await store.readMessages(sessionId);
+      assert.equal(messages.length, 2);
+      assert.equal(messages[0]?.type, 'user');
+      const note = messages[1];
+      assert.equal(note?.type, 'system_note');
+      if (note?.type !== 'system_note') throw new Error('corruption note missing');
+      assert.equal(note.kind, 'error');
+      assert.equal((note.data as { code?: unknown }).code, 'jsonl_parse_error');
+      assert.equal((note.data as { lineNumber?: unknown }).lineNumber, 3);
+    });
+  });
+
   test('derives lastMessagePreview from visible user and assistant messages', async () => {
     await withStore(async (store) => {
       const header = await store.create(makeInput({ name: 'Preview' }));
@@ -456,6 +544,30 @@ function makeInput(overrides: Partial<CreateSessionInput> = {}): CreateSessionIn
     permissionMode: 'ask',
     name: 'Session',
     labels: [],
+    ...overrides,
+  };
+}
+
+function makeRawHeader(overrides: Partial<SessionHeader> = {}): SessionHeader {
+  return {
+    id: 'raw-session',
+    workspaceRoot: '/tmp/workspace',
+    cwd: '/tmp/cwd',
+    createdAt: 1,
+    lastUsedAt: 1,
+    name: 'Raw session',
+    isFlagged: false,
+    labels: [],
+    isArchived: false,
+    status: 'active',
+    statusUpdatedAt: 1,
+    hasUnread: false,
+    backend: 'fake',
+    llmConnectionSlug: 'fake',
+    connectionLocked: false,
+    model: 'fake-model',
+    permissionMode: 'ask',
+    schemaVersion: 1,
     ...overrides,
   };
 }

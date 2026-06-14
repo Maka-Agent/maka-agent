@@ -268,6 +268,40 @@ describe('OfficeDocument read-only tool', () => {
       });
       assert.equal(timeout.ok, false);
       assert.equal(timeout.ok ? null : timeout.reason, 'officecli_timeout');
+
+      const preAbortedController = new AbortController();
+      preAbortedController.abort();
+      const preAborted = await runOfficeDocumentOperation({
+        cwd: workspaceRoot,
+        path: 'sheet.xlsx',
+        operation: 'validate',
+        abortSignal: preAbortedController.signal,
+        runner: fakeRunner(() => {
+          throw new Error('pre-aborted operation should not run officecli');
+        }),
+      });
+      assert.equal(preAborted.ok, false);
+      assert.equal(preAborted.ok ? null : preAborted.reason, 'officecli_aborted');
+
+      const inflightController = new AbortController();
+      const inflight = await runOfficeDocumentOperation({
+        cwd: workspaceRoot,
+        path: 'sheet.xlsx',
+        operation: 'validate',
+        abortSignal: inflightController.signal,
+        runner: fakeRunner((_cmd, _args, options, callback) => {
+          assert.equal(options.signal, inflightController.signal);
+          (options.signal as AbortSignal).addEventListener('abort', () => {
+            const error = new Error('aborted') as NodeJS.ErrnoException;
+            error.name = 'AbortError';
+            error.code = 'ABORT_ERR';
+            callback(error, '', '');
+          }, { once: true });
+          inflightController.abort();
+        }),
+      });
+      assert.equal(inflight.ok, false);
+      assert.equal(inflight.ok ? null : inflight.reason, 'officecli_aborted');
     });
   });
 

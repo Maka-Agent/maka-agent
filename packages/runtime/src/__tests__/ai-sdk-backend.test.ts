@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
+import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
 import type { LlmConnection, SessionHeader } from '@maka/core';
 import type { SessionEvent } from '@maka/core/events';
 import type { ToolResultMessage } from '@maka/core/session';
+import type { LlmCallRecord } from '@maka/core/usage-stats/types';
 import {
   AiSdkBackend,
   INVALID_TOOL_NAME,
   MAX_ACTIVE_SUBAGENT_TOOLS_PER_TURN,
   TOOL_ERROR_RESULT_MAX_CHARS,
   formatSyntheticToolErrorText,
+  normalizeAiSdkUsage,
   repairMakaToolCall,
   type MakaTool,
 } from '../ai-sdk-backend.js';
@@ -214,7 +218,200 @@ describe('AiSdkBackend stop', () => {
   });
 });
 
+describe('AiSdkBackend usage telemetry', () => {
+  test('normalizes standard LanguageModelUsage detail token fields', () => {
+    const usage = normalizeAiSdkUsage({
+      inputTokens: 100,
+      outputTokens: 20,
+      inputTokenDetails: {
+        cacheReadTokens: 30,
+        cacheWriteTokens: 10,
+      },
+      outputTokenDetails: {
+        reasoningTokens: 5,
+      },
+    });
+
+    assert.deepEqual(usage, {
+      inputTokens: 100,
+      outputTokens: 20,
+      cachedInputTokens: 30,
+      cacheWriteInputTokens: 10,
+      reasoningTokens: 5,
+      totalTokens: 120,
+    });
+  });
+
+  test('normalizes cache and reasoning tokens to messages, events, and telemetry', async () => {
+    const messages: unknown[] = [];
+    const events: SessionEvent[] = [];
+    const llmRecords: LlmCallRecord[] = [];
+    const chunks: LanguageModelV3StreamPart[] = [
+      { type: 'stream-start', warnings: [] },
+      { type: 'text-start', id: 'text-1' },
+      { type: 'text-delta', id: 'text-1', delta: 'hello' },
+      { type: 'text-end', id: 'text-1' },
+      {
+        type: 'finish',
+        finishReason: { unified: 'stop', raw: 'stop' },
+        usage: {
+          inputTokens: {
+            total: 10,
+            noCache: 5,
+            cacheRead: 3,
+            cacheWrite: 2,
+          },
+          outputTokens: {
+            total: 7,
+            text: 5,
+            reasoning: 2,
+          },
+        },
+      },
+    ];
+    const model = new MockLanguageModelV3({
+      doStream: {
+        stream: simulateReadableStream({
+          chunks,
+          initialDelayInMs: null,
+          chunkDelayInMs: null,
+        }),
+      },
+    });
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header(),
+      appendMessage: async (message) => {
+        messages.push(message);
+      },
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'mock-model-id',
+      permissionEngine: new PermissionEngine({ newId: () => 'permission-id', now: () => 1 }),
+      modelFactory: () => model,
+      tools: [],
+      newId: idGenerator(),
+      now: monotonicClock(),
+      recordLlmCall: (record) => {
+        llmRecords.push(record);
+      },
+    });
+
+    for await (const event of backend.send({ turnId: 'turn-1', text: 'hi', context: [] })) {
+      events.push(event);
+    }
+
+    const usageMessage = messages.find((message) =>
+      (message as { type?: string }).type === 'token_usage'
+    ) as { input?: number; output?: number; cacheRead?: number; cacheCreation?: number } | undefined;
+    const usageEvent = events.find((event) => event.type === 'token_usage') as
+      | Extract<SessionEvent, { type: 'token_usage' }>
+      | undefined;
+
+    assert.equal((usageMessage as { type?: string } | undefined)?.type, 'token_usage');
+    assert.equal((usageMessage as { turnId?: string } | undefined)?.turnId, 'turn-1');
+    assert.equal(usageMessage?.input, 10);
+    assert.equal(usageMessage?.output, 7);
+    assert.equal(usageMessage?.cacheRead, 3);
+    assert.equal(usageMessage?.cacheCreation, 2);
+    assert.equal(usageEvent?.input, 10);
+    assert.equal(usageEvent?.output, 7);
+    assert.equal(usageEvent?.cacheRead, 3);
+    assert.equal(usageEvent?.cacheCreation, 2);
+    assert.equal(llmRecords[0]?.inputTokens, 10);
+    assert.equal(llmRecords[0]?.outputTokens, 7);
+    assert.equal(llmRecords[0]?.cachedInputTokens, 3);
+    assert.equal(llmRecords[0]?.cacheWriteInputTokens, 2);
+    assert.equal(llmRecords[0]?.reasoningTokens, 2);
+    assert.equal(llmRecords[0]?.totalTokens, 17);
+  });
+});
+
 describe('AiSdkBackend tool permission category hints', () => {
+  test('permission prompt timeout expires one request, resumes watchdog, and writes an error result', async () => {
+    const messages: unknown[] = [];
+    const events: SessionEvent[] = [];
+    const permissionEngine = new PermissionEngine({ newId: idGenerator(), now: () => 1 });
+    let implCalled = false;
+    let pauseCount = 0;
+    let resumeCount = 0;
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header('ask'),
+      appendMessage: async (message) => {
+        messages.push(message);
+      },
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'claude-sonnet-4-5-20250929',
+      permissionEngine,
+      modelFactory: () => ({}),
+      tools: [],
+      newId: idGenerator(),
+      now: () => 1,
+      permissionTimeoutMs: 1,
+    });
+    const tool: MakaTool = {
+      name: 'Write',
+      description: 'write file',
+      parameters: {},
+      permissionRequired: true,
+      impl: async () => {
+        implCalled = true;
+        return { ok: true };
+      },
+    };
+    (backend as unknown as {
+      currentWatchdog: { pause(): void; resume(): void };
+    }).currentWatchdog = {
+      pause: () => {
+        pauseCount += 1;
+      },
+      resume: () => {
+        resumeCount += 1;
+      },
+    };
+
+    const execute = (backend as unknown as {
+      wrapToolExecute(
+        tool: MakaTool,
+        turnId: string,
+        queue: { push(event: SessionEvent): void },
+      ): (args: unknown, ctx: { toolCallId: string; abortSignal: AbortSignal }) => Promise<unknown>;
+    }).wrapToolExecute(tool, 'turn-1', { push: (event) => events.push(event) });
+
+    const result = await execute(
+      { path: 'notes.md', content: 'hello' },
+      { toolCallId: 'tool-1', abortSignal: new AbortController().signal },
+    );
+    const permissionRequest = events.find((event) => event.type === 'permission_request') as
+      | Extract<SessionEvent, { type: 'permission_request' }>
+      | undefined;
+    const toolResult = events.find((event) => event.type === 'tool_result') as
+      | Extract<SessionEvent, { type: 'tool_result' }>
+      | undefined;
+
+    assert.equal(implCalled, false);
+    assert.equal(pauseCount, 1);
+    assert.equal(resumeCount, 1);
+    assert.equal(permissionEngine.pendingCount('turn-1'), 0);
+    assert.equal(permissionEngine.recordResponse('turn-1', {
+      requestId: permissionRequest?.requestId ?? 'missing',
+      decision: 'allow',
+    }), null);
+    assert.match((result as { error?: string }).error ?? '', /Permission flow aborted/);
+    assert.match((result as { error?: string }).error ?? '', /timed out/);
+    assert.equal(toolResult?.isError, true);
+    assert.equal(
+      messages.some((message) =>
+        (message as { type?: string; toolUseId?: string; isError?: boolean }).type === 'tool_result' &&
+        (message as { toolUseId?: string }).toolUseId === 'tool-1' &&
+        (message as { isError?: boolean }).isError === true,
+      ),
+      true,
+    );
+  });
+
   test('passes categoryHint through PermissionEngine before tool execution', async () => {
     const messages: unknown[] = [];
     const events: SessionEvent[] = [];
@@ -410,6 +607,62 @@ describe('AiSdkBackend tool permission category hints', () => {
       { status: 'aborted', toolCallId: 'tool-aborted' },
     ]);
   });
+
+  test('maps aborted OfficeDocument results to aborted tool telemetry', async () => {
+    const events: SessionEvent[] = [];
+    const telemetry: Array<{ status: string; toolCallId?: string }> = [];
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header('ask'),
+      appendMessage: async () => {},
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'claude-sonnet-4-5-20250929',
+      permissionEngine: new PermissionEngine({ newId: () => 'permission-id', now: () => 1 }),
+      modelFactory: () => ({}),
+      tools: [],
+      newId: idGenerator(),
+      now: () => 1,
+      recordToolInvocation: (record) => {
+        telemetry.push({ status: record.status, toolCallId: record.toolCallId });
+      },
+    });
+    const tool: MakaTool = {
+      name: 'OfficeDocument',
+      description: 'read office',
+      parameters: {},
+      permissionRequired: false,
+      impl: async () => ({
+        kind: 'office_document',
+        ok: false,
+        operation: 'view',
+        path: 'slides.pptx',
+        args: ['view', 'slides.pptx', 'outline'],
+        reason: 'officecli_aborted',
+        message: 'officecli 操作已取消。',
+      }),
+    };
+    const execute = (backend as unknown as {
+      wrapToolExecute(
+        tool: MakaTool,
+        turnId: string,
+        queue: { push(event: SessionEvent): void },
+      ): (args: unknown, ctx: { toolCallId: string; abortSignal: AbortSignal }) => Promise<unknown>;
+    }).wrapToolExecute(tool, 'turn-1', { push: (event) => events.push(event) });
+
+    await execute({ path: 'slides.pptx', operation: 'view' }, {
+      toolCallId: 'tool-office-aborted',
+      abortSignal: new AbortController().signal,
+    });
+
+    assert.equal(
+      (events.find((event) => event.type === 'tool_result') as { isError?: boolean } | undefined)?.isError,
+      true,
+    );
+    assert.deepEqual(telemetry, [
+      { status: 'aborted', toolCallId: 'tool-office-aborted' },
+    ]);
+  });
 });
 
 describe('AiSdkBackend tool-call repair', () => {
@@ -499,4 +752,9 @@ function connection(): LlmConnection {
 function idGenerator(): () => string {
   let index = 0;
   return () => `id-${++index}`;
+}
+
+function monotonicClock(): () => number {
+  let value = 1_000;
+  return () => ++value;
 }

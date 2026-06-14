@@ -56,6 +56,7 @@ export type OfficeDocumentResult =
         | 'invalid_props'
         | 'file_exists'
         | 'officecli_missing'
+        | 'officecli_aborted'
         | 'officecli_timeout'
         | 'officecli_failed';
       message: string;
@@ -98,7 +99,7 @@ export function buildOfficeDocumentTool(): MakaTool<
         .describe('Optional depth for get; capped at 6.'),
     }),
     permissionRequired: false,
-    impl: async ({ path, operation, topic, viewMode, selector, query, depth }, { cwd }) => runOfficeDocumentOperation({
+    impl: async ({ path, operation, topic, viewMode, selector, query, depth }, { cwd, abortSignal }) => runOfficeDocumentOperation({
       cwd,
       path,
       operation,
@@ -107,6 +108,7 @@ export function buildOfficeDocumentTool(): MakaTool<
       selector,
       query,
       depth,
+      abortSignal,
     }),
   };
 }
@@ -145,7 +147,7 @@ export function buildOfficeDocumentEditTool(): MakaTool<
     }),
     permissionRequired: true,
     categoryHint: 'file_write',
-    impl: async ({ path, operation, target, elementType, props, index }, { cwd }) => runOfficeDocumentEditOperation({
+    impl: async ({ path, operation, target, elementType, props, index }, { cwd, abortSignal }) => runOfficeDocumentEditOperation({
       cwd,
       path,
       operation,
@@ -153,6 +155,7 @@ export function buildOfficeDocumentEditTool(): MakaTool<
       elementType,
       props,
       index,
+      abortSignal,
     }),
   };
 }
@@ -168,6 +171,7 @@ export async function runOfficeDocumentOperation(input: {
   depth?: unknown;
   runner?: OfficeCliRunner;
   timeoutMs?: number;
+  abortSignal?: AbortSignal;
 }): Promise<OfficeDocumentResult> {
   const operation = normalizeOperation(input.operation);
   if (!operation) {
@@ -188,6 +192,7 @@ export async function runOfficeDocumentOperation(input: {
       args: buildOfficeHelpArgs(input.topic),
       runner: input.runner,
       timeoutMs: input.timeoutMs,
+      abortSignal: input.abortSignal,
     });
   }
 
@@ -231,6 +236,7 @@ export async function runOfficeDocumentOperation(input: {
     args: argsResult.args,
     runner,
     timeoutMs,
+    abortSignal: input.abortSignal,
   });
 }
 
@@ -242,12 +248,13 @@ async function runOfficeCliOperation(input: {
   args: string[];
   runner?: OfficeCliRunner;
   timeoutMs?: number;
+  abortSignal?: AbortSignal;
 }): Promise<OfficeDocumentResult> {
   const workspaceRoot = await realpath(input.cwd);
   const runner = input.runner ?? execFile;
   const timeoutMs = input.timeoutMs ?? OFFICE_DOCUMENT_TIMEOUT_MS;
   try {
-    const output = await runOfficeCli(runner, input.args, timeoutMs);
+    const output = await runOfficeCli(runner, input.args, timeoutMs, input.abortSignal);
     const stdout = sanitizeOfficeCliOutput(output.stdout, workspaceRoot);
     const stderr = sanitizeOfficeCliOutput(output.stderr, workspaceRoot);
     const cappedStdout = capOutput(stdout);
@@ -274,6 +281,17 @@ async function runOfficeCliOperation(input: {
         args: input.absPath && input.relPath ? displayArgs(input.args, input.absPath, input.relPath) : input.args,
         reason: 'officecli_missing',
         message: '本机未检测到 officecli。请先安装 officecli，并确认 `officecli --version` 可运行后重试。',
+      };
+    }
+    if (code === 'ABORT_ERR' || (error as Error).name === 'AbortError') {
+      return {
+        kind: 'office_document',
+        ok: false,
+        operation: input.operation,
+        ...(input.relPath ? { path: input.relPath } : {}),
+        args: input.absPath && input.relPath ? displayArgs(input.args, input.absPath, input.relPath) : input.args,
+        reason: 'officecli_aborted',
+        message: 'officecli 操作已取消。',
       };
     }
     if (code === 'ETIMEDOUT' || killed) {
@@ -309,6 +327,7 @@ export async function runOfficeDocumentEditOperation(input: {
   index?: unknown;
   runner?: OfficeCliRunner;
   timeoutMs?: number;
+  abortSignal?: AbortSignal;
 }): Promise<OfficeDocumentResult> {
   const operation = normalizeEditOperation(input.operation);
   if (!operation) {
@@ -360,6 +379,7 @@ export async function runOfficeDocumentEditOperation(input: {
     args: argsResult.args,
     runner: input.runner,
     timeoutMs: input.timeoutMs,
+    abortSignal: input.abortSignal,
   });
 }
 
@@ -584,8 +604,17 @@ function normalizeBoundedText(value: unknown): string | null {
   return text;
 }
 
-function runOfficeCli(runner: OfficeCliRunner, args: string[], timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
+function runOfficeCli(
+  runner: OfficeCliRunner,
+  args: string[],
+  timeoutMs: number,
+  abortSignal?: AbortSignal,
+): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolvePromise, reject) => {
+    if (abortSignal?.aborted) {
+      reject(abortError());
+      return;
+    }
     const child = runner(
       'officecli',
       args,
@@ -593,6 +622,7 @@ function runOfficeCli(runner: OfficeCliRunner, args: string[], timeoutMs: number
         timeout: timeoutMs,
         maxBuffer: OFFICE_DOCUMENT_MAX_BUFFER,
         env: buildOfficeCliEnv(),
+        ...(abortSignal ? { signal: abortSignal } : {}),
       },
       (error, stdout, stderr) => {
         if (error) {
@@ -605,6 +635,13 @@ function runOfficeCli(runner: OfficeCliRunner, args: string[], timeoutMs: number
     );
     child.on('error', reject);
   });
+}
+
+function abortError(): Error {
+  const error = new Error('officecli aborted') as Error & { code?: string };
+  error.name = 'AbortError';
+  error.code = 'ABORT_ERR';
+  return error;
 }
 
 function sanitizeOfficeCliOutput(text: string, workspaceRoot: string): string {
