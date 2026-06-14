@@ -33,6 +33,8 @@ export type {
   MakaToolContext,
   ModelFactory,
   ModelFactoryInput,
+  RunTraceEvent,
+  RunTraceRecorder,
 } from './ai-sdk-backend.js';
 export { PiAgentBackend, normalizePiAgentFrame } from './pi-agent-backend.js';
 export type {

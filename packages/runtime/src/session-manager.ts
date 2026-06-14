@@ -46,8 +46,12 @@ import type {
 import type { PermissionResponse } from '@maka/core/permission';
 import type { PermissionMode } from '@maka/core/permission';
 import { DEEP_RESEARCH_SESSION_LABEL, isDeepResearchSession } from '@maka/core';
+import type { AgentRunStore } from '@maka/core';
 
 import type { AgentBackend } from './ai-sdk-backend.js';
+import type { RunTraceRecorder } from './run-trace.js';
+import { AgentRun, type AgentRunActiveSession, type AgentRunLineage } from './agent-run.js';
+import { classifyAgentRunRecovery, type AgentRunRecoveryDecision } from './agent-run-recovery.js';
 
 export interface StopSessionInput {
   source?: 'stop_button';
@@ -82,6 +86,7 @@ export interface BackendFactoryContext {
   workspaceRoot: string;
   header: SessionHeader;
   store: SessionStore;
+  recordRunTrace?: RunTraceRecorder;
 }
 
 export type BackendFactory = (ctx: BackendFactoryContext) => AgentBackend | Promise<AgentBackend>;
@@ -110,20 +115,19 @@ export class BackendRegistry {
 
 export interface SessionManagerDeps {
   store: SessionStore;
+  runStore?: AgentRunStore;
   backends: BackendRegistry;
   newId: () => string;
   now: () => number;
 }
 
-interface ActiveSession {
+interface ActiveSession extends AgentRunActiveSession {
   sessionId: string;
   backend: AgentBackend;
   /** Tracks the latest header we've read (used to short-circuit some reads). */
   cachedHeader: SessionHeader;
-  activeStreams: number;
-  activeTurnIds: Set<string>;
-  activeTurnLineage: Map<string, Partial<Pick<UserMessageInput, 'parentTurnId' | 'retriedFromTurnId' | 'regeneratedFromTurnId' | 'branchOfTurnId' | 'parentSessionId'>>>;
-  stoppedTurnIds: Set<string>;
+  activeRuns: Map<string, AgentRun>;
+  turnToRunId: Map<string, string>;
 }
 
 export class SessionManager {
@@ -158,16 +162,36 @@ export class SessionManager {
     const recovered: string[] = [];
     for (const session of interrupted) {
       if (this.active.has(session.id)) continue;
-      let messages: StoredMessage[];
+      let messages: StoredMessage[] = [];
+      let messagesReadable = true;
       try {
         messages = await this.deps.store.readMessages(session.id);
       } catch {
+        messagesReadable = false;
+      }
+
+      if (this.deps.runStore) {
+        const runRecovery = await this.recoverAgentRunsFromLedger(session.id, messages).catch(() => undefined);
+        if (runRecovery?.hasLedger) {
+          if (runRecovery.recovered) {
+            await this.updateStatus(session.id, 'active').catch(() => {});
+            recovered.push(session.id);
+          } else if (!messagesReadable && (session.status === 'running' || session.status === 'waiting_for_user')) {
+            await this.updateStatus(session.id, 'active').catch(() => {});
+            recovered.push(session.id);
+          }
+          continue;
+        }
+      }
+
+      if (!messagesReadable) {
         if (session.status === 'running' || session.status === 'waiting_for_user') {
           await this.updateStatus(session.id, 'active').catch(() => {});
           recovered.push(session.id);
         }
         continue;
       }
+
       const recoveries = interruptedTurnRecoveries(messages);
       if (recoveries.length === 0) continue;
       for (const recovery of recoveries) {
@@ -189,7 +213,7 @@ export class SessionManager {
   ): Promise<SessionSummary> {
     const active = this.active.get(sessionId);
     const backendConfigChanged = changesBackendConfig(patch);
-    if (active && backendConfigChanged && active.activeStreams > 0) {
+    if (active && backendConfigChanged && active.activeRuns.size > 0) {
       throw new Error('Cannot change backend configuration while a turn is running');
     }
 
@@ -245,7 +269,7 @@ export class SessionManager {
     if (previous.permissionMode === mode && !leavingDeepResearch) return headerToSummary(previous);
 
     const active = this.active.get(sessionId);
-    if (active && active.activeStreams > 0) {
+    if (active && active.activeRuns.size > 0) {
       throw new Error('当前对话正在运行，等结束后再切换权限模式。');
     }
     if (previous.status === 'waiting_for_user') {
@@ -300,134 +324,27 @@ export class SessionManager {
     sessionId: string,
     input: UserMessageInput,
   ): AsyncIterable<SessionEvent> {
-    // 1. Read header (for backend kind + permissionMode + cwd + model).
-    let header = await this.deps.store.readHeader(sessionId);
-
-    // 2. Append the user message FIRST, before any backend startup. JSONL is
-    //    the source of truth; even if backend init fails the message is
-    //    recorded.
-    const userMsg: UserMessage = {
-      type: 'user',
-      id: this.deps.newId(),
-      turnId: input.turnId,
-      ts: this.deps.now(),
-      text: input.text,
-      ...(input.attachments ? { attachments: input.attachments } : {}),
-    };
-    await this.deps.store.appendMessage(sessionId, userMsg);
-    await this.appendTurnState(sessionId, input.turnId, 'running', input);
-
-    let lastTs = this.deps.now();
-    let sawCompletion = false;
-    let finalStatus: { status: SessionStatus; blockedReason?: SessionBlockedReason } | undefined;
-    let active: ActiveSession | undefined;
-    let activeStreamTracked = false;
-    let turnFailed = false;
-
-    try {
-      // 3. Lock connection right after the user message is flushed (§9 Step 2.3).
-      //    Even if backend startup fails next, the session's backend choice is
-      //    committed and won't drift.
-      if (!header.connectionLocked) {
-        header = await this.deps.store.updateHeader(sessionId, { connectionLocked: true });
-      }
-
-      // 4. Resolve / build backend.
-      active = await this.ensureActive(sessionId, header);
-
-      // 5. Stream events from backend, side-tracking the latest ts for header
-      //    bookkeeping when the turn completes.
-      await this.updateStatus(sessionId, 'running', undefined, lastTs);
-      active.activeStreams += 1;
-      activeStreamTracked = true;
-      active.activeTurnIds.add(input.turnId);
-      active.activeTurnLineage.set(input.turnId, {
-        ...(input.parentTurnId ? { parentTurnId: input.parentTurnId } : {}),
-        ...(input.retriedFromTurnId ? { retriedFromTurnId: input.retriedFromTurnId } : {}),
-        ...(input.regeneratedFromTurnId ? { regeneratedFromTurnId: input.regeneratedFromTurnId } : {}),
-        ...(input.branchOfTurnId ? { branchOfTurnId: input.branchOfTurnId } : {}),
-        ...(input.parentSessionId ? { parentSessionId: input.parentSessionId } : {}),
-      });
-
-      for await (const ev of active.backend.send({
-        turnId: input.turnId,
-        text: input.text,
-        ...(input.attachments ? { attachments: input.attachments } : {}),
-        context: await this.deps.store.readMessages(sessionId),
-      })) {
-        lastTs = ev.ts;
-        const transition = statusFromEvent(ev);
-        const stoppedDuringTurn = active.stoppedTurnIds.has(input.turnId);
-        if (transition && !stoppedDuringTurn) {
-          await this.updateStatus(sessionId, transition.status, transition.blockedReason, ev.ts);
-        }
-        if ((ev.type === 'complete' || ev.type === 'abort') && !turnFailed) {
-          sawCompletion = true;
-          finalStatus = stoppedDuringTurn
-            ? { status: 'aborted' }
-            : (transition ?? { status: 'active' });
-          const turnStatus = turnStatusFromEvent(ev);
-          if (turnStatus && !stoppedDuringTurn) {
-            await this.appendTurnState(sessionId, input.turnId, turnStatus.status, input, {
-              ts: ev.ts,
-              errorClass: turnStatus.errorClass,
-            });
-          }
-        }
-        if (ev.type === 'error') {
-          turnFailed = true;
-          finalStatus = transition ?? { status: 'blocked', blockedReason: 'unknown' };
-          await this.appendTurnState(sessionId, input.turnId, 'failed', input, {
-            ts: ev.ts,
-            errorClass: ev.reason ?? ev.code ?? 'unknown',
-          });
-        }
-        yield ev;
-      }
-    } catch (error) {
-      finalStatus = { status: 'blocked', blockedReason: 'unknown' };
-      await this.appendTurnState(sessionId, input.turnId, 'failed', input, {
-        errorClass: error instanceof Error ? error.name : 'unknown',
-      }).catch(() => {});
-      throw error;
-    } finally {
-      if (active && activeStreamTracked) {
-        const stoppedDuringTurn = active.stoppedTurnIds.has(input.turnId);
-        active.activeStreams = Math.max(0, active.activeStreams - 1);
-        active.activeTurnIds.delete(input.turnId);
-        active.activeTurnLineage.delete(input.turnId);
-        active.stoppedTurnIds.delete(input.turnId);
-        if (stoppedDuringTurn) {
-          finalStatus = { status: 'aborted' };
-        }
-      }
-      const nextStatus = active && active.activeStreams > 0
-        ? { status: 'running' as const }
-        : (finalStatus ?? { status: 'active' as const });
-      // 6. Update header timestamps + unread flag exactly once per turn.
-      try {
-        await this.deps.store.updateHeader(sessionId, {
-          lastUsedAt: lastTs,
-          lastMessageAt: lastTs,
-          hasUnread: true,
-          ...statusPatch(nextStatus.status, lastTs, nextStatus.blockedReason),
-        });
-      } catch {
-        // Swallow header-update failures; the turn already completed at the
-        // user-visible level.
-      }
-      // Persist a SystemNote marking the turn end (helps debug + recovery).
-      if (sawCompletion) {
-        const note: SystemNoteMessage = {
-          type: 'system_note',
-          id: this.deps.newId(),
-          turnId: input.turnId,
-          ts: lastTs,
-          kind: 'session_resume',
-        };
-        await this.deps.store.appendMessage(sessionId, note).catch(() => {});
-      }
-    }
+    const header = await this.deps.store.readHeader(sessionId);
+    const run = new AgentRun({
+      sessionId,
+      header,
+      userInput: input,
+      store: this.deps.store,
+      runStore: this.deps.runStore,
+      newId: this.deps.newId,
+      now: this.deps.now,
+      hooks: {
+        ensureActive: (targetSessionId, nextHeader) => this.ensureActive(targetSessionId, nextHeader),
+        registerRun: (active, activeRun) => this.registerRun(active, activeRun),
+        unregisterRun: (active, activeRun) => this.unregisterRun(active, activeRun),
+        updateHeader: (targetSessionId, patch) => this.updateHeader(targetSessionId, patch),
+        updateStatus: (targetSessionId, status, blockedReason, ts) =>
+          this.updateStatus(targetSessionId, status, blockedReason, ts),
+        appendTurnState: (targetSessionId, turnId, status, lineage, options) =>
+          this.appendTurnState(targetSessionId, turnId, status, lineage, options),
+      },
+    });
+    yield* run.execute();
   }
 
   async stopSession(sessionId: string, input: StopSessionInput = {}): Promise<void> {
@@ -435,16 +352,17 @@ export class SessionManager {
     if (!active) return;
     const abortSource = normalizeStopSessionSource(input.source);
     await active.backend.stop('user_stop');
-    for (const turnId of active.activeTurnIds) {
-      active.stoppedTurnIds.add(turnId);
+    const activeRuns = [...active.activeRuns.values()];
+    for (const run of activeRuns) {
+      run.stop(input.source);
     }
     await this.updateStatus(sessionId, 'aborted');
-    for (const turnId of active.activeTurnIds) {
+    for (const run of activeRuns) {
       await this.appendTurnState(
         sessionId,
-        turnId,
+        run.turnId,
         'aborted',
-        active.activeTurnLineage.get(turnId) ?? {},
+        run.lineage,
         { ts: this.deps.now(), abortSource },
       ).catch(() => {});
     }
@@ -546,18 +464,34 @@ export class SessionManager {
       workspaceRoot: header.workspaceRoot,
       header,
       store: this.deps.store,
+      recordRunTrace: (event) => {
+        const active = this.active.get(sessionId);
+        const runId = active?.turnToRunId.get(event.turnId);
+        const run = runId ? active?.activeRuns.get(runId) : undefined;
+        run?.recordRunTrace(event);
+      },
     });
     const entry: ActiveSession = {
       sessionId,
       backend,
       cachedHeader: header,
-      activeStreams: 0,
-      activeTurnIds: new Set(),
-      activeTurnLineage: new Map(),
-      stoppedTurnIds: new Set(),
+      activeRuns: new Map(),
+      turnToRunId: new Map(),
     };
     this.active.set(sessionId, entry);
     return entry;
+  }
+
+  private registerRun(active: AgentRunActiveSession, run: AgentRun): void {
+    active.activeRuns.set(run.runId, run);
+    active.turnToRunId.set(run.turnId, run.runId);
+  }
+
+  private unregisterRun(active: AgentRunActiveSession, run: AgentRun): void {
+    active.activeRuns.delete(run.runId);
+    if (active.turnToRunId.get(run.turnId) === run.runId) {
+      active.turnToRunId.delete(run.turnId);
+    }
   }
 
   private async disposeBackend(sessionId: string): Promise<void> {
@@ -577,16 +511,24 @@ export class SessionManager {
     blockedReason?: SessionBlockedReason,
     ts = this.deps.now(),
   ): Promise<void> {
-    const next = await this.deps.store.updateHeader(sessionId, statusPatch(status, ts, blockedReason));
+    await this.updateHeader(sessionId, statusPatch(status, ts, blockedReason));
+  }
+
+  private async updateHeader(
+    sessionId: string,
+    patch: Partial<SessionHeader>,
+  ): Promise<SessionHeader> {
+    const next = await this.deps.store.updateHeader(sessionId, patch);
     const active = this.active.get(sessionId);
     if (active) active.cachedHeader = next;
+    return next;
   }
 
   private async appendTurnState(
     sessionId: string,
     turnId: string,
     status: TurnRecord['status'],
-    lineage: Partial<Pick<UserMessageInput, 'parentTurnId' | 'retriedFromTurnId' | 'regeneratedFromTurnId' | 'branchOfTurnId' | 'parentSessionId'>> = {},
+    lineage: AgentRunLineage = {},
     options: { ts?: number; errorClass?: string; abortSource?: string } = {},
   ): Promise<void> {
     const ts = options.ts ?? this.deps.now();
@@ -635,6 +577,71 @@ export class SessionManager {
       .find((message): message is UserMessage => message.type === 'user' && message.turnId === turnId);
     if (!user) throw new Error(`Turn ${turnId} has no user message`);
     return user;
+  }
+
+  private async recoverAgentRunsFromLedger(
+    sessionId: string,
+    messages: readonly StoredMessage[],
+  ): Promise<{ hasLedger: boolean; recovered: boolean }> {
+    if (!this.deps.runStore) return { hasLedger: false, recovered: false };
+    const runs = await this.deps.runStore.listSessionRuns(sessionId);
+    if (runs.length === 0) return { hasLedger: false, recovered: false };
+
+    let recovered = false;
+    for (const run of runs) {
+      const events = await this.deps.runStore.readEvents(sessionId, run.runId);
+      const decision = classifyAgentRunRecovery(run, events, messages);
+      if (!decision) continue;
+      await this.applyAgentRunRecovery(sessionId, decision);
+      recovered = true;
+    }
+    return { hasLedger: true, recovered };
+  }
+
+  private async applyAgentRunRecovery(
+    sessionId: string,
+    decision: AgentRunRecoveryDecision,
+  ): Promise<void> {
+    const ts = this.deps.now();
+    if (decision.status === 'completed') {
+      await this.deps.runStore?.updateRun(sessionId, decision.runId, {
+        status: 'completed',
+        completedAt: ts,
+        updatedAt: ts,
+      });
+      await this.deps.runStore?.appendEvent(sessionId, decision.runId, {
+        type: 'run_completed',
+        id: this.deps.newId(),
+        runId: decision.runId,
+        sessionId,
+        turnId: decision.turnId,
+        ts,
+        data: { recovered: true, ...decision.diagnostic },
+      });
+      await this.appendTurnState(sessionId, decision.turnId, 'completed', decision.lineage, { ts }).catch(() => {});
+      return;
+    }
+
+    const failureClass = decision.failureClass ?? 'app_restarted';
+    await this.deps.runStore?.updateRun(sessionId, decision.runId, {
+      status: 'failed',
+      completedAt: ts,
+      updatedAt: ts,
+      failureClass,
+    });
+    await this.deps.runStore?.appendEvent(sessionId, decision.runId, {
+      type: 'run_failed',
+      id: this.deps.newId(),
+      runId: decision.runId,
+      sessionId,
+      turnId: decision.turnId,
+      ts,
+      data: { recovered: true, failureClass, ...decision.diagnostic },
+    });
+    await this.appendTurnState(sessionId, decision.turnId, 'failed', decision.lineage, {
+      ts,
+      errorClass: failureClass,
+    }).catch(() => {});
   }
 }
 

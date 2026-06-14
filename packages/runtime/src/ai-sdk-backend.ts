@@ -37,14 +37,7 @@ import type {
   CompleteEvent,
   AbortEvent,
   ErrorEvent,
-  ToolStartEvent,
-  ToolResultEvent,
-  ToolResultContent,
-  ToolOutputStream,
-  TextDeltaEvent,
   TextCompleteEvent,
-  ThinkingDeltaEvent,
-  ThinkingCompleteEvent,
   TokenUsageEvent,
   AttachmentRef,
 } from '@maka/core/events';
@@ -62,20 +55,42 @@ import type {
   BackendSendInput,
   PermissionDecision,
 } from '@maka/core/backend-types';
-import type { ToolCategory } from '@maka/core/permission';
-import { PROVIDER_DEFAULTS, type LlmConnection } from '@maka/core/llm-connections';
-import { generalizedErrorMessage, redactSecrets } from '@maka/core/redaction';
+import type { LlmConnection } from '@maka/core/llm-connections';
 import type { LlmCallRecord, ToolInvocationRecord } from '@maka/core/usage-stats/types';
 import { z } from 'zod';
 
 import { PermissionEngine } from './permission-engine.js';
 import { AsyncEventQueue } from './async-queue.js';
-import {
-  recordToolArtifactsSafely,
-  type ToolArtifactRecorder,
-} from './tool-artifacts.js';
-import { createToolOutputDeltaEmitter } from './tool-output-delta.js';
 import { StreamWatchdog, formatStreamWatchdogError } from './stream-watchdog.js';
+import {
+  MAX_ACTIVE_SUBAGENT_TOOLS_PER_TURN,
+  TOOL_ERROR_RESULT_MAX_CHARS,
+  ToolRuntime,
+  formatSyntheticToolErrorText,
+  type MakaTool,
+  type MakaToolContext,
+} from './tool-runtime.js';
+import {
+  ModelAdapter,
+  normalizeAiSdkUsage,
+  type ModelFactory,
+  type ModelFactoryInput,
+  type NormalizedAiSdkUsage,
+  type RepairableAiSdkToolCall,
+} from './model-adapter.js';
+import type { ToolArtifactRecorder } from './tool-artifacts.js';
+import { RunTrace, type RunTraceRecorder } from './run-trace.js';
+
+export {
+  DEFAULT_PERMISSION_TIMEOUT_MS,
+  MAX_ACTIVE_SUBAGENT_TOOLS_PER_TURN,
+  TOOL_ERROR_RESULT_MAX_CHARS,
+  formatSyntheticToolErrorText,
+} from './tool-runtime.js';
+export type { MakaTool, MakaToolContext } from './tool-runtime.js';
+export { normalizeAiSdkUsage } from './model-adapter.js';
+export type { ModelFactory, ModelFactoryInput, RepairableAiSdkToolCall } from './model-adapter.js';
+export type { RunTraceEvent, RunTraceRecorder } from './run-trace.js';
 
 // ============================================================================
 // AgentBackend interface
@@ -90,78 +105,7 @@ export interface AgentBackend {
   dispose(): Promise<void>;
 }
 
-// ============================================================================
-// MakaTool: our wrapper around ai-sdk's tool definition.
-//
-// We carry the Zod schema and an `impl` callback. The backend wraps `impl`
-// with permission gating before passing to ai-sdk's `streamText({ tools })`.
-// ============================================================================
-
-export interface MakaTool<P = unknown, R = unknown> {
-  /** Canonical (Claude-SDK-style) name. Pi adapter → translate to canonical. */
-  name: string;
-  /** Human-readable description shown to the model. */
-  description: string;
-  /** Zod schema describing the tool's argument shape. Carried as `unknown`
-   *  here so this file does not have a hard zod dependency; runtime callers
-   *  may pass a `z.ZodTypeAny`. */
-  parameters: unknown;
-  /**
-   * If `false`, the wrap layer skips PermissionEngine.evaluate() entirely
-   * and runs impl directly. Use for read-only / search tools (Read / Glob /
-   * Grep). Defaults to `true` (always go through the engine).
-   */
-  permissionRequired?: boolean;
-  /** Optional UI display name. */
-  displayName?: string;
-  /** Optional trusted category override for custom tools. */
-  categoryHint?: ToolCategory;
-  /** Real tool implementation. Called only after permission allows. */
-  impl: (args: any, ctx: MakaToolContext) => Promise<R> | R;
-}
-
-export interface MakaToolContext {
-  sessionId: string;
-  turnId: string;
-  /** Session working directory. */
-  cwd: string;
-  toolCallId: string;
-  abortSignal: AbortSignal;
-  emitOutput: (stream: ToolOutputStream, chunk: string) => void;
-}
-
-// ============================================================================
-// Model factory contract (implemented elsewhere — @kabi)
-// ============================================================================
-
-/**
- * Build an ai-sdk LanguageModel from a single input object.
- * Matches the signature exported by `runtime/model-factory.ts` (@kabi):
- *   `getAIModel(input: ModelFactoryInput): LanguageModelV2`
- *
- * We type-erase the return as `unknown` here to avoid pulling ai-sdk's
- * `LanguageModelV2` type into core's dependency graph.
- */
-export interface ModelFactoryInput {
-  connection: LlmConnection;
-  apiKey: string;
-  modelId: string;
-}
-export type ModelFactory = (input: ModelFactoryInput) => unknown;
-
-export const TOOL_ERROR_RESULT_MAX_CHARS = 4000;
 export const INVALID_TOOL_NAME = 'invalid';
-export const MAX_ACTIVE_SUBAGENT_TOOLS_PER_TURN = 5;
-export const DEFAULT_PERMISSION_TIMEOUT_MS = 300_000;
-const SUBAGENT_TOOL_LIMIT_MESSAGE = '只读探索并发过多：同一轮最多 5 个子代理。请等待已有探索完成后再继续。';
-
-export interface RepairableAiSdkToolCall {
-  toolCallId: string;
-  toolName: string;
-  input: string;
-  providerExecuted?: boolean;
-  providerMetadata?: unknown;
-}
 
 // ============================================================================
 // Constructor input — single object matches @kabi's BackendRegistry call site
@@ -214,6 +158,8 @@ export interface AiSdkBackendInput {
   /** Optional fire-and-forget telemetry hooks. Tool implementations remain unaware. */
   recordLlmCall?: LlmTelemetryRecorder;
   recordToolInvocation?: ToolTelemetryRecorder;
+  /** Optional diagnostic trace hook for explaining a runtime turn without changing renderer events. */
+  recordRunTrace?: RunTraceRecorder;
   /**
    * Optional artifact recorder. Runtime derives only deterministic candidates
    * from structured tool results / explicit redirects; desktop main owns
@@ -241,6 +187,8 @@ export class AiSdkBackend implements AgentBackend {
   private readonly newId: () => string;
   private readonly now: () => number;
   private readonly maxSteps: number;
+  private readonly toolRuntime: ToolRuntime;
+  private readonly modelAdapter: ModelAdapter;
 
   private aborted = false;
   private abortController: AbortController | null = null;
@@ -249,8 +197,7 @@ export class AiSdkBackend implements AgentBackend {
   private currentQueue: AsyncEventQueue<SessionEvent> | null = null;
   /** Paused while the backend is waiting on a user permission decision. */
   private currentWatchdog: StreamWatchdog | null = null;
-  /** PawWork borrow: keep read-only subagent fan-out bounded per active turn. */
-  private activeSubagentToolCount = 0;
+  private currentRunTrace: RunTrace | null = null;
 
   constructor(input: AiSdkBackendInput) {
     this.input = input;
@@ -258,6 +205,31 @@ export class AiSdkBackend implements AgentBackend {
     this.newId = input.newId ?? (() => crypto.randomUUID());
     this.now = input.now ?? (() => Date.now());
     this.maxSteps = input.maxSteps ?? 50;
+    this.modelAdapter = new ModelAdapter({
+      connection: input.connection,
+      apiKey: input.apiKey,
+      modelId: input.modelId,
+      modelFactory: input.modelFactory,
+      providerOptions: input.providerOptions,
+      maxSteps: this.maxSteps,
+      newId: this.newId,
+      now: this.now,
+    });
+    this.toolRuntime = new ToolRuntime({
+      sessionId: input.sessionId,
+      header: input.header,
+      connection: input.connection,
+      modelId: input.modelId,
+      appendMessage: input.appendMessage,
+      permissionEngine: input.permissionEngine,
+      newId: this.newId,
+      now: this.now,
+      getPermissionPauseTarget: () => this.currentWatchdog,
+      getRunTrace: () => this.currentRunTrace,
+      permissionTimeoutMs: input.permissionTimeoutMs,
+      recordToolInvocation: input.recordToolInvocation,
+      recordToolArtifacts: input.recordToolArtifacts,
+    });
   }
 
   // --------------------------------------------------------------------------
@@ -281,19 +253,26 @@ export class AiSdkBackend implements AgentBackend {
     let tokenUsage: NormalizedAiSdkUsage | undefined;
     let streamStatus: LlmCallRecord['status'] = 'success';
     let streamErrorClass: string | undefined;
+    const trace = new RunTrace({
+      sessionId: this.sessionId,
+      turnId,
+      connectionSlug: this.input.connection.slug,
+      providerId: this.input.connection.providerType,
+      modelId: this.input.modelId,
+      newId: this.newId,
+      now: this.now,
+      record: this.input.recordRunTrace,
+    });
+    this.currentRunTrace = trace;
+    trace.turnStarted();
 
     // --- Resolve model (API key already attached at construct time) ---
     let model: unknown;
     try {
-      if (PROVIDER_DEFAULTS[this.input.connection.providerType].authKind !== 'none' && !this.input.apiKey) {
-        throw new Error(`No API key stored for connection "${this.input.connection.slug}"`);
-      }
-      model = this.input.modelFactory({
-        connection: this.input.connection,
-        apiKey: this.input.apiKey,
-        modelId: this.input.modelId,
-      });
+      model = this.modelAdapter.resolveModel();
+      trace.modelResolved();
     } catch (err) {
+      trace.modelResolveFailed(err);
       queue.push(this.makeErrorEvent(turnId, err));
       queue.push({
         type: 'complete',
@@ -307,15 +286,6 @@ export class AiSdkBackend implements AgentBackend {
       yield* this.drain(queue);
       return;
     }
-
-    // --- Lazy import of ai-sdk (~150ms cold) ---
-    const ai = await import('ai').catch((err) => {
-      throw new Error(`Failed to load 'ai' package. Run \`npm install ai\`. Inner: ${(err as Error).message}`);
-    });
-    const { streamText, stepCountIs } = ai as unknown as {
-      streamText: (opts: Record<string, unknown>) => StreamTextResult;
-      stepCountIs: (n: number) => unknown;
-    };
 
     // --- Build ai-sdk tools dict with permission-wrapped execute ---
     const aiSdkTools: Record<string, unknown> = {};
@@ -350,18 +320,21 @@ export class AiSdkBackend implements AgentBackend {
             const message = formatStreamWatchdogError(timeout);
             watchdogTimeoutError = new Error(message);
             queue.push(this.makeErrorEvent(turnId, watchdogTimeoutError));
+            trace.modelStreamFailed('Timeout', watchdogTimeoutError);
             this.abortController?.abort(watchdogTimeoutError);
           },
         });
         this.currentWatchdog = watchdog;
         watchdog.start();
+        const activeTools = this.input.tools.map((tool) => tool.name);
+        trace.modelStreamStarted(activeTools);
 
-        const result = streamText({
+        const result = await this.modelAdapter.startStream({
           model,
           messages,
           tools: aiSdkTools,
-          activeTools: this.input.tools.map((tool) => tool.name),
-          experimental_repairToolCall: async (
+          activeTools,
+          repairToolCall: async (
             { toolCall, error }: { toolCall: RepairableAiSdkToolCall; error: unknown },
           ) => {
             return repairMakaToolCall({
@@ -371,15 +344,13 @@ export class AiSdkBackend implements AgentBackend {
             });
           },
           system: await this.resolveSystemPrompt(),
-          providerOptions: this.input.providerOptions,
-          stopWhen: stepCountIs(this.maxSteps),
           abortSignal: this.abortController!.signal,
         });
 
         for await (const chunk of result.fullStream) {
           if (this.aborted) break;
           watchdog.markActivity();
-          this.handleStreamChunk(chunk, turnId, assistantMessageId, queue, {
+          this.modelAdapter.handleStreamChunk(chunk, turnId, assistantMessageId, queue, {
             onText: (t) => { assistantText += t; },
             onTextComplete: (t) => { assistantText = t; },
             onThinking: (t) => { thinkingText += t; },
@@ -439,6 +410,7 @@ export class AiSdkBackend implements AgentBackend {
         try {
           tokenUsage = normalizeAiSdkUsage(await result.usage);
           if (tokenUsage) {
+            trace.usageRecorded(tokenUsage);
             const tu: TokenUsageMessage = {
               type: 'token_usage',
               id: this.newId(),
@@ -466,16 +438,18 @@ export class AiSdkBackend implements AgentBackend {
         }
 
         const finishReason = await result.finishReason.catch(() => 'stop');
+        const stopReason = this.mapFinishReason(finishReason);
+        trace.modelStreamCompleted(stopReason);
         queue.push({
           type: 'complete',
           id: this.newId(),
           turnId,
           ts: this.now(),
-          stopReason: this.mapFinishReason(finishReason),
+          stopReason,
         } satisfies CompleteEvent);
       } catch (err) {
         streamStatus = this.aborted ? 'aborted' : 'error';
-        streamErrorClass = classifyError(watchdogTimeoutError ?? err);
+        streamErrorClass = this.modelAdapter.classifyError(watchdogTimeoutError ?? err);
         if (this.aborted) {
           queue.push({
             type: 'abort',
@@ -494,6 +468,7 @@ export class AiSdkBackend implements AgentBackend {
         } else {
           if (!watchdogTimeoutError) {
             queue.push(this.makeErrorEvent(turnId, err));
+            trace.modelStreamFailed(streamErrorClass, err);
           }
           queue.push({
             type: 'complete',
@@ -544,332 +519,7 @@ export class AiSdkBackend implements AgentBackend {
     turnId: string,
     queue: AsyncEventQueue<SessionEvent>,
   ) {
-    return async (
-      args: unknown,
-      ctx: { toolCallId: string; abortSignal: AbortSignal },
-    ): Promise<unknown> => {
-      const toolUseId = ctx.toolCallId;
-      const now = this.now();
-      const toolIntent = describeToolIntent(tool, args);
-
-      // 1. Always write tool_call FIRST (§6.2 invariant).
-      const callMsg: ToolCallMessage = {
-        type: 'tool_call',
-        id: toolUseId,
-        turnId,
-        ts: now,
-        toolName: tool.name,
-        ...(tool.displayName ? { displayName: tool.displayName } : {}),
-        ...(toolIntent ? { intent: toolIntent } : {}),
-        args,
-      };
-      await this.input.appendMessage(callMsg);
-      const startEv: ToolStartEvent = {
-        type: 'tool_start',
-        id: this.newId(),
-        turnId,
-        ts: now,
-        toolUseId,
-        toolName: tool.name,
-        args,
-        ...(tool.displayName ? { displayName: tool.displayName } : {}),
-        ...(toolIntent ? { intent: toolIntent } : {}),
-      };
-      queue.push(startEv);
-
-      // 2. PermissionEngine evaluate — skipped for tools marked permissionRequired=false
-      //    (Read / Glob / Grep). We still write tool_call/tool_result messages
-      //    so the materializer renders them just like permission-gated tools.
-      if (tool.permissionRequired === false) {
-        // Fast path: jump straight to impl. Fall through to step 3 below.
-      } else {
-      const verdict = this.input.permissionEngine.evaluate({
-        sessionId: this.sessionId,
-        turnId,
-        toolUseId,
-        toolName: tool.name,
-        args,
-        ...(tool.categoryHint !== undefined ? { categoryHint: tool.categoryHint } : {}),
-        mode: this.input.header.permissionMode,
-      });
-
-      if (verdict.kind === 'block') {
-        await this.writeSyntheticToolResult(toolUseId, turnId, verdict.reason, queue);
-        return this.errorReturn(verdict.reason);
-      }
-
-      if (verdict.kind === 'prompt') {
-        // Surface request to UI via queue, then await user response.
-        queue.push(verdict.event);
-        let response: PermissionDecision;
-        try {
-          response = await this.awaitPermissionDecision(verdict, turnId);
-        } catch (err) {
-          const msg = formatSyntheticToolErrorText(err);
-          const reason = formatSyntheticToolErrorText(`Permission flow aborted: ${msg}`);
-          await this.writeSyntheticToolResult(toolUseId, turnId, reason, queue);
-          return this.errorReturn(reason);
-        }
-
-        // Persist the decision and ack it on the event stream.
-        const decisionMsg: PermissionDecisionMessage = {
-          type: 'permission_decision',
-          id: response.requestId,
-          turnId,
-          ts: this.now(),
-          toolUseId,
-          toolName: tool.name,
-          decision: response.decision,
-          ...(response.rememberForTurn !== undefined ? { rememberForTurn: response.rememberForTurn } : {}),
-        };
-        await this.input.appendMessage(decisionMsg);
-        queue.push({
-          type: 'permission_decision_ack',
-          id: this.newId(),
-          turnId,
-          ts: this.now(),
-          requestId: response.requestId,
-          toolUseId,
-          decision: response.decision,
-          ...(response.rememberForTurn !== undefined ? { rememberForTurn: response.rememberForTurn } : {}),
-        });
-
-        if (response.decision === 'deny') {
-          const reason = '用户已拒绝权限请求';
-          await this.writeSyntheticToolResult(toolUseId, turnId, reason, queue);
-          return this.errorReturn(reason);
-        }
-      }
-      } // end of: permissionRequired === false ? skip : evaluate
-
-      // 3. Permission allowed (or skipped) → run the real impl.
-      const reservedSubagentSlot = this.reserveSubagentSlot(tool);
-      if (!reservedSubagentSlot) {
-        await this.writeSyntheticToolResult(toolUseId, turnId, SUBAGENT_TOOL_LIMIT_MESSAGE, queue);
-        return this.errorReturn(SUBAGENT_TOOL_LIMIT_MESSAGE);
-      }
-      const startedAt = this.now();
-      const output = createToolOutputDeltaEmitter({
-        sessionId: this.sessionId,
-        turnId,
-        toolUseId,
-        newId: this.newId,
-        now: this.now,
-        push: (event) => queue.push(event),
-      });
-      try {
-        const result = await tool.impl(args as never, {
-          sessionId: this.sessionId,
-          turnId,
-          cwd: this.input.header.cwd,
-          toolCallId: toolUseId,
-          abortSignal: ctx.abortSignal,
-          emitOutput: output.emit,
-        });
-        output.flush();
-        const durationMs = this.now() - startedAt;
-
-        // Coerce impl's return into ToolResultContent for storage + event.
-        const content = this.coerceResultContent(result);
-        const toolResultStatus = deriveToolResultStatus(content);
-        const resultMsg: ToolResultMessage = {
-          type: 'tool_result',
-          id: this.newId(),
-          turnId,
-          ts: this.now(),
-          toolUseId,
-          isError: toolResultStatus !== 'success',
-          content,
-          durationMs,
-        };
-        await this.input.appendMessage(resultMsg);
-        queue.push({
-          type: 'tool_result',
-          id: this.newId(),
-          turnId,
-          ts: this.now(),
-          toolUseId,
-          isError: toolResultStatus !== 'success',
-          content,
-          durationMs,
-        } satisfies ToolResultEvent);
-
-        this.input.recordToolInvocation?.({
-          sessionId: this.sessionId,
-          turnId,
-          toolCallId: toolUseId,
-          toolName: tool.name,
-          providerId: this.input.connection.providerType,
-          modelId: this.input.modelId,
-          durationMs,
-          status: toolResultStatus,
-          argsSummary: summarizeArgs(args),
-          bytesIn: byteLength(args),
-          bytesOut: byteLength(result),
-          startedAt,
-        });
-
-        void recordToolArtifactsSafely(
-          {
-            sessionId: this.sessionId,
-            turnId,
-            toolUseId,
-            toolName: tool.name,
-            cwd: this.input.header.cwd,
-            args,
-            result,
-          },
-          this.input.recordToolArtifacts,
-          (message) => {
-            queue.push({
-              type: 'tool_progress',
-              id: this.newId(),
-              turnId,
-              ts: this.now(),
-              toolUseId,
-              chunk: message,
-            });
-          },
-        );
-
-        return result;
-      } catch (err) {
-        output.flush();
-        const terminalFailure = this.coerceTerminalFailure(tool, args, err);
-        if (terminalFailure) {
-          const durationMs = Math.max(0, this.now() - startedAt);
-          const resultMsg: ToolResultMessage = {
-            type: 'tool_result',
-            id: this.newId(),
-            turnId,
-            ts: this.now(),
-            toolUseId,
-            isError: true,
-            content: terminalFailure.content,
-            durationMs,
-          };
-          await this.input.appendMessage(resultMsg);
-          queue.push({
-            type: 'tool_result',
-            id: this.newId(),
-            turnId,
-            ts: this.now(),
-            toolUseId,
-            isError: true,
-            content: terminalFailure.content,
-            durationMs,
-          } satisfies ToolResultEvent);
-          this.input.recordToolInvocation?.({
-            sessionId: this.sessionId,
-            turnId,
-            toolCallId: toolUseId,
-            toolName: tool.name,
-            providerId: this.input.connection.providerType,
-            modelId: this.input.modelId,
-            durationMs,
-            status: 'error',
-            errorClass: classifyError(err),
-            argsSummary: summarizeArgs(args),
-            bytesIn: byteLength(args),
-            bytesOut: byteLength(terminalFailure.content),
-            startedAt,
-          });
-          return this.errorReturn(terminalFailure.message);
-        }
-        const msg = formatSyntheticToolErrorText(err);
-        await this.writeSyntheticToolResult(toolUseId, turnId, msg, queue);
-        this.input.recordToolInvocation?.({
-          sessionId: this.sessionId,
-          turnId,
-          toolCallId: toolUseId,
-          toolName: tool.name,
-          providerId: this.input.connection.providerType,
-          modelId: this.input.modelId,
-          durationMs: Math.max(0, this.now() - startedAt),
-          status: 'error',
-          errorClass: classifyError(err),
-          argsSummary: summarizeArgs(args),
-          bytesIn: byteLength(args),
-          bytesOut: 0,
-          startedAt,
-        });
-        return this.errorReturn(msg);
-      } finally {
-        if (reservedSubagentSlot) this.releaseSubagentSlot(tool);
-      }
-    };
-  }
-
-  // --------------------------------------------------------------------------
-  // Stream chunk normalizer — ai-sdk fullStream → SessionEvent
-  // --------------------------------------------------------------------------
-
-  private handleStreamChunk(
-    chunk: AiSdkStreamChunk,
-    turnId: string,
-    assistantMessageId: string,
-    queue: AsyncEventQueue<SessionEvent>,
-    cb: {
-      onText: (t: string) => void;
-      onTextComplete: (t: string) => void;
-      onThinking: (t: string) => void;
-      onThinkingComplete: (t: string, sig?: string) => void;
-    },
-  ): void {
-    const ts = this.now();
-    switch (chunk.type) {
-      case 'text-delta': {
-        const text = chunk.text ?? chunk.textDelta ?? chunk.delta ?? '';
-        cb.onText(text);
-        queue.push({
-          type: 'text_delta',
-          id: this.newId(),
-          turnId,
-          ts,
-          messageId: assistantMessageId,
-          text,
-        } satisfies TextDeltaEvent);
-        break;
-      }
-      case 'reasoning':
-      case 'reasoning-delta': {
-        // Anthropic / OpenAI o-series style thinking
-        const text = chunk.text ?? chunk.textDelta ?? chunk.delta ?? '';
-        cb.onThinking(text);
-        queue.push({
-          type: 'thinking_delta',
-          id: this.newId(),
-          turnId,
-          ts,
-          messageId: assistantMessageId,
-          text,
-        } satisfies ThinkingDeltaEvent);
-        break;
-      }
-      case 'step-finish': {
-        // ai-sdk fires step-finish after each turn step (incl. between tool calls).
-        // We don't need to emit anything here; tool results already streamed.
-        break;
-      }
-      case 'finish': {
-        // Final usage handled in pump's await result.usage path. Emit text_complete
-        // (we don't have a per-message complete in ai-sdk; aggregate from cb).
-        // Note: aggregated text is captured by the pump via cb.onText.
-        break;
-      }
-      case 'tool-call':
-      case 'tool-result':
-        // These are emitted by ai-sdk after our wrapped execute() runs.
-        // Our wrapped execute already emitted tool_start + tool_result to the
-        // queue, so we ignore these chunks to avoid double-emission.
-        break;
-      case 'error':
-        queue.push(this.makeErrorEvent(turnId, chunk.error));
-        break;
-      default:
-        // Unrecognized chunk type — forward-compat: ignore.
-        break;
-    }
+    return this.toolRuntime.wrapToolExecute(tool, turnId, queue);
   }
 
   // --------------------------------------------------------------------------
@@ -882,6 +532,7 @@ export class AiSdkBackend implements AgentBackend {
     if (this.currentTurnId !== null) {
       this.input.permissionEngine.endTurn(this.currentTurnId, 'aborted');
     }
+    this.currentRunTrace?.abortRequested(_reason);
   }
 
   async respondToPermission(decision: PermissionDecision): Promise<void> {
@@ -895,115 +546,22 @@ export class AiSdkBackend implements AgentBackend {
     if (!this.aborted) await this.stop('user_stop');
   }
 
-  private async writeSyntheticToolResult(
+  private writeSyntheticToolResult(
     toolUseId: string,
     turnId: string,
     text: string,
     queue: AsyncEventQueue<SessionEvent>,
   ): Promise<void> {
-    const content: ToolResultContent = { kind: 'text', text: formatSyntheticToolErrorText(text) };
-    const msg: ToolResultMessage = {
-      type: 'tool_result',
-      id: this.newId(),
-      turnId,
-      ts: this.now(),
-      toolUseId,
-      isError: true,
-      content,
-    };
-    await this.input.appendMessage(msg);
-    queue.push({
-      type: 'tool_result',
-      id: this.newId(),
-      turnId,
-      ts: this.now(),
-      toolUseId,
-      isError: true,
-      content,
-    } satisfies ToolResultEvent);
-  }
-
-  /** Coerce arbitrary tool impl return into ToolResultContent for storage. */
-  private coerceResultContent(raw: unknown): ToolResultContent {
-    if (typeof raw === 'string') return { kind: 'text', text: raw };
-    if (raw && typeof raw === 'object') {
-      const obj = raw as { kind?: string; text?: string };
-      if (typeof obj.kind === 'string') return raw as ToolResultContent;
-      if (typeof obj.text === 'string') return { kind: 'text', text: obj.text };
-      return { kind: 'json', value: raw };
-    }
-    return { kind: 'text', text: String(raw ?? '') };
-  }
-
-  private coerceTerminalFailure(
-    tool: MakaTool,
-    args: unknown,
-    err: unknown,
-  ): { content: Extract<ToolResultContent, { kind: 'terminal' }>; message: string } | null {
-    if (tool.name !== 'Bash' || !err || typeof err !== 'object') return null;
-    const error = err as { code?: unknown; stdout?: unknown; stderr?: unknown };
-    if (typeof error.code !== 'number') return null;
-    const command = args && typeof args === 'object' && typeof (args as { command?: unknown }).command === 'string'
-      ? (args as { command: string }).command
-      : '';
-    return {
-      content: {
-        kind: 'terminal',
-        cwd: this.input.header.cwd,
-        cmd: redactSecrets(command),
-        exitCode: error.code,
-        stdout: redactSecrets(String(error.stdout ?? '')),
-        stderr: redactSecrets(String(error.stderr ?? '')),
-      },
-      message: `命令退出码 ${error.code}`,
-    };
-  }
-
-  private reserveSubagentSlot(tool: MakaTool): boolean {
-    if (tool.categoryHint !== 'subagent') return true;
-    if (this.activeSubagentToolCount >= MAX_ACTIVE_SUBAGENT_TOOLS_PER_TURN) return false;
-    this.activeSubagentToolCount += 1;
-    return true;
-  }
-
-  private releaseSubagentSlot(tool: MakaTool): void {
-    if (tool.categoryHint !== 'subagent') return;
-    this.activeSubagentToolCount = Math.max(0, this.activeSubagentToolCount - 1);
-  }
-
-  /** Build the value we return to ai-sdk from a synthetic-error tool call. */
-  private errorReturn(message: string): unknown {
-    return { error: message };
+    return this.toolRuntime.writeSyntheticToolResult(toolUseId, turnId, text, queue);
   }
 
   /** Map ai-sdk finishReason → our CompleteEvent.stopReason. */
   private mapFinishReason(reason: unknown): CompleteEvent['stopReason'] {
-    switch (reason) {
-      case 'stop':           return 'end_turn';
-      case 'length':         return 'max_tokens';
-      case 'content-filter': return 'error';
-      case 'error':          return 'error';
-      case 'tool-calls':     return 'end_turn';   // ai-sdk auto-loops; if this leaks out, treat as end
-      default:               return 'end_turn';
-    }
+    return this.modelAdapter.mapFinishReason(reason);
   }
 
   private makeErrorEvent(turnId: string, err: unknown): ErrorEvent {
-    const message = generalizedErrorMessage(err);
-    const reason = errorReasonFromClass(classifyError(err));
-    const code = err instanceof Error && 'code' in err
-      ? String((err as { code?: unknown }).code)
-      : undefined;
-    return {
-      type: 'error',
-      id: this.newId(),
-      turnId,
-      ts: this.now(),
-      recoverable: false,
-      ...(code !== undefined ? { code } : {}),
-      ...(reason !== undefined ? { reason } : {}),
-      message,
-    };
+    return this.modelAdapter.makeErrorEvent(turnId, err);
   }
 
   /** Materialize stored messages into ai-sdk's message format.
@@ -1045,198 +603,15 @@ export class AiSdkBackend implements AgentBackend {
     for await (const ev of queue) yield ev;
   }
 
-  private async awaitPermissionDecision(
-    verdict: Extract<ReturnType<PermissionEngine['evaluate']>, { kind: 'prompt' }>,
-    turnId: string,
-  ): Promise<PermissionDecision> {
-    const timeoutMs = this.input.permissionTimeoutMs ?? DEFAULT_PERMISSION_TIMEOUT_MS;
-    this.currentWatchdog?.pause();
-    try {
-      if (timeoutMs <= 0) return await verdict.parked;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const timeout = new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => {
-          const reason = `Permission request ${verdict.event.requestId} timed out after ${timeoutMs}ms`;
-          this.input.permissionEngine.expireRequest(turnId, verdict.event.requestId, reason);
-          reject(new Error(reason));
-        }, timeoutMs);
-      });
-      try {
-        return await Promise.race([verdict.parked, timeout]);
-      } finally {
-        if (timer !== undefined) clearTimeout(timer);
-      }
-    } finally {
-      this.currentWatchdog?.resume();
-    }
-  }
-
   private cleanupAfterTurn(turnId: string): void {
     this.input.permissionEngine.endTurn(turnId, this.aborted ? 'aborted' : 'completed');
     this.abortController = null;
     this.currentQueue = null;
     this.currentTurnId = null;
-    this.activeSubagentToolCount = 0;
+    this.currentRunTrace = null;
+    this.toolRuntime.resetTurnState();
     this.aborted = false;
   }
-}
-
-// ============================================================================
-// Loose stream-chunk shape (intentionally lenient — ai-sdk evolves)
-// ============================================================================
-
-interface AiSdkStreamChunk {
-  type: string;
-  text?: string;
-  delta?: string;
-  textDelta?: string;
-  toolCallId?: string;
-  toolName?: string;
-  args?: unknown;
-  result?: unknown;
-  usage?: AiSdkUsageLike;
-  finishReason?: string;
-  error?: unknown;
-}
-
-interface StreamTextResult {
-  fullStream: AsyncIterable<AiSdkStreamChunk>;
-  usage: Promise<AiSdkUsageLike | undefined>;
-  finishReason: Promise<string>;
-}
-
-interface AiSdkUsageLike {
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-  inputTokens?: number;
-  outputTokens?: number;
-  cachedInputTokens?: number;
-  cacheWriteInputTokens?: number;
-  reasoningTokens?: number;
-  cacheReadInputTokens?: number;
-  cacheCreationInputTokens?: number;
-  inputTokenDetails?: {
-    cachedTokens?: number;
-    cacheReadTokens?: number;
-    cacheWriteTokens?: number;
-    reasoningTokens?: number;
-  };
-  outputTokenDetails?: {
-    reasoningTokens?: number;
-  };
-}
-
-interface NormalizedAiSdkUsage {
-  inputTokens: number;
-  outputTokens: number;
-  cachedInputTokens: number;
-  cacheWriteInputTokens: number;
-  reasoningTokens: number;
-  totalTokens: number;
-}
-
-export function normalizeAiSdkUsage(usage: AiSdkUsageLike | undefined): NormalizedAiSdkUsage | undefined {
-  if (!usage) return undefined;
-  const inputTokens = finiteToken(usage.inputTokens) ?? finiteToken(usage.promptTokens) ?? 0;
-  const outputTokens = finiteToken(usage.outputTokens) ?? finiteToken(usage.completionTokens) ?? 0;
-  const cachedInputTokens =
-    finiteToken(usage.cachedInputTokens)
-    ?? finiteToken(usage.cacheReadInputTokens)
-    ?? finiteToken(usage.inputTokenDetails?.cacheReadTokens)
-    ?? finiteToken(usage.inputTokenDetails?.cachedTokens)
-    ?? 0;
-  const cacheWriteInputTokens =
-    finiteToken(usage.cacheWriteInputTokens)
-    ?? finiteToken(usage.cacheCreationInputTokens)
-    ?? finiteToken(usage.inputTokenDetails?.cacheWriteTokens)
-    ?? 0;
-  const reasoningTokens =
-    finiteToken(usage.reasoningTokens)
-    ?? finiteToken(usage.outputTokenDetails?.reasoningTokens)
-    ?? finiteToken(usage.inputTokenDetails?.reasoningTokens)
-    ?? 0;
-  const totalTokens = finiteToken(usage.totalTokens) ?? inputTokens + outputTokens;
-  return {
-    inputTokens,
-    outputTokens,
-    cachedInputTokens,
-    cacheWriteInputTokens,
-    reasoningTokens,
-    totalTokens,
-  };
-}
-
-function finiteToken(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
-}
-
-function classifyError(error: unknown): string {
-  if (!(error instanceof Error)) return 'Other';
-  const code = 'code' in error ? String((error as { code?: unknown }).code) : '';
-  const text = `${error.name} ${code} ${error.message}`.toLowerCase();
-  if (text.includes('abort')) return 'Abort';
-  if (text.includes('rate') || code === '429') return 'RateLimit';
-  if (text.includes('auth') || code === '401' || code === '403') return 'Auth';
-  if (text.includes('timeout')) return 'Timeout';
-  if (text.includes('network') || text.includes('fetch')) return 'Network';
-  return error.name || 'Other';
-}
-
-function errorReasonFromClass(errorClass: string): string | undefined {
-  switch (errorClass) {
-    case 'Timeout':
-      return 'timeout';
-    case 'Auth':
-      return 'auth';
-    case 'RateLimit':
-      return 'rate_limit';
-    case 'Network':
-      return 'network';
-    default:
-      return undefined;
-  }
-}
-
-export function formatSyntheticToolErrorText(error: unknown): string {
-  const raw = error instanceof Error ? error.message : String(error);
-  const redacted = redactSecrets(raw || 'Tool failed');
-  if (redacted.length <= TOOL_ERROR_RESULT_MAX_CHARS) return redacted;
-  return `${redacted.slice(0, TOOL_ERROR_RESULT_MAX_CHARS - 1)}…`;
-}
-
-function deriveToolResultStatus(content: ToolResultContent): ToolInvocationRecord['status'] {
-  if (content.kind === 'explore_agent' && content.ok === false) {
-    return content.reason === 'aborted' ? 'aborted' : 'error';
-  }
-  if (content.kind === 'rive_workflow' && content.ok === false) return 'error';
-  if (content.kind === 'web_search_error') return 'error';
-  if (content.kind === 'office_document' && content.ok === false) {
-    return content.reason === 'officecli_aborted' ? 'aborted' : 'error';
-  }
-  return 'success';
-}
-
-function summarizeArgs(args: unknown): string {
-  const text = typeof args === 'string' ? args : JSON.stringify(args ?? null);
-  return text.length <= 512 ? text : `${text.slice(0, 511)}…`;
-}
-
-function describeToolIntent(tool: MakaTool, args: unknown): string | undefined {
-  if (tool.categoryHint !== 'subagent' || tool.name !== 'ExploreAgent') return undefined;
-  if (!args || typeof args !== 'object') return undefined;
-  const objective = (args as { objective?: unknown }).objective;
-  if (typeof objective !== 'string') return undefined;
-  const normalized = redactSecrets(objective.replace(/\s+/g, ' ').trim());
-  if (normalized.length === 0) return undefined;
-  const capped = normalized.length <= 180 ? normalized : `${normalized.slice(0, 179)}…`;
-  return `只读探索：${capped}`;
-}
-
-function byteLength(value: unknown): number {
-  if (value === undefined) return 0;
-  const text = typeof value === 'string' ? value : JSON.stringify(value ?? null);
-  return Buffer.byteLength(text, 'utf8');
 }
 
 export function repairMakaToolCall(input: {

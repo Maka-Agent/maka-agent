@@ -68,6 +68,17 @@ export {
   isTurnStatus,
 } from './session.js';
 
+// agent-run.ts
+export type {
+  AgentRunEvent,
+  AgentRunEventType,
+  AgentRunHeader,
+  AgentRunInputSummary,
+  AgentRunStatus,
+  AgentRunStore,
+} from './agent-run.js';
+export { AGENT_RUN_STATUSES } from './agent-run.js';
+
 // session-event-health.ts
 export type {
   SessionEventStreamSnapshot,

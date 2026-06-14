@@ -15,6 +15,7 @@ import {
   normalizeAiSdkUsage,
   repairMakaToolCall,
   type MakaTool,
+  type RunTraceEvent,
 } from '../ai-sdk-backend.js';
 import { PermissionEngine } from '../permission-engine.js';
 
@@ -327,7 +328,351 @@ describe('AiSdkBackend usage telemetry', () => {
   });
 });
 
+describe('AiSdkBackend RunTrace', () => {
+  test('records turn, model, usage, and completion trace events without changing SessionEvents', async () => {
+    const trace: RunTraceEvent[] = [];
+    const events: SessionEvent[] = [];
+    const model = new MockLanguageModelV3({
+      doStream: {
+        stream: simulateReadableStream({
+          chunks: [
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'hello' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: { unified: 'stop', raw: 'stop' },
+              usage: {
+                inputTokens: {
+                  total: 4,
+                  noCache: 4,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                },
+                outputTokens: {
+                  total: 2,
+                  text: 1,
+                  reasoning: 1,
+                },
+              },
+            },
+          ],
+          initialDelayInMs: null,
+          chunkDelayInMs: null,
+        }),
+      },
+    });
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header(),
+      appendMessage: async () => {},
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'mock-model-id',
+      permissionEngine: new PermissionEngine({ newId: () => 'permission-id', now: () => 1 }),
+      modelFactory: () => model,
+      tools: [],
+      newId: idGenerator(),
+      now: monotonicClock(),
+      recordRunTrace: (event) => {
+        trace.push(event);
+      },
+    });
+
+    for await (const event of backend.send({ turnId: 'turn-1', text: 'hi', context: [] })) {
+      events.push(event);
+    }
+
+    assert.deepEqual(
+      trace.map((event) => event.type),
+      ['turn_started', 'model_resolved', 'model_stream_started', 'usage_recorded', 'model_stream_completed'],
+    );
+    assert.deepEqual(
+      trace.map((event) => event.phase),
+      ['turn', 'model', 'model', 'usage', 'model'],
+    );
+    assert.equal(trace[0]?.sessionId, 'session-1');
+    assert.equal(trace[0]?.turnId, 'turn-1');
+    assert.equal(trace.find((event) => event.type === 'usage_recorded')?.data?.inputTokens, 4);
+    assert.equal(trace.find((event) => event.type === 'usage_recorded')?.data?.reasoningTokens, 1);
+    assert.deepEqual(
+      events.map((event) => event.type).filter((type) => type === 'text_delta' || type === 'token_usage' || type === 'complete'),
+      ['text_delta', 'token_usage', 'complete'],
+    );
+  });
+
+  test('trace recorder failures are best-effort and do not change model execution', async () => {
+    const events: SessionEvent[] = [];
+    const model = new MockLanguageModelV3({
+      doStream: {
+        stream: simulateReadableStream({
+          chunks: [
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'hello' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: { unified: 'stop', raw: 'stop' },
+              usage: {
+                inputTokens: {
+                  total: 1,
+                  noCache: 1,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                },
+                outputTokens: {
+                  total: 1,
+                  text: 1,
+                  reasoning: 0,
+                },
+              },
+            },
+          ],
+          initialDelayInMs: null,
+          chunkDelayInMs: null,
+        }),
+      },
+    });
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header(),
+      appendMessage: async () => {},
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'mock-model-id',
+      permissionEngine: new PermissionEngine({ newId: () => 'permission-id', now: () => 1 }),
+      modelFactory: () => model,
+      tools: [],
+      newId: idGenerator(),
+      now: monotonicClock(),
+      recordRunTrace: () => {
+        throw new Error('trace sink unavailable');
+      },
+    });
+
+    for await (const event of backend.send({ turnId: 'turn-1', text: 'hi', context: [] })) {
+      events.push(event);
+    }
+
+    assert.deepEqual(
+      events.map((event) => event.type).filter((type) => type === 'text_delta' || type === 'token_usage' || type === 'complete'),
+      ['text_delta', 'token_usage', 'complete'],
+    );
+  });
+
+
+  test('records permission and tool trace events for denied tools', async () => {
+    const trace: RunTraceEvent[] = [];
+    const events: SessionEvent[] = [];
+    const permissionEngine = new PermissionEngine({ newId: idGenerator(), now: () => 1 });
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header('ask'),
+      appendMessage: async () => {},
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'claude-sonnet-4-5-20250929',
+      permissionEngine,
+      modelFactory: () => ({}),
+      tools: [],
+      newId: idGenerator(),
+      now: monotonicClock(),
+      permissionTimeoutMs: 1_000,
+    });
+    (backend as unknown as {
+      currentRunTrace: { emit(eventPhase: string, eventType: string, message: string, data?: Record<string, unknown>): void };
+      currentWatchdog: { pause(): void; resume(): void };
+    }).currentRunTrace = {
+      emit: (phase, type, message, data) => {
+        trace.push({
+          id: `trace-${trace.length + 1}`,
+          sessionId: 'session-1',
+          turnId: 'turn-1',
+          ts: trace.length + 1,
+          phase: phase as RunTraceEvent['phase'],
+          type: type as RunTraceEvent['type'],
+          message,
+          ...(data ? { data } : {}),
+        });
+      },
+    };
+    (backend as unknown as {
+      currentWatchdog: { pause(): void; resume(): void };
+    }).currentWatchdog = { pause() {}, resume() {} };
+    const tool: MakaTool = {
+      name: 'Write',
+      description: 'write file',
+      parameters: {},
+      permissionRequired: true,
+      impl: async () => ({ ok: true }),
+    };
+    const execute = (backend as unknown as {
+      wrapToolExecute(
+        tool: MakaTool,
+        turnId: string,
+        queue: { push(event: SessionEvent): void },
+      ): (args: unknown, ctx: { toolCallId: string; abortSignal: AbortSignal }) => Promise<unknown>;
+    }).wrapToolExecute(tool, 'turn-1', { push: (event) => events.push(event) });
+
+    const pending = execute(
+      { path: 'notes.md', content: 'hello' },
+      { toolCallId: 'tool-1', abortSignal: new AbortController().signal },
+    );
+    await waitFor(() => events.some((event) => event.type === 'permission_request'));
+    const request = events.find((event) => event.type === 'permission_request') as
+      | Extract<SessionEvent, { type: 'permission_request' }>
+      | undefined;
+    assert.ok(request);
+    permissionEngine.recordResponse('turn-1', {
+      requestId: request.requestId,
+      decision: 'deny',
+    });
+    await pending;
+
+    assert.deepEqual(
+      trace.map((event) => event.type),
+      ['tool_started', 'permission_requested', 'permission_decided', 'tool_failed'],
+    );
+    assert.deepEqual(
+      trace.map((event) => event.phase),
+      ['tool', 'permission', 'permission', 'tool'],
+    );
+    assert.equal(trace.find((event) => event.type === 'permission_decided')?.data?.decision, 'deny');
+    assert.equal(trace.find((event) => event.type === 'tool_failed')?.data?.errorClass, 'Permission');
+  });
+
+  test('records abort trace when stop is requested', async () => {
+    const trace: RunTraceEvent[] = [];
+    const permissionEngine = new PermissionEngine({ newId: () => 'permission-id', now: () => 1 });
+    permissionEngine.beginTurn('turn-1');
+    const verdict = permissionEngine.evaluate({
+      sessionId: 'session-1',
+      turnId: 'turn-1',
+      toolUseId: 'tool-1',
+      toolName: 'Write',
+      args: { path: 'notes.md', content: 'hello' },
+      mode: 'ask',
+    });
+    assert.equal(verdict.kind, 'prompt');
+    const parked = verdict.kind === 'prompt'
+      ? verdict.parked.then(
+          () => 'resolved',
+          (error: Error) => error.message,
+        )
+      : Promise.resolve('not-prompt');
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header(),
+      appendMessage: async () => {},
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'claude-sonnet-4-5-20250929',
+      permissionEngine,
+      modelFactory: () => ({}),
+      tools: [],
+      newId: idGenerator(),
+      now: monotonicClock(),
+    });
+    (backend as unknown as {
+      currentTurnId: string;
+      currentRunTrace: { abortRequested(reason: string): void };
+    }).currentTurnId = 'turn-1';
+    (backend as unknown as {
+      currentRunTrace: { abortRequested(reason: string): void };
+    }).currentRunTrace = {
+      abortRequested: (reason) => {
+        trace.push({
+          id: 'trace-1',
+          sessionId: 'session-1',
+          turnId: 'turn-1',
+          ts: 1,
+          phase: 'abort',
+          type: 'abort_requested',
+          message: 'Abort requested',
+          data: { reason },
+        });
+      },
+    };
+
+    await backend.stop('redirect');
+
+    assert.equal(trace.length, 1);
+    assert.equal(trace[0]?.type, 'abort_requested');
+    assert.equal(trace[0]?.data?.reason, 'redirect');
+    assert.match(await parked, /Turn turn-1 aborted before permission request permission-id was answered/);
+    assert.equal(permissionEngine.pendingCount('turn-1'), 0);
+  });
+});
+
 describe('AiSdkBackend tool permission category hints', () => {
+  test('permissionRequired=false fast path preserves tool-call/result ordering and telemetry', async () => {
+    const messages: unknown[] = [];
+    const events: SessionEvent[] = [];
+    const telemetry: Array<{ status: string; toolCallId?: string }> = [];
+    let implCalled = false;
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header('ask'),
+      appendMessage: async (message) => {
+        messages.push(message);
+      },
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'claude-sonnet-4-5-20250929',
+      permissionEngine: new PermissionEngine({ newId: () => 'permission-id', now: () => 1 }),
+      modelFactory: () => ({}),
+      tools: [],
+      newId: idGenerator(),
+      now: monotonicClock(),
+      recordToolInvocation: (record) => {
+        telemetry.push({ status: record.status, toolCallId: record.toolCallId });
+      },
+    });
+    const tool: MakaTool = {
+      name: 'Read',
+      description: 'read file',
+      parameters: {},
+      permissionRequired: false,
+      impl: async () => {
+        implCalled = true;
+        return { kind: 'text', text: 'hello' };
+      },
+    };
+    const execute = (backend as unknown as {
+      wrapToolExecute(
+        tool: MakaTool,
+        turnId: string,
+        queue: { push(event: SessionEvent): void },
+      ): (args: unknown, ctx: { toolCallId: string; abortSignal: AbortSignal }) => Promise<unknown>;
+    }).wrapToolExecute(tool, 'turn-1', { push: (event) => events.push(event) });
+
+    const result = await execute(
+      { path: 'notes.md' },
+      { toolCallId: 'tool-1', abortSignal: new AbortController().signal },
+    );
+
+    assert.equal(implCalled, true);
+    assert.deepEqual(result, { kind: 'text', text: 'hello' });
+    assert.deepEqual(
+      messages
+        .map((message) => (message as { type?: string }).type)
+        .filter((type) => type === 'tool_call' || type === 'tool_result'),
+      ['tool_call', 'tool_result'],
+    );
+    assert.deepEqual(
+      events
+        .map((event) => event.type)
+        .filter((type) => type === 'tool_start' || type === 'tool_result'),
+      ['tool_start', 'tool_result'],
+    );
+    assert.equal(events.some((event) => event.type === 'permission_request'), false);
+    assert.deepEqual(telemetry, [
+      { status: 'success', toolCallId: 'tool-1' },
+    ]);
+  });
+
   test('permission prompt timeout expires one request, resumes watchdog, and writes an error result', async () => {
     const messages: unknown[] = [];
     const events: SessionEvent[] = [];
@@ -409,6 +754,230 @@ describe('AiSdkBackend tool permission category hints', () => {
         (message as { isError?: boolean }).isError === true,
       ),
       true,
+    );
+  });
+
+  test('permission denial records decision ack, resumes watchdog, and never runs impl', async () => {
+    const messages: unknown[] = [];
+    const events: SessionEvent[] = [];
+    const permissionEngine = new PermissionEngine({ newId: idGenerator(), now: () => 1 });
+    let implCalled = false;
+    let pauseCount = 0;
+    let resumeCount = 0;
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header('ask'),
+      appendMessage: async (message) => {
+        messages.push(message);
+      },
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'claude-sonnet-4-5-20250929',
+      permissionEngine,
+      modelFactory: () => ({}),
+      tools: [],
+      newId: idGenerator(),
+      now: () => 1,
+      permissionTimeoutMs: 1_000,
+    });
+    const tool: MakaTool = {
+      name: 'Write',
+      description: 'write file',
+      parameters: {},
+      permissionRequired: true,
+      impl: async () => {
+        implCalled = true;
+        return { ok: true };
+      },
+    };
+    (backend as unknown as {
+      currentWatchdog: { pause(): void; resume(): void };
+    }).currentWatchdog = {
+      pause: () => {
+        pauseCount += 1;
+      },
+      resume: () => {
+        resumeCount += 1;
+      },
+    };
+    const execute = (backend as unknown as {
+      wrapToolExecute(
+        tool: MakaTool,
+        turnId: string,
+        queue: { push(event: SessionEvent): void },
+      ): (args: unknown, ctx: { toolCallId: string; abortSignal: AbortSignal }) => Promise<unknown>;
+    }).wrapToolExecute(tool, 'turn-1', { push: (event) => events.push(event) });
+
+    const pending = execute(
+      { path: 'notes.md', content: 'hello' },
+      { toolCallId: 'tool-1', abortSignal: new AbortController().signal },
+    );
+    await waitFor(() => events.some((event) => event.type === 'permission_request'));
+    const request = events.find((event) => event.type === 'permission_request') as
+      | Extract<SessionEvent, { type: 'permission_request' }>
+      | undefined;
+    assert.ok(request);
+
+    const accepted = permissionEngine.recordResponse('turn-1', {
+      requestId: request.requestId,
+      decision: 'deny',
+      rememberForTurn: true,
+    });
+    assert.ok(accepted);
+    const result = await pending;
+
+    assert.equal(implCalled, false);
+    assert.equal(pauseCount, 1);
+    assert.equal(resumeCount, 1);
+    assert.deepEqual(result, { error: '用户已拒绝权限请求' });
+    assert.equal(messages.some((message) => (message as { type?: string }).type === 'tool_call'), true);
+    assert.equal(
+      messages.some((message) =>
+        (message as { type?: string; decision?: string; rememberForTurn?: boolean }).type === 'permission_decision' &&
+        (message as { decision?: string }).decision === 'deny' &&
+        (message as { rememberForTurn?: boolean }).rememberForTurn === true,
+      ),
+      true,
+    );
+    assert.equal(
+      events.some((event) =>
+        event.type === 'permission_decision_ack' &&
+        event.decision === 'deny' &&
+        event.rememberForTurn === true,
+      ),
+      true,
+    );
+    assert.equal(
+      events.some((event) => event.type === 'tool_result' && event.toolUseId === 'tool-1' && event.isError === true),
+      true,
+    );
+  });
+
+  test('tool failure telemetry classifies and redacts generic implementation errors', async () => {
+    const messages: unknown[] = [];
+    const events: SessionEvent[] = [];
+    const telemetry: Array<{ status: string; errorClass?: string; bytesOut: number }> = [];
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header('ask'),
+      appendMessage: async (message) => {
+        messages.push(message);
+      },
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'claude-sonnet-4-5-20250929',
+      permissionEngine: new PermissionEngine({ newId: () => 'permission-id', now: () => 1 }),
+      modelFactory: () => ({}),
+      tools: [],
+      newId: idGenerator(),
+      now: monotonicClock(),
+      recordToolInvocation: (record) => {
+        telemetry.push({
+          status: record.status,
+          errorClass: record.errorClass,
+          bytesOut: record.bytesOut ?? 0,
+        });
+      },
+    });
+    const tool: MakaTool = {
+      name: 'Write',
+      description: 'write file',
+      parameters: {},
+      permissionRequired: false,
+      impl: async () => {
+        const error = new Error('401 Authorization: Bearer sk-live-secret-token-value');
+        Object.assign(error, { code: 401 });
+        throw error;
+      },
+    };
+    const execute = (backend as unknown as {
+      wrapToolExecute(
+        tool: MakaTool,
+        turnId: string,
+        queue: { push(event: SessionEvent): void },
+      ): (args: unknown, ctx: { toolCallId: string; abortSignal: AbortSignal }) => Promise<unknown>;
+    }).wrapToolExecute(tool, 'turn-1', { push: (event) => events.push(event) });
+
+    const result = await execute(
+      { path: 'notes.md', content: 'hello' },
+      { toolCallId: 'tool-1', abortSignal: new AbortController().signal },
+    );
+    const resultText = (result as { error?: string }).error ?? '';
+    const serialized = JSON.stringify({ messages, events, result });
+
+    assert.match(resultText, /Authorization: Bearer \[redacted\]/);
+    assert.equal(serialized.includes('sk-live-secret-token-value'), false);
+    assert.equal(
+      events.some((event) => event.type === 'tool_result' && event.toolUseId === 'tool-1' && event.isError === true),
+      true,
+    );
+    assert.deepEqual(telemetry, [
+      { status: 'error', errorClass: 'Auth', bytesOut: 0 },
+    ]);
+  });
+
+  test('flushes output deltas before successful and failed tool results', async () => {
+    const events: SessionEvent[] = [];
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header('ask'),
+      appendMessage: async () => {},
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'claude-sonnet-4-5-20250929',
+      permissionEngine: new PermissionEngine({ newId: () => 'permission-id', now: () => 1 }),
+      modelFactory: () => ({}),
+      tools: [],
+      newId: idGenerator(),
+      now: monotonicClock(),
+    });
+    const successTool: MakaTool = {
+      name: 'Streamer',
+      description: 'streams output',
+      parameters: {},
+      permissionRequired: false,
+      impl: async (_args, ctx) => {
+        ctx.emitOutput('stdout', 'success chunk');
+        return { ok: true };
+      },
+    };
+    const failureTool: MakaTool = {
+      name: 'Streamer',
+      description: 'streams then fails',
+      parameters: {},
+      permissionRequired: false,
+      impl: async (_args, ctx) => {
+        ctx.emitOutput('stderr', 'failure chunk');
+        throw new Error('tool failed');
+      },
+    };
+    const wrap = (tool: MakaTool) => (backend as unknown as {
+      wrapToolExecute(
+        tool: MakaTool,
+        turnId: string,
+        queue: { push(event: SessionEvent): void },
+      ): (args: unknown, ctx: { toolCallId: string; abortSignal: AbortSignal }) => Promise<unknown>;
+    }).wrapToolExecute(tool, 'turn-1', { push: (event) => events.push(event) });
+
+    await wrap(successTool)({}, {
+      toolCallId: 'tool-success',
+      abortSignal: new AbortController().signal,
+    });
+    await wrap(failureTool)({}, {
+      toolCallId: 'tool-failure',
+      abortSignal: new AbortController().signal,
+    });
+    const eventKeys = events.map((event) => `${event.type}:${'toolUseId' in event ? event.toolUseId : ''}`);
+
+    assert.ok(
+      eventKeys.indexOf('tool_output_delta:tool-success') <
+      eventKeys.indexOf('tool_result:tool-success'),
+      'successful tool output must flush before its result event',
+    );
+    assert.ok(
+      eventKeys.indexOf('tool_output_delta:tool-failure') <
+      eventKeys.indexOf('tool_result:tool-failure'),
+      'failed tool output must flush before its result event',
     );
   });
 
@@ -556,7 +1125,9 @@ describe('AiSdkBackend tool permission category hints', () => {
       parameters: {},
       permissionRequired: true,
       categoryHint: 'subagent',
-      impl: async (args: { reason?: string }) => ({
+      impl: async (args: unknown) => {
+        const input = args as { reason?: string };
+        return {
         kind: 'explore_agent',
         ok: false,
         mode: 'read_only',
@@ -570,9 +1141,10 @@ describe('AiSdkBackend tool permission category hints', () => {
         candidateFiles: [],
         matches: [],
         notes: [],
-        reason: args.reason === 'aborted' ? 'aborted' : 'invalid_root',
-        message: args.reason === 'aborted' ? '只读探索已取消。' : '范围无效。',
-      }),
+          reason: input.reason === 'aborted' ? 'aborted' : 'invalid_root',
+          message: input.reason === 'aborted' ? '只读探索已取消。' : '范围无效。',
+        };
+      },
     };
     const execute = (backend as unknown as {
       wrapToolExecute(
@@ -757,4 +1329,12 @@ function idGenerator(): () => string {
 function monotonicClock(): () => number {
   let value = 1_000;
   return () => ++value;
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  assert.fail('condition was not met before timeout');
 }

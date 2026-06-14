@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Runtime kernel extraction
+
+This change set turns the runtime execution path from a large implicit
+`SessionManager` / `AiSdkBackend` flow into an internal runtime-kernel shape.
+It keeps the existing desktop, renderer, IPC, session JSONL, settings, bot, and
+gateway surfaces stable while moving model, tool, trace, run-ledger, and
+startup-recovery responsibilities behind explicit internal boundaries.
+
+| Area | Summary |
+| --- | --- |
+| Tool runtime | Extracted an internal `ToolRuntime` around tool input validation, permission checks, watchdog pause/resume, abort propagation, telemetry, artifact recording, and failure classification. |
+| Model adapter | Extracted a minimal `ModelAdapter` so provider stream/error/usage normalization no longer lives directly in the backend orchestration shell. |
+| Runtime trace | Added best-effort `RunTrace` events for model, tool, permission, abort, and usage milestones without changing renderer-visible `SessionEvent` behavior. |
+| AgentRun ledger | Added core `AgentRun` types and a file-backed `AgentRunStore` at `sessions/<sessionId>/runs/<runId>/run.json` plus `events.jsonl`. |
+| AgentRun execution | Moved the heavy turn execution lifecycle from `SessionManager.sendMessage()` into internal `AgentRun.execute()`, including user-message append, backend stream drive, status projection, abort/failure handling, and durable trace writes. |
+| Startup recovery | Made `recoverInterruptedSessions()` prefer the AgentRun ledger when available, repairing stale non-terminal runs and preserving the legacy message/turn-state fallback for older sessions. |
+
+See `docs/runtime-kernel.md` for the design rationale, boundaries, and
+verification details.
+
 ### Hardening phases 1-5
 
 This change set collects the first five maintenance hardening phases from the
@@ -17,6 +37,9 @@ Rive deep-read follow-up work.
 
 ### Verification
 
+- Runtime package typecheck/build and full runtime test suite.
+- Desktop main build/typecheck.
+- Storage package build and AgentRun store tests.
 - Runtime package typecheck/build and focused runtime tests.
 - Storage package build and focused session-store tests.
 - Desktop main build/typecheck and focused bot/OpenGateway, credential-store,
