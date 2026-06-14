@@ -149,7 +149,7 @@ import {
   PROVIDER_DEFAULTS,
   type LlmConnection,
 } from '@maka/core/llm-connections';
-import { createArtifactStore, createConnectionStore, createPlanReminderStore, createSessionStore, createSettingsStore, createTelemetryRepo, resolveArtifactPath } from '@maka/storage';
+import { createAgentRunStore, createArtifactStore, createConnectionStore, createPlanReminderStore, createSessionStore, createSettingsStore, createTelemetryRepo, resolveArtifactPath } from '@maka/storage';
 import {
   ensureSessionCanSendOrRebind,
   errorCode,
@@ -221,6 +221,7 @@ const visualSmokeFixture = resolveVisualSmokeFixture(
 );
 const workspaceRoot = join(app.getPath('userData'), 'workspaces', visualSmokeFixture?.workspaceName ?? 'default');
 const store = createSessionStore(workspaceRoot);
+const runStore = createAgentRunStore(workspaceRoot);
 const connectionStore = createConnectionStore(workspaceRoot);
 const settingsStore = createSettingsStore(workspaceRoot);
 const telemetryRepo = createTelemetryRepo(workspaceRoot);
@@ -747,6 +748,7 @@ backends.register('ai-sdk', async (ctx) => {
           : event,
       ),
     recordToolArtifacts: (event) => persistToolArtifacts(ctx.header.cwd, event),
+    recordRunTrace: ctx.recordRunTrace,
     newId: randomUUID,
     now: Date.now,
   });
@@ -943,6 +945,7 @@ backends.register('fake', (ctx) =>
 
 const runtime = new SessionManager({
   store,
+  runStore,
   backends,
   newId: randomUUID,
   now: Date.now,

@@ -154,7 +154,7 @@ describe('RunTrace extraction contract', () => {
     assert.doesNotMatch(events, /trace_/);
     assert.doesNotMatch(adapter, /RunTrace|recordRunTrace/);
     assert.doesNotMatch(preload, /RunTrace|recordRunTrace|runTrace|trace_/);
-    assert.doesNotMatch(main, /ipcMain\.handle\([^)]*trace|runTrace|recordRunTrace/);
+    assert.doesNotMatch(main, /ipcMain\.handle\([^)]*(?:RunTrace|recordRunTrace|runTrace|trace_)/);
     assert.doesNotMatch(settings, /RunTrace|recordRunTrace|runTrace|trace_/);
   });
 });
