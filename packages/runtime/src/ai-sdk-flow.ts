@@ -458,6 +458,7 @@ export class AiSdkFlow implements AgentFlow, AgentFlowControl {
         text: input.text,
         ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
         context: input.context,
+        ...(input.runtimeContext !== undefined ? { runtimeContext: input.runtimeContext } : {}),
       })) {
         const runtimeEvent = mapSessionEventToRuntimeEvent(sessionEvent, ctx, memory);
         await this.onSessionEvent?.(sessionEvent, runtimeEvent);

@@ -178,6 +178,20 @@ describe('AiSdkFlow seam', () => {
         text: 'previous',
       },
     ];
+    const runtimeContext: RuntimeEvent[] = [
+      {
+        id: 'rt-prev',
+        invocationId: 'inv-prev',
+        runId: 'run-prev',
+        sessionId: 'session-1',
+        turnId: 'turn-prev',
+        ts: 1,
+        partial: false,
+        role: 'user',
+        author: 'user',
+        content: { kind: 'text', text: 'previous' },
+      },
+    ];
     const backend = new ScriptedBackend({
       events: [ev({ type: 'complete', stopReason: 'end_turn' })],
     });
@@ -197,6 +211,7 @@ describe('AiSdkFlow seam', () => {
       text: 'hi',
       attachments: [attachment],
       context: history,
+      runtimeContext,
       source: 'test',
     });
 
@@ -207,6 +222,7 @@ describe('AiSdkFlow seam', () => {
       text: 'hi',
       attachments: [attachment],
       context: history,
+      runtimeContext,
     });
   });
 

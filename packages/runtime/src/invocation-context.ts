@@ -74,6 +74,11 @@ export interface InvocationRequest {
    * receive an undefined model-history input.
    */
   context?: StoredMessage[];
+  /**
+   * Optional prior RuntimeEvent ledger resolved by the caller. RuntimeRunner
+   * passes this through without adding the current turn's RuntimeEvents.
+   */
+  runtimeContext?: RuntimeEvent[];
   source: InvocationSource;
   /** Optional branch/agent lane; forwarded onto every emitted event. */
   branch?: string;

@@ -10,6 +10,7 @@
  */
 
 import type { AttachmentRef } from './events.js';
+import type { RuntimeEvent } from './runtime-event.js';
 import type { StoredMessage } from './session.js';
 import type { PermissionResponse } from './permission.js';
 
@@ -23,6 +24,11 @@ export interface BackendSendInput {
    * expected conversation shape.
    */
   context: StoredMessage[];
+  /**
+   * Optional prior RuntimeEvent ledger for model-history projection. Backends
+   * prefer this only when supplied and usable; `context` remains the fallback.
+   */
+  runtimeContext?: RuntimeEvent[];
 }
 
 /** Alias for clarity at the backend boundary. */

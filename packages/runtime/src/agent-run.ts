@@ -15,6 +15,10 @@ import type { BackendSendInput } from '@maka/core/backend-types';
 import type { AgentBackend } from './ai-sdk-backend.js';
 import type { RunTraceEvent } from './run-trace.js';
 import type { SessionStore, StopSessionInput } from './session-manager.js';
+import {
+  buildTextModelMessagesFromRuntimeEvents,
+  type TextModelMessage,
+} from './model-history.js';
 
 export interface AgentRunActiveSession {
   sessionId: string;
@@ -147,13 +151,17 @@ export class AgentRun {
 
     await this.input.hooks.updateStatus(this.sessionId, 'running', undefined, this.lastTs);
 
+    const legacyContext = await this.input.store.readMessages(this.sessionId);
+    const runtimeContext = await this.buildRuntimeContextIfComplete(legacyContext);
+
     return {
       backend: this.active.backend,
       backendInput: {
         turnId: this.turnId,
         text: this.input.userInput.text,
         ...(this.input.userInput.attachments ? { attachments: this.input.userInput.attachments } : {}),
-        context: await this.input.store.readMessages(this.sessionId),
+        context: legacyContext,
+        ...(runtimeContext !== undefined ? { runtimeContext } : {}),
       },
     };
   }
@@ -273,6 +281,35 @@ export class AgentRun {
     } catch (error) {
       this.runStoreAvailable = false;
       this.enqueueTraceWriteFailure(error);
+    }
+  }
+
+  private async buildRuntimeContextIfComplete(
+    legacyContext: readonly StoredMessage[],
+  ): Promise<RuntimeEvent[] | undefined> {
+    if (!this.input.runStore || !this.runStoreAvailable) return undefined;
+    try {
+      const runtimeContext: RuntimeEvent[] = [];
+      const runs = await this.input.runStore.listSessionRuns(this.sessionId);
+      for (const run of runs) {
+        if (run.runId === this.runId || run.turnId === this.turnId) continue;
+        const events = await this.input.runStore.readRuntimeEvents(this.sessionId, run.runId);
+        runtimeContext.push(
+          ...events.filter((event) => event.runId !== this.runId && event.turnId !== this.turnId),
+        );
+      }
+      if (runtimeContext.length === 0) return undefined;
+
+      const runtimeMessages = buildTextModelMessagesFromRuntimeEvents(runtimeContext);
+      if (runtimeMessages.length === 0) return undefined;
+
+      const legacyPriorMessages = materializeLegacyTextMessages(
+        legacyContext.filter((message) => message.turnId !== this.turnId),
+      );
+      if (!runtimeMessagesCoverLegacy(runtimeMessages, legacyPriorMessages)) return undefined;
+      return runtimeContext;
+    } catch {
+      return undefined;
     }
   }
 
@@ -460,6 +497,34 @@ function traceToRunEvent(event: RunTraceEvent, runId: string): AgentRunEvent {
     message: redactTraceString(event.message),
     data: sanitizeTraceData(event.data),
   };
+}
+
+function materializeLegacyTextMessages(stored: readonly StoredMessage[]): TextModelMessage[] {
+  const out: TextModelMessage[] = [];
+  for (const message of stored) {
+    if (message.type === 'user') {
+      out.push({ role: 'user', content: message.text });
+    } else if (message.type === 'assistant') {
+      out.push({ role: 'assistant', content: message.text });
+    }
+  }
+  return out;
+}
+
+function runtimeMessagesCoverLegacy(
+  runtimeMessages: readonly TextModelMessage[],
+  legacyMessages: readonly TextModelMessage[],
+): boolean {
+  if (runtimeMessages.length !== legacyMessages.length) return false;
+  return legacyMessages.every((legacyMessage, index) => {
+    const runtimeMessage = runtimeMessages[index];
+    if (!runtimeMessage || runtimeMessage.role !== legacyMessage.role) return false;
+    if (runtimeMessage.content === legacyMessage.content) return true;
+    return (
+      runtimeMessage.role === 'user' &&
+      runtimeMessage.content.startsWith(`${legacyMessage.content}\n\n[attachment: `)
+    );
+  });
 }
 
 function sanitizeTraceData(data: Record<string, unknown> | undefined): Record<string, unknown> | undefined {

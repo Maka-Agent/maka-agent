@@ -35,6 +35,7 @@ import {
 } from '../runtime-event-adapters.js';
 import {
   buildModelHistoryFromRuntimeEvents,
+  buildTextModelMessagesFromRuntimeEvents,
   type ModelHistoryEntry,
 } from '../model-history.js';
 
@@ -776,6 +777,61 @@ describe('buildModelHistoryFromRuntimeEvents', () => {
       'function_call',
       'function_response',
       'text',
+    ]);
+  });
+
+  test('text-only AI SDK projection skips unsupported entries and preserves user attachment refs', () => {
+    const events: RuntimeEvent[] = [
+      ev({
+        role: 'user',
+        author: 'user',
+        content: { kind: 'text', text: 'see attached', attachments: [attachment] },
+      }),
+      ev({
+        partial: true,
+        role: 'model',
+        author: 'agent',
+        content: { kind: 'text', text: 'partial' },
+      }),
+      ev({
+        role: 'system',
+        author: 'system',
+        content: { kind: 'text', text: 'system note' },
+      }),
+      ev({
+        role: 'model',
+        author: 'agent',
+        content: { kind: 'thinking', text: 'private reasoning' },
+      }),
+      ev({
+        role: 'model',
+        author: 'agent',
+        content: { kind: 'function_call', id: 'fc1', name: 'Read', args: {} },
+      }),
+      ev({
+        role: 'tool',
+        author: 'tool',
+        content: { kind: 'function_response', id: 'fc1', name: 'Read', result: 'data' },
+      }),
+      ev({
+        role: 'model',
+        author: 'agent',
+        content: { kind: 'text', text: 'final answer' },
+      }),
+      ev({
+        role: 'model',
+        author: 'agent',
+        status: 'completed',
+        actions: { endInvocation: true },
+      }),
+    ];
+
+    expect(buildTextModelMessagesFromRuntimeEvents(events)).toEqual([
+      {
+        role: 'user',
+        content: 'see attached\n\n[attachment: brief.pdf (application/pdf)]',
+      },
+      { role: 'assistant', content: 'final answer' },
     ]);
   });
 });

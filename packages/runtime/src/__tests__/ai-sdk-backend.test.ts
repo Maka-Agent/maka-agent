@@ -4,6 +4,7 @@ import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
 import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
 import type { LlmConnection, SessionHeader } from '@maka/core';
 import type { SessionEvent } from '@maka/core/events';
+import type { RuntimeEvent } from '@maka/core/runtime-event';
 import type { ToolResultMessage } from '@maka/core/session';
 import type { LlmCallRecord } from '@maka/core/usage-stats/types';
 import {
@@ -18,6 +19,92 @@ import {
   type RunTraceEvent,
 } from '../ai-sdk-backend.js';
 import { PermissionEngine } from '../permission-engine.js';
+
+describe('AiSdkBackend model history', () => {
+  test('prefers RuntimeEvent prior messages and appends current user once', async () => {
+    const model = completionModel();
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header(),
+      appendMessage: async () => {},
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'mock-model-id',
+      permissionEngine: new PermissionEngine({ newId: () => 'permission-id', now: () => 1 }),
+      modelFactory: () => model,
+      tools: [],
+      newId: idGenerator(),
+      now: monotonicClock(),
+    });
+
+    await drain(backend.send({
+      turnId: 'turn-current',
+      text: 'current user',
+      context: [
+        { type: 'user', id: 'legacy-u', turnId: 'turn-prev', ts: 1, text: 'legacy user' },
+        { type: 'assistant', id: 'legacy-a', turnId: 'turn-prev', ts: 2, text: 'legacy assistant', modelId: 'm' },
+      ],
+      runtimeContext: [
+        runtimeTextEvent({ id: 'rt-u', turnId: 'turn-prev', role: 'user', author: 'user', text: 'runtime user' }),
+        runtimeTextEvent({ id: 'rt-a', turnId: 'turn-prev', role: 'model', author: 'agent', text: 'runtime assistant' }),
+        runtimeTextEvent({ id: 'rt-current', turnId: 'turn-current', role: 'user', author: 'user', text: 'current from runtime' }),
+      ],
+    }));
+
+    assert.deepEqual(compactPrompt(model), [
+      { role: 'user', content: [{ type: 'text', text: 'runtime user' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'runtime assistant' }] },
+      { role: 'user', content: [{ type: 'text', text: 'current user' }] },
+    ]);
+  });
+
+  test('falls back to StoredMessage context when RuntimeEvent projection is empty', async () => {
+    const model = completionModel();
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header(),
+      appendMessage: async () => {},
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'mock-model-id',
+      permissionEngine: new PermissionEngine({ newId: () => 'permission-id', now: () => 1 }),
+      modelFactory: () => model,
+      tools: [],
+      newId: idGenerator(),
+      now: monotonicClock(),
+    });
+
+    await drain(backend.send({
+      turnId: 'turn-current',
+      text: 'current user',
+      context: [
+        { type: 'user', id: 'legacy-u', turnId: 'turn-prev', ts: 1, text: 'legacy user' },
+        { type: 'assistant', id: 'legacy-a', turnId: 'turn-prev', ts: 2, text: 'legacy assistant', modelId: 'm' },
+      ],
+      runtimeContext: [
+        {
+          id: 'rt-terminal',
+          invocationId: 'inv-1',
+          runId: 'run-prev',
+          sessionId: 'session-1',
+          turnId: 'turn-prev',
+          ts: 1,
+          partial: false,
+          role: 'model',
+          author: 'agent',
+          status: 'completed',
+          actions: { endInvocation: true },
+        },
+      ],
+    }));
+
+    assert.deepEqual(compactPrompt(model), [
+      { role: 'user', content: [{ type: 'text', text: 'legacy user' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'legacy assistant' }] },
+      { role: 'user', content: [{ type: 'text', text: 'current user' }] },
+    ]);
+  });
+});
 
 describe('AiSdkBackend error surfaces', () => {
   test('generalizes model setup errors before emitting renderer events', async () => {
@@ -1285,6 +1372,72 @@ describe('AiSdkBackend tool-call repair', () => {
     assert.equal(repaired, null);
   });
 });
+
+function completionModel(): MockLanguageModelV3 {
+  const chunks: LanguageModelV3StreamPart[] = [
+    { type: 'stream-start', warnings: [] },
+    {
+      type: 'finish',
+      finishReason: { unified: 'stop', raw: 'stop' },
+      usage: {
+        inputTokens: {
+          total: 1,
+          noCache: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+        },
+        outputTokens: {
+          total: 1,
+          text: 1,
+          reasoning: 0,
+        },
+      },
+    },
+  ];
+  return new MockLanguageModelV3({
+    doStream: {
+      stream: simulateReadableStream({
+        chunks,
+        initialDelayInMs: null,
+        chunkDelayInMs: null,
+      }),
+    },
+  });
+}
+
+function runtimeTextEvent(input: {
+  id: string;
+  turnId: string;
+  role: 'user' | 'model';
+  author: 'user' | 'agent';
+  text: string;
+}): RuntimeEvent {
+  return {
+    id: input.id,
+    invocationId: 'inv-1',
+    runId: 'run-prev',
+    sessionId: 'session-1',
+    turnId: input.turnId,
+    ts: 1,
+    partial: false,
+    role: input.role,
+    author: input.author,
+    content: { kind: 'text', text: input.text },
+  };
+}
+
+function compactPrompt(model: MockLanguageModelV3): unknown {
+  return model.doStreamCalls[0]?.prompt.map((message) => ({
+    role: message.role,
+    content: message.content,
+  }));
+}
+
+async function drain(iterable: AsyncIterable<unknown>): Promise<void> {
+  for await (const _ of iterable) {
+    // consume
+  }
+}
 
 function header(permissionMode: SessionHeader['permissionMode'] = 'ask'): SessionHeader {
   return {

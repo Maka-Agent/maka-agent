@@ -290,6 +290,68 @@ describe('SessionManager permission mode updates', () => {
     expect(await runStore.readRuntimeEvents(session.id, run.runId)).toEqual([]);
   });
 
+  test('next turn receives complete prior RuntimeEvent context alongside legacy context', async () => {
+    const store = new MemorySessionStore();
+    const runStore = new MemoryAgentRunStore();
+    const backends = new BackendRegistry();
+    const backendInstances: TestBackend[] = [];
+    backends.register('fake', (ctx) => {
+      const backend = new TestBackend(ctx);
+      backendInstances.push(backend);
+      return backend;
+    });
+    const manager = new SessionManager({
+      store,
+      runStore,
+      backends,
+      newId: nextId(),
+      now: nextNow(6_800),
+      runtimeSource: 'test',
+    });
+    const session = await manager.createSession(makeInput());
+
+    await drain(manager.sendMessage(session.id, { turnId: 'turn-1', text: 'first' }));
+    await drain(manager.sendMessage(session.id, { turnId: 'turn-2', text: 'second' }));
+
+    const secondInput = backendInstances[0]?.sendInputs[1];
+    if (!secondInput) throw new Error('second backend input was not recorded');
+    expect(secondInput.context.some((message) => message.type === 'user' && message.turnId === 'turn-1')).toBe(true);
+    expect(secondInput.context.some((message) => message.type === 'user' && message.turnId === 'turn-2')).toBe(true);
+    expect(secondInput.runtimeContext?.map((event) => event.turnId)).toEqual(['turn-1', 'turn-1', 'turn-1']);
+    expect(secondInput.runtimeContext?.map((event) => event.role)).toEqual(['user', 'model', 'system']);
+    expect(secondInput.runtimeContext?.[0]?.content).toEqual({ kind: 'text', text: 'first' });
+  });
+
+  test('next turn remains legacy-only when prior RuntimeEvent ledger is unusable', async () => {
+    const store = new MemorySessionStore();
+    const runStore = new MemoryAgentRunStore({ failRuntimeEventAppends: true });
+    const backends = new BackendRegistry();
+    const backendInstances: TestBackend[] = [];
+    backends.register('fake', (ctx) => {
+      const backend = new TestBackend(ctx);
+      backendInstances.push(backend);
+      return backend;
+    });
+    const manager = new SessionManager({
+      store,
+      runStore,
+      backends,
+      newId: nextId(),
+      now: nextNow(6_900),
+      runtimeSource: 'test',
+    });
+    const session = await manager.createSession(makeInput());
+
+    await drain(manager.sendMessage(session.id, { turnId: 'turn-1', text: 'first' }));
+    await drain(manager.sendMessage(session.id, { turnId: 'turn-2', text: 'second' }));
+
+    const secondInput = backendInstances[0]?.sendInputs[1];
+    if (!secondInput) throw new Error('second backend input was not recorded');
+    expect(secondInput.runtimeContext).toBeUndefined();
+    expect(secondInput.context.some((message) => message.type === 'user' && message.turnId === 'turn-1')).toBe(true);
+    expect(secondInput.context.some((message) => message.type === 'user' && message.turnId === 'turn-2')).toBe(true);
+  });
+
   test('sendMessage production source uses AiSdkFlow instead of an inline mapper flow', async () => {
     const source = await readFile(new URL('../../src/session-manager.ts', import.meta.url), 'utf8');
     const sendMessageSource = source.slice(
@@ -925,12 +987,14 @@ describe('SessionManager permission mode updates', () => {
 class TestBackend implements AgentBackend {
   readonly kind = 'fake' as const;
   readonly sessionId: string;
+  readonly sendInputs: BackendSendInput[] = [];
 
   constructor(private readonly ctx: BackendFactoryContext, private readonly gate?: Gate) {
     this.sessionId = ctx.sessionId;
   }
 
   async *send(input: BackendSendInput): AsyncIterable<SessionEvent> {
+    this.sendInputs.push(input);
     yield { type: 'text_delta', id: `${input.turnId}-delta`, turnId: input.turnId, ts: 1, messageId: `${input.turnId}-m`, text: 'ok' };
     await this.gate?.promise;
     yield { type: 'complete', id: `${input.turnId}-complete`, turnId: input.turnId, ts: 2, stopReason: 'end_turn' };

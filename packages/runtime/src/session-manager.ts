@@ -395,6 +395,7 @@ export class SessionManager {
       text: input.text,
       ...(begin.backendInput.attachments ? { attachments: begin.backendInput.attachments } : {}),
       context: begin.backendInput.context,
+      ...(begin.backendInput.runtimeContext !== undefined ? { runtimeContext: begin.backendInput.runtimeContext } : {}),
       source: this.deps.runtimeSource ?? 'desktop',
       lineage: run.lineage,
       abortSignal: abortController.signal,

@@ -37,9 +37,11 @@ import {
   isPartialRuntimeEvent,
   runtimeEventHasModelVisibleContent,
   type RuntimeEvent,
+  type RuntimeEventTextContent,
   type RuntimeEventContent,
   type RuntimeEventRole,
 } from '@maka/core/runtime-event';
+import type { AttachmentRef } from '@maka/core/events';
 
 // ============================================================================
 // Output type
@@ -55,6 +57,11 @@ export interface ModelHistoryEntry {
   content: RuntimeEventContent;
   ts: number;
   eventId: string;
+}
+
+export interface TextModelMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
 }
 
 // ============================================================================
@@ -139,4 +146,56 @@ export function buildModelHistoryFromRuntimeEvents(
     });
   }
   return out;
+}
+
+export interface RuntimeEventTextMessageOptions {
+  includeSystemEvents?: boolean;
+}
+
+/**
+ * Convert projected RuntimeEvent history into the current AI SDK text-only
+ * message shape. Tool/function and thinking entries are intentionally skipped.
+ */
+export function buildTextModelMessagesFromRuntimeEvents(
+  events: readonly RuntimeEvent[],
+  options: RuntimeEventTextMessageOptions = {},
+): TextModelMessage[] {
+  const history = buildModelHistoryFromRuntimeEvents(events, {
+    includeToolEvents: false,
+    includeSystemEvents: options.includeSystemEvents ?? false,
+    includeThinking: false,
+  });
+  const out: TextModelMessage[] = [];
+  for (const entry of history) {
+    if (entry.content.kind !== 'text') continue;
+    if (entry.role === 'tool') continue;
+    if (entry.role === 'system' && !options.includeSystemEvents) continue;
+    const role = entry.role === 'model'
+      ? 'assistant'
+      : entry.role === 'user'
+        ? 'user'
+        : entry.role === 'system'
+          ? 'system'
+          : undefined;
+    if (!role) continue;
+    out.push({
+      role,
+      content: formatTextWithAttachmentRefs(entry.content),
+    });
+  }
+  return out;
+}
+
+export function formatTextWithAttachmentRefs(
+  textOrContent: string | RuntimeEventTextContent,
+  attachments?: AttachmentRef[],
+): string {
+  const text = typeof textOrContent === 'string' ? textOrContent : textOrContent.text;
+  const refs = typeof textOrContent === 'string' ? attachments : textOrContent.attachments;
+  if (!refs || refs.length === 0) return text;
+  return `${text}\n\n${formatAttachmentRefs(refs)}`;
+}
+
+function formatAttachmentRefs(attachments: readonly AttachmentRef[]): string {
+  return attachments.map((a) => `[attachment: ${a.name} (${a.mimeType})]`).join(' ');
 }

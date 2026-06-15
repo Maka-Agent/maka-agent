@@ -80,6 +80,10 @@ import {
 } from './model-adapter.js';
 import type { ToolArtifactRecorder } from './tool-artifacts.js';
 import { RunTrace, type RunTraceRecorder } from './run-trace.js';
+import {
+  buildTextModelMessagesFromRuntimeEvents,
+  formatTextWithAttachmentRefs,
+} from './model-history.js';
 
 export {
   DEFAULT_PERMISSION_TIMEOUT_MS,
@@ -298,10 +302,17 @@ export class AiSdkBackend implements AgentBackend {
       };
     }
 
-    // --- Build messages from context (StoredMessage[] → ai-sdk format) ---
-    const messages = this.materializePriorMessages(
-      input.context.filter((message) => message.turnId !== input.turnId),
-    );
+    // --- Build messages from context, preferring durable RuntimeEvents when usable. ---
+    const runtimeMessages = input.runtimeContext
+      ? buildTextModelMessagesFromRuntimeEvents(
+        input.runtimeContext.filter((event) => event.turnId !== input.turnId),
+      )
+      : [];
+    const messages = runtimeMessages.length > 0
+      ? runtimeMessages
+      : this.materializePriorMessages(
+        input.context.filter((message) => message.turnId !== input.turnId),
+      );
     messages.push({
       role: 'user',
       content: this.buildUserContent(input.text, input.attachments),
@@ -583,9 +594,7 @@ export class AiSdkBackend implements AgentBackend {
 
   /** Build the user content payload for the current turn (text + attachment refs). */
   private buildUserContent(text: string, attachments?: AttachmentRef[]): string {
-    if (!attachments || attachments.length === 0) return text;
-    const refs = attachments.map((a) => `[attachment: ${a.name} (${a.mimeType})]`).join(' ');
-    return `${text}\n\n${refs}`;
+    return formatTextWithAttachmentRefs(text, attachments);
   }
 
   private async resolveSystemPrompt(): Promise<string | undefined> {

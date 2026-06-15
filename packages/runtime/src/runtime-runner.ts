@@ -295,6 +295,7 @@ function buildFlowInput(request: InvocationRequest): FlowInput {
   return {
     text: request.text,
     context: request.context ?? [],
+    ...(request.runtimeContext !== undefined ? { runtimeContext: request.runtimeContext } : {}),
     ...(request.attachments !== undefined ? { attachments: request.attachments } : {}),
     ...(request.abortSignal ? { abortSignal: request.abortSignal } : {}),
   };

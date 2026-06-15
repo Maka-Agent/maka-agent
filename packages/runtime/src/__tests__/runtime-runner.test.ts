@@ -410,6 +410,20 @@ describe('RuntimeRunner', () => {
         text: 'previous',
       },
     ];
+    const runtimeContext: RuntimeEvent[] = [
+      {
+        id: 'rt-prev',
+        invocationId: 'inv-prev',
+        runId: 'run-prev',
+        sessionId: 'sess-1',
+        turnId: 'prev-turn',
+        ts: 1,
+        partial: false,
+        role: 'user',
+        author: 'user',
+        content: { kind: 'text', text: 'previous' },
+      },
+    ];
     let seenInput: Parameters<AgentFlowLike['run']>[1] | undefined;
     const flow: AgentFlowLike = {
       async *run(ctx, input) {
@@ -420,13 +434,14 @@ describe('RuntimeRunner', () => {
     const runner = new RuntimeRunner({ flow, providers });
 
     const result = await runner.run(
-      makeRequest({ text: 'with file', context, attachments: [attachment] }),
+      makeRequest({ text: 'with file', context, runtimeContext, attachments: [attachment] }),
     );
 
     expect(result.status).toBe('completed');
     expect(seenInput).toEqual({
       text: 'with file',
       context,
+      runtimeContext,
       attachments: [attachment],
     });
     expect(result.events[0]!.content).toEqual({
