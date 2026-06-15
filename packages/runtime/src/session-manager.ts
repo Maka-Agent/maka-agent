@@ -708,8 +708,13 @@ export class SessionManager {
       let runEvents: RuntimeEvent[];
       try {
         runEvents = await this.deps.runStore.readRuntimeEvents(sessionId, run.runId);
-      } catch {
-        return fallback([readDiagnostic('unsupported_event', 'AgentRunStore.readRuntimeEvents failed', { runId: run.runId })]);
+      } catch (error) {
+        return fallback([
+          readDiagnostic('unsupported_event', 'AgentRunStore.readRuntimeEvents failed', {
+            runId: run.runId,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        ]);
       }
 
       if (runEvents.length === 0) {
@@ -724,6 +729,10 @@ export class SessionManager {
       }
     }
 
+    // RuntimeEvent-primary reads use session chronology across terminal runs,
+    // with stable run/ledger/id tie-breakers. This matches legacy message
+    // reads better than concatenating each run ledger in creation order when
+    // overlapping runs complete out of order.
     ordered.sort((a, b) =>
       a.event.ts - b.event.ts ||
       a.runIndex - b.runIndex ||
