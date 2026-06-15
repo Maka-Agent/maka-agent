@@ -360,6 +360,51 @@ describe('SessionManager permission mode updates', () => {
     expect(await manager.getMessages(session.id)).toEqual(legacyMessages);
   });
 
+  test('getMessages falls back to legacy when runtime ledger read fails', async () => {
+    const store = new MemorySessionStore();
+    const runStore = new MemoryAgentRunStore({ failRuntimeEventReads: true });
+    const manager = makeManagerForReadCutover(store, runStore);
+    const session = await manager.createSession(makeInput());
+    const seeded = await seedRuntimeReadTurn({
+      store,
+      runStore,
+      sessionId: session.id,
+      turnId: 'turn-1',
+      runId: 'run-1',
+      userText: 'legacy question',
+      assistantText: 'legacy answer',
+      legacyIdPrefix: 'legacy',
+    });
+
+    expect(await manager.getMessages(session.id)).toEqual(seeded.legacyMessages);
+  });
+
+  test('MAKA_RUNTIME_READ_SOURCE=legacy forces legacy reads even when RuntimeEvents are complete', async () => {
+    const previous = process.env.MAKA_RUNTIME_READ_SOURCE;
+    process.env.MAKA_RUNTIME_READ_SOURCE = 'legacy';
+    try {
+      const store = new MemorySessionStore();
+      const runStore = new MemoryAgentRunStore();
+      const manager = makeManagerForReadCutover(store, runStore);
+      const session = await manager.createSession(makeInput());
+      const seeded = await seedRuntimeReadTurn({
+        store,
+        runStore,
+        sessionId: session.id,
+        turnId: 'turn-1',
+        runId: 'run-1',
+        userText: 'legacy forced question',
+        assistantText: 'legacy forced answer',
+        legacyIdPrefix: 'legacy',
+      });
+
+      expect(await manager.getMessages(session.id)).toEqual(seeded.legacyMessages);
+    } finally {
+      if (previous === undefined) delete process.env.MAKA_RUNTIME_READ_SOURCE;
+      else process.env.MAKA_RUNTIME_READ_SOURCE = previous;
+    }
+  });
+
   test('listTurns derives from the RuntimeEvent-primary message view', async () => {
     const store = new MemorySessionStore();
     const runStore = new MemoryAgentRunStore();
@@ -415,6 +460,111 @@ describe('SessionManager permission mode updates', () => {
     const messages = await manager.getMessages(session.id);
 
     expect(messages).toEqual([...seeded.legacyMessages, legacyNote]);
+  });
+
+  test('getMessages orders RuntimeEvent-primary reads by session event chronology across runs', async () => {
+    const store = new MemorySessionStore();
+    const runStore = new MemoryAgentRunStore();
+    const manager = makeManagerForReadCutover(store, runStore);
+    const session = await manager.createSession(makeInput());
+    await seedRuntimeRun(runStore, makeRunHeader({
+      sessionId: session.id,
+      runId: 'slow-run',
+      turnId: 'slow',
+      status: 'completed',
+      createdAt: 100,
+      updatedAt: 107,
+      completedAt: 107,
+    }), [
+      runtimeEvent({
+        id: 'slow-user',
+        sessionId: session.id,
+        runId: 'slow-run',
+        turnId: 'slow',
+        ts: 101,
+        role: 'user',
+        author: 'user',
+        content: { kind: 'text', text: 'slow question' },
+        refs: { storedMessageId: 'slow-user-message' },
+      }),
+      runtimeEvent({
+        id: 'slow-assistant',
+        sessionId: session.id,
+        runId: 'slow-run',
+        turnId: 'slow',
+        ts: 106,
+        role: 'model',
+        author: 'agent',
+        content: { kind: 'text', text: 'slow answer' },
+        refs: { storedMessageId: 'slow-assistant-message' },
+      }),
+      runtimeEvent({
+        id: 'slow-complete',
+        sessionId: session.id,
+        runId: 'slow-run',
+        turnId: 'slow',
+        ts: 107,
+        role: 'system',
+        author: 'system',
+        status: 'completed',
+        actions: { endInvocation: true },
+      }),
+    ]);
+    await seedRuntimeRun(runStore, makeRunHeader({
+      sessionId: session.id,
+      runId: 'fast-run',
+      turnId: 'fast',
+      status: 'completed',
+      createdAt: 102,
+      updatedAt: 105,
+      completedAt: 105,
+    }), [
+      runtimeEvent({
+        id: 'fast-user',
+        sessionId: session.id,
+        runId: 'fast-run',
+        turnId: 'fast',
+        ts: 103,
+        role: 'user',
+        author: 'user',
+        content: { kind: 'text', text: 'fast question' },
+        refs: { storedMessageId: 'fast-user-message' },
+      }),
+      runtimeEvent({
+        id: 'fast-assistant',
+        sessionId: session.id,
+        runId: 'fast-run',
+        turnId: 'fast',
+        ts: 104,
+        role: 'model',
+        author: 'agent',
+        content: { kind: 'text', text: 'fast answer' },
+        refs: { storedMessageId: 'fast-assistant-message' },
+      }),
+      runtimeEvent({
+        id: 'fast-complete',
+        sessionId: session.id,
+        runId: 'fast-run',
+        turnId: 'fast',
+        ts: 105,
+        role: 'system',
+        author: 'system',
+        status: 'completed',
+        actions: { endInvocation: true },
+      }),
+    ]);
+    store.failNextReadMessagesFor.set(session.id, 1);
+
+    const messages = await manager.getMessages(session.id);
+
+    expect(messages.map((message) => `${message.type}:${'turnId' in message ? message.turnId : 'none'}:${message.ts}`)).toEqual([
+      'user:slow:101',
+      'user:fast:103',
+      'assistant:fast:104',
+      'turn_state:fast:105',
+      'assistant:slow:106',
+      'turn_state:slow:107',
+    ]);
   });
 
   test('retry finds aborted source turns and user messages through the RuntimeEvent-primary view', async () => {
@@ -1512,7 +1662,7 @@ class MemoryAgentRunStore implements AgentRunStore {
   private events = new Map<string, AgentRunEvent[]>();
   private runtimeEvents = new Map<string, RuntimeEvent[]>();
 
-  constructor(private readonly options: { failRuntimeEventAppends?: boolean } = {}) {}
+  constructor(private readonly options: { failRuntimeEventAppends?: boolean; failRuntimeEventReads?: boolean } = {}) {}
 
   async createRun(header: AgentRunHeader): Promise<AgentRunHeader> {
     this.headers.set(key(header.sessionId, header.runId), { ...header });
@@ -1555,6 +1705,7 @@ class MemoryAgentRunStore implements AgentRunStore {
   }
 
   async readRuntimeEvents(sessionId: string, runId: string): Promise<RuntimeEvent[]> {
+    if (this.options.failRuntimeEventReads) throw new Error('runtime event read failed');
     return (this.runtimeEvents.get(key(sessionId, runId)) ?? []).map(copyRuntimeEvent);
   }
 }
