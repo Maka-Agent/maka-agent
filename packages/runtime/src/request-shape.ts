@@ -49,17 +49,27 @@ export interface RequestShapeDiagnostic {
   toolSourceEconomy?: ToolSourceEconomyDiagnostic;
 }
 
+const NO_LOADED_TOOLS: ReadonlySet<string> = new Set();
+
 export function canonicalizeToolSet(
   tools: readonly MakaTool[],
   invalidTool: MakaTool,
+  loadedDeferredNames: ReadonlySet<string> = NO_LOADED_TOOLS,
 ): CanonicalToolSet {
   const visibleTools = tools
     .filter((tool) => tool.name !== invalidTool.name)
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name));
+  // providerTools stays the full registry (dispatch never depends on exposure).
+  // activeTools is the model-visible subset: every direct tool plus any deferred
+  // tool already loaded this session. The AI SDK serializes only activeTools to
+  // the provider, so deferred-and-unloaded schemas stay off the wire.
+  const activeTools = visibleTools
+    .filter((tool) => tool.exposure !== 'deferred' || loadedDeferredNames.has(tool.name))
+    .map((tool) => tool.name);
   return {
     providerTools: [...visibleTools, invalidTool],
-    activeTools: visibleTools.map((tool) => tool.name),
+    activeTools,
   };
 }
 

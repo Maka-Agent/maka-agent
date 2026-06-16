@@ -34,6 +34,14 @@ export interface MakaTool<P = any, R = unknown> {
   /** Zod schema describing the tool's argument shape. */
   parameters: unknown;
   /**
+   * Exposure tier. `direct` (the default when omitted) tools are advertised to
+   * the model every turn. `deferred` tools are withheld from the model-visible
+   * `activeTools` set until loaded on demand via `load_tool`, keeping their
+   * schema out of the per-turn prompt. Dispatch works regardless of exposure —
+   * a deferred tool stays in `providerTools` so it is callable once activated.
+   */
+  exposure?: 'direct' | 'deferred';
+  /**
    * If `false`, the wrap layer skips PermissionEngine.evaluate() entirely.
    * Defaults to `true` (always go through the engine).
    */
