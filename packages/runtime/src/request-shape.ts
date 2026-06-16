@@ -29,9 +29,15 @@ export interface RequestShapeComponents {
   historyProjectionHash: string;
 }
 
+export type DurablePrefixComponents = Omit<RequestShapeComponents, 'historyProjectionHash'>;
+
 export interface RequestShapeDiagnostic {
+  /** Durable provider prefix shape, excluding prior-history projection. */
   prefixHash: string;
   prefixChangeReason: PrefixChangeReason;
+  /** Full request shape, including prior-history projection. */
+  requestShapeHash: string;
+  requestShapeChangeReason: PrefixChangeReason;
   componentHashes: RequestShapeComponents;
 }
 
@@ -67,10 +73,17 @@ export function computeRequestShapeDiagnostic(
     }),
     historyProjectionHash: stableHash(input.priorMessages.map(messageShapeForHash)),
   };
-  const prefixHash = stableHash(componentHashes);
+  const durablePrefixComponents = durableComponents(componentHashes);
+  const prefixHash = stableHash(durablePrefixComponents);
+  const requestShapeHash = stableHash(componentHashes);
   return {
     prefixHash,
-    prefixChangeReason: classifyPrefixChange(componentHashes, prior?.componentHashes),
+    prefixChangeReason: classifyDurablePrefixChange(
+      durablePrefixComponents,
+      prior ? durableComponents(prior.componentHashes) : undefined,
+    ),
+    requestShapeHash,
+    requestShapeChangeReason: classifyRequestShapeChange(componentHashes, prior?.componentHashes),
     componentHashes,
   };
 }
@@ -93,7 +106,19 @@ export function stableStringify(value: unknown): string {
   return JSON.stringify(canonicalize(value));
 }
 
-function classifyPrefixChange(
+function classifyDurablePrefixChange(
+  current: DurablePrefixComponents,
+  prior: DurablePrefixComponents | undefined,
+): PrefixChangeReason {
+  if (!prior) return 'first_turn';
+  if (current.modelProviderHash !== prior.modelProviderHash) return 'model_or_provider_changed';
+  if (current.systemPromptHash !== prior.systemPromptHash) return 'system_prompt_changed';
+  if (current.toolSchemaHash !== prior.toolSchemaHash) return 'tool_schema_changed';
+  if (current.providerOptionsHash !== prior.providerOptionsHash) return 'provider_options_changed';
+  return 'stable';
+}
+
+function classifyRequestShapeChange(
   current: RequestShapeComponents,
   prior: RequestShapeComponents | undefined,
 ): PrefixChangeReason {
@@ -104,6 +129,15 @@ function classifyPrefixChange(
   if (current.providerOptionsHash !== prior.providerOptionsHash) return 'provider_options_changed';
   if (current.historyProjectionHash !== prior.historyProjectionHash) return 'history_projection_changed';
   return 'stable';
+}
+
+function durableComponents(components: RequestShapeComponents): DurablePrefixComponents {
+  return {
+    modelProviderHash: components.modelProviderHash,
+    systemPromptHash: components.systemPromptHash,
+    providerOptionsHash: components.providerOptionsHash,
+    toolSchemaHash: components.toolSchemaHash,
+  };
 }
 
 function toolShapeForDiagnostics(tool: MakaTool): unknown {

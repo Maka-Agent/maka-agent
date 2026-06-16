@@ -14,9 +14,11 @@ export function recordLlmCall(deps: LlmRecorderDeps, record: LlmCallRecord): voi
     try {
       const cacheHitInputTokens = record.cacheHitInputTokens ?? record.cachedInputTokens ?? 0;
       const cacheWriteInputTokens = record.cacheWriteInputTokens ?? 0;
+      const derivedCacheMissInputTokens = record.cacheMissInputTokens === undefined;
       const cacheMissInputTokens =
         record.cacheMissInputTokens
         ?? Math.max(0, record.inputTokens - cacheHitInputTokens - cacheWriteInputTokens);
+      const cacheMissInputSource = record.cacheMissInputSource ?? (derivedCacheMissInputTokens ? 'derived' : undefined);
       const cachedInputTokens = cacheHitInputTokens;
       const reasoningTokens = record.reasoningTokens ?? 0;
       const totalTokens = record.totalTokens ?? record.inputTokens + record.outputTokens + reasoningTokens;
@@ -36,6 +38,7 @@ export function recordLlmCall(deps: LlmRecorderDeps, record: LlmCallRecord): voi
         id: `usage_${record.turnId ?? randomUUID()}`,
         cacheHitInputTokens,
         cacheMissInputTokens,
+        ...(cacheMissInputSource !== undefined ? { cacheMissInputSource } : {}),
         cachedInputTokens,
         cacheWriteInputTokens,
         reasoningTokens,

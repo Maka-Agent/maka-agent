@@ -24,7 +24,11 @@ import {
   canonicalizeToolSet,
   computeRequestShapeDiagnostic,
 } from '../request-shape.js';
-import { applyRuntimeEventContextBudget } from '../context-budget.js';
+import {
+  ARCHIVED_TOOL_RESULT_PLACEHOLDER_KIND,
+  applyRuntimeEventContextBudget,
+} from '../context-budget.js';
+import { buildRuntimeEventModelReplayPlan } from '../model-history.js';
 
 describe('AiSdkBackend model history', () => {
   test('prefers RuntimeEvent prior messages and appends current user once', async () => {
@@ -532,6 +536,7 @@ describe('AiSdkBackend usage telemetry', () => {
       outputTokens: 20,
       cacheHitInputTokens: 30,
       cacheMissInputTokens: 60,
+      cacheMissInputSource: 'derived',
       cachedInputTokens: 30,
       cacheWriteInputTokens: 10,
       reasoningTokens: 5,
@@ -605,12 +610,17 @@ describe('AiSdkBackend usage telemetry', () => {
       output?: number;
       cacheHitInput?: number;
       cacheMissInput?: number;
+      cacheMissInputSource?: string;
       cacheWriteInput?: number;
       cacheRead?: number;
       cacheCreation?: number;
       reasoning?: number;
       total?: number;
       rawFinishReason?: string;
+      prefixHash?: string;
+      prefixChangeReason?: string;
+      requestShapeHash?: string;
+      requestShapeChangeReason?: string;
     } | undefined;
     const usageEvent = events.find((event) => event.type === 'token_usage') as
       | Extract<SessionEvent, { type: 'token_usage' }>
@@ -622,31 +632,46 @@ describe('AiSdkBackend usage telemetry', () => {
     assert.equal(usageMessage?.output, 7);
     assert.equal(usageMessage?.cacheHitInput, 3);
     assert.equal(usageMessage?.cacheMissInput, 5);
+    assert.equal(usageMessage?.cacheMissInputSource, 'explicit');
     assert.equal(usageMessage?.cacheWriteInput, 2);
     assert.equal(usageMessage?.cacheRead, 3);
     assert.equal(usageMessage?.cacheCreation, 2);
     assert.equal(usageMessage?.reasoning, 2);
     assert.equal(usageMessage?.total, 17);
     assert.equal(usageMessage?.rawFinishReason, 'stop');
+    assert.equal(usageMessage?.prefixChangeReason, 'first_turn');
+    assert.equal(usageMessage?.requestShapeChangeReason, 'first_turn');
+    assert.ok(usageMessage?.prefixHash);
+    assert.ok(usageMessage?.requestShapeHash);
     assert.equal(usageEvent?.input, 10);
     assert.equal(usageEvent?.output, 7);
     assert.equal(usageEvent?.cacheHitInput, 3);
     assert.equal(usageEvent?.cacheMissInput, 5);
+    assert.equal(usageEvent?.cacheMissInputSource, 'explicit');
     assert.equal(usageEvent?.cacheWriteInput, 2);
     assert.equal(usageEvent?.cacheRead, 3);
     assert.equal(usageEvent?.cacheCreation, 2);
     assert.equal(usageEvent?.reasoning, 2);
     assert.equal(usageEvent?.total, 17);
     assert.equal(usageEvent?.rawFinishReason, 'stop');
+    assert.equal(usageEvent?.prefixChangeReason, 'first_turn');
+    assert.equal(usageEvent?.requestShapeChangeReason, 'first_turn');
+    assert.ok(usageEvent?.prefixHash);
+    assert.ok(usageEvent?.requestShapeHash);
     assert.equal(llmRecords[0]?.inputTokens, 10);
     assert.equal(llmRecords[0]?.outputTokens, 7);
     assert.equal(llmRecords[0]?.cacheHitInputTokens, 3);
     assert.equal(llmRecords[0]?.cacheMissInputTokens, 5);
+    assert.equal(llmRecords[0]?.cacheMissInputSource, 'explicit');
     assert.equal(llmRecords[0]?.cachedInputTokens, 3);
     assert.equal(llmRecords[0]?.cacheWriteInputTokens, 2);
     assert.equal(llmRecords[0]?.reasoningTokens, 2);
     assert.equal(llmRecords[0]?.totalTokens, 17);
     assert.equal(llmRecords[0]?.rawFinishReason, 'stop');
+    assert.equal(llmRecords[0]?.prefixChangeReason, 'first_turn');
+    assert.equal(llmRecords[0]?.requestShapeChangeReason, 'first_turn');
+    assert.ok(llmRecords[0]?.prefixHash);
+    assert.ok(llmRecords[0]?.requestShapeHash);
   });
 });
 
@@ -676,8 +701,11 @@ describe('AiSdkBackend request-shape diagnostics', () => {
     }, first);
 
     assert.equal(first.prefixChangeReason, 'first_turn');
+    assert.equal(first.requestShapeChangeReason, 'first_turn');
     assert.equal(second.prefixChangeReason, 'stable');
+    assert.equal(second.requestShapeChangeReason, 'stable');
     assert.equal(second.prefixHash, first.prefixHash);
+    assert.equal(second.requestShapeHash, first.requestShapeHash);
   });
 
   test('classifies targeted request-shape changes', () => {
@@ -713,10 +741,14 @@ describe('AiSdkBackend request-shape diagnostics', () => {
       ...baseInput,
       modelId: 'other-model',
     }, base).prefixChangeReason, 'model_or_provider_changed');
-    assert.equal(computeRequestShapeDiagnostic({
+    const historyChanged = computeRequestShapeDiagnostic({
       ...baseInput,
       priorMessages: [{ role: 'assistant' as const, content: 'hello' }],
-    }, base).prefixChangeReason, 'history_projection_changed');
+    }, base);
+    assert.equal(historyChanged.prefixChangeReason, 'stable');
+    assert.equal(historyChanged.prefixHash, base.prefixHash);
+    assert.equal(historyChanged.requestShapeChangeReason, 'history_projection_changed');
+    assert.notEqual(historyChanged.requestShapeHash, base.requestShapeHash);
   });
 
   test('tool canonicalization is independent of registration order and places invalid last', () => {
@@ -793,7 +825,11 @@ describe('AiSdkBackend request-shape diagnostics', () => {
     assert.equal(usageEvents[0]?.prefixChangeReason, 'first_turn');
     assert.equal(usageEvents[1]?.prefixChangeReason, 'stable');
     assert.equal(usageEvents[1]?.prefixHash, usageEvents[0]?.prefixHash);
+    assert.equal(usageEvents[0]?.requestShapeChangeReason, 'first_turn');
+    assert.equal(usageEvents[1]?.requestShapeChangeReason, 'stable');
+    assert.equal(usageEvents[1]?.requestShapeHash, usageEvents[0]?.requestShapeHash);
     assert.equal(llmRecords[1]?.prefixChangeReason, 'stable');
+    assert.equal(llmRecords[1]?.requestShapeChangeReason, 'stable');
     assert.match(JSON.stringify(compactPrompt(models[0]!)), /2026-05-29/);
     assert.match(JSON.stringify(compactPrompt(models[1]!)), /2026-05-30/);
     assert.equal(JSON.stringify(modelCallSettings(models[0]!)).includes('2026-05-29'), false);
@@ -822,6 +858,94 @@ describe('AiSdkBackend context budget and prompt attribution', () => {
     assert.equal(budgeted.diagnostic.droppedTurns, 1);
     assert.equal(budgeted.diagnostic.keptTurns, 1);
     assert.equal(budgeted.diagnostic.droppedEvents, 2);
+  });
+
+  test('stale tool-result pruning replaces old payloads before budgeting and preserves replay pairing', () => {
+    const oldResult = { body: 'x'.repeat(500) };
+    const newResult = { body: 'y'.repeat(500) };
+    const events = [
+      runtimeEvent({
+        id: 'old-call',
+        turnId: 'old',
+        role: 'model',
+        author: 'agent',
+        content: { kind: 'function_call', id: 'tool-old', name: 'Read', args: { path: 'old.txt' } },
+      }),
+      runtimeEvent({
+        id: 'old-result',
+        turnId: 'old',
+        role: 'tool',
+        author: 'tool',
+        content: { kind: 'function_response', id: 'tool-old', name: 'Read', result: oldResult },
+      }),
+      runtimeEvent({
+        id: 'new-call',
+        turnId: 'new',
+        role: 'model',
+        author: 'agent',
+        content: { kind: 'function_call', id: 'tool-new', name: 'Read', args: { path: 'new.txt' } },
+      }),
+      runtimeEvent({
+        id: 'new-result',
+        turnId: 'new',
+        role: 'tool',
+        author: 'tool',
+        content: { kind: 'function_response', id: 'tool-new', name: 'Read', result: newResult },
+      }),
+    ];
+
+    const optOut = applyRuntimeEventContextBudget(events, {
+      staleToolResultPrune: { enabled: false, maxResultEstimatedTokens: 1 },
+      minRecentTurns: 1,
+      charsPerToken: 1,
+    });
+    assert.equal(optOut, undefined);
+
+    const budgeted = applyRuntimeEventContextBudget(events, {
+      staleToolResultPrune: {
+        enabled: true,
+        maxResultEstimatedTokens: 1,
+        minRecentTurnsFull: 1,
+      },
+      minRecentTurns: 1,
+      charsPerToken: 1,
+    });
+
+    assert.ok(budgeted);
+    assert.equal(budgeted.diagnostic.prunedToolResults, 1);
+    assert.equal(budgeted.diagnostic.archivePlaceholders, 1);
+    const oldResponse = budgeted.events.find((event) => event.id === 'old-result');
+    assert.equal(oldResponse?.content?.kind, 'function_response');
+    const oldResponseContent = oldResponse?.content;
+    assert.equal(oldResponseContent?.kind, 'function_response');
+    const placeholder = oldResponseContent?.kind === 'function_response'
+      ? oldResponseContent.result as { kind?: string; runtimeEventId?: string; toolCallId?: string; toolName?: string }
+      : undefined;
+    assert.equal(placeholder?.kind, ARCHIVED_TOOL_RESULT_PLACEHOLDER_KIND);
+    assert.equal(placeholder?.runtimeEventId, 'old-result');
+    assert.equal(placeholder?.toolCallId, 'tool-old');
+    assert.equal(placeholder?.toolName, 'Read');
+
+    const newResponse = budgeted.events.find((event) => event.id === 'new-result');
+    assert.equal(newResponse?.content?.kind, 'function_response');
+    assert.deepEqual(
+      newResponse?.content?.kind === 'function_response' ? newResponse.content.result : undefined,
+      newResult,
+    );
+
+    const replayPlan = buildRuntimeEventModelReplayPlan(budgeted.events);
+    assert.deepEqual(
+      replayPlan.diagnostics.filter((diagnostic) =>
+        diagnostic.code === 'unmatched_tool_result' || diagnostic.code === 'tool_id_mismatch'
+      ),
+      [],
+    );
+    const oldReplayResult = replayPlan.items.find((item) =>
+      item.kind === 'tool_result' && item.toolCallId === 'tool-old'
+    );
+    assert.equal(oldReplayResult?.kind, 'tool_result');
+    assert.equal(oldReplayResult?.eventId, 'old-result');
+    assert.equal(oldReplayResult?.kind === 'tool_result' ? oldReplayResult.toolName : undefined, 'Read');
   });
 
   test('usage events include prompt segments and context budget diagnostics', async () => {

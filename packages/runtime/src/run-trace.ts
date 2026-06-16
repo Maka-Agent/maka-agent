@@ -1,5 +1,6 @@
 import { generalizedErrorMessage } from '@maka/core/redaction';
 import type {
+  CacheMissInputSource,
   ContextBudgetDiagnostic,
   PrefixChangeReason,
   PromptSegmentEstimate,
@@ -100,6 +101,8 @@ export class RunTrace {
     prefix?: {
       prefixHash: string;
       prefixChangeReason: PrefixChangeReason;
+      requestShapeHash?: string;
+      requestShapeChangeReason?: PrefixChangeReason;
       promptSegments?: PromptSegmentEstimate[];
       contextBudget?: ContextBudgetDiagnostic;
     },
@@ -128,6 +131,7 @@ export class RunTrace {
     outputTokens: number;
     cacheHitInputTokens: number;
     cacheMissInputTokens: number;
+    cacheMissInputSource?: CacheMissInputSource;
     cachedInputTokens: number;
     cacheWriteInputTokens: number;
     reasoningTokens: number;
@@ -135,12 +139,15 @@ export class RunTrace {
     rawFinishReason?: string;
     prefixHash?: string;
     prefixChangeReason?: PrefixChangeReason;
+    requestShapeHash?: string;
+    requestShapeChangeReason?: PrefixChangeReason;
   }): void {
     this.emit('usage', 'usage_recorded', 'Token usage recorded', {
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       cacheHitInputTokens: usage.cacheHitInputTokens,
       cacheMissInputTokens: usage.cacheMissInputTokens,
+      ...(usage.cacheMissInputSource !== undefined ? { cacheMissInputSource: usage.cacheMissInputSource } : {}),
       cachedInputTokens: usage.cachedInputTokens,
       cacheWriteInputTokens: usage.cacheWriteInputTokens,
       reasoningTokens: usage.reasoningTokens,
@@ -148,6 +155,10 @@ export class RunTrace {
       ...(usage.rawFinishReason !== undefined ? { rawFinishReason: usage.rawFinishReason } : {}),
       ...(usage.prefixHash !== undefined ? { prefixHash: usage.prefixHash } : {}),
       ...(usage.prefixChangeReason !== undefined ? { prefixChangeReason: usage.prefixChangeReason } : {}),
+      ...(usage.requestShapeHash !== undefined ? { requestShapeHash: usage.requestShapeHash } : {}),
+      ...(usage.requestShapeChangeReason !== undefined
+        ? { requestShapeChangeReason: usage.requestShapeChangeReason }
+        : {}),
     });
   }
 

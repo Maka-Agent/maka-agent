@@ -168,9 +168,16 @@ for (let i = 1; i <= turnCount; i += 1) {
     stopReason: completeEvent?.stopReason,
     prefixChangeReason: usageEvent?.prefixChangeReason,
     prefixHash: usageEvent?.prefixHash,
+    requestShapeChangeReason: usageEvent?.requestShapeChangeReason,
+    requestShapeHash: usageEvent?.requestShapeHash,
     input: usageEvent?.input ?? llmRecord?.inputTokens,
     cacheHitInput: usageEvent?.cacheHitInput ?? llmRecord?.cacheHitInputTokens,
     cacheMissInput: usageEvent?.cacheMissInput ?? llmRecord?.cacheMissInputTokens,
+    cacheMissInputSource: usageEvent?.cacheMissInputSource ?? llmRecord?.cacheMissInputSource,
+    cacheMissShapeSource: classifyCacheMissShape(
+      usageEvent?.prefixChangeReason,
+      usageEvent?.requestShapeChangeReason,
+    ),
     output: usageEvent?.output ?? llmRecord?.outputTokens,
     total: usageEvent?.total,
     estimatedCostUsd: cost?.totalCost,
@@ -205,12 +212,19 @@ const report = {
   totals,
   turns,
   runTracePrefixEvents: runTraceEvents
-    .filter((event) => event.data?.prefixHash || event.data?.prefixChangeReason)
+    .filter((event) =>
+      event.data?.prefixHash ||
+      event.data?.prefixChangeReason ||
+      event.data?.requestShapeHash ||
+      event.data?.requestShapeChangeReason
+    )
     .map((event) => ({
       phase: event.phase,
       type: event.type,
       prefixHash: event.data?.prefixHash,
       prefixChangeReason: event.data?.prefixChangeReason,
+      requestShapeHash: event.data?.requestShapeHash,
+      requestShapeChangeReason: event.data?.requestShapeChangeReason,
       promptSegments: event.data?.promptSegments,
       contextBudget: event.data?.contextBudget,
     })),
@@ -229,13 +243,32 @@ function buildContextBudgetPolicy() {
   const maxHistoryEstimatedTokens = parseOptionalPositiveInt(
     process.env.MAKA_CONTEXT_HISTORY_BUDGET_TOKENS,
   );
-  if (maxHistoryEstimatedTokens === undefined) return undefined;
   const maxHistoryTurns = parseOptionalPositiveInt(process.env.MAKA_CONTEXT_HISTORY_BUDGET_TURNS);
+  const staleToolResultPrune = buildStaleToolResultPrunePolicy();
+  if (maxHistoryEstimatedTokens === undefined && maxHistoryTurns === undefined && !staleToolResultPrune) {
+    return undefined;
+  }
   return {
     name: process.env.MAKA_CONTEXT_BUDGET_NAME ?? 'cost-baseline-history-budget',
-    maxHistoryEstimatedTokens,
     minRecentTurns: parsePositiveInt(process.env.MAKA_CONTEXT_MIN_RECENT_TURNS, 2),
+    ...(maxHistoryEstimatedTokens !== undefined ? { maxHistoryEstimatedTokens } : {}),
+    ...(staleToolResultPrune ? { staleToolResultPrune } : {}),
     ...(maxHistoryTurns !== undefined ? { maxHistoryTurns } : {}),
+  };
+}
+
+function buildStaleToolResultPrunePolicy() {
+  if (process.env.MAKA_CONTEXT_STALE_TOOL_RESULT_PRUNE !== 'on') return undefined;
+  return {
+    enabled: true,
+    maxResultEstimatedTokens: parsePositiveInt(
+      process.env.MAKA_CONTEXT_STALE_TOOL_RESULT_MAX_TOKENS,
+      2048,
+    ),
+    minRecentTurnsFull: parsePositiveInt(
+      process.env.MAKA_CONTEXT_STALE_TOOL_RESULT_MIN_RECENT_TURNS,
+      parsePositiveInt(process.env.MAKA_CONTEXT_MIN_RECENT_TURNS, 2),
+    ),
   };
 }
 
@@ -247,6 +280,14 @@ function parseOptionalPositiveInt(value) {
   if (!value) return undefined;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function classifyCacheMissShape(prefixChangeReason, requestShapeChangeReason) {
+  if (!prefixChangeReason && !requestShapeChangeReason) return undefined;
+  if (prefixChangeReason === 'first_turn') return 'first_turn';
+  if (prefixChangeReason && prefixChangeReason !== 'stable') return 'explicit_durable_prefix_change';
+  if (requestShapeChangeReason && requestShapeChangeReason !== 'stable') return 'derived_request_shape_change';
+  return 'stable_shape';
 }
 
 function renderMarkdown(report, jsonPath) {
@@ -271,8 +312,8 @@ function renderMarkdown(report, jsonPath) {
     '',
     '## Turns',
     '',
-    '| turn | input | hit | miss | output | reason | prior history est | budget after |',
-    '| ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: |',
+    '| turn | input | hit | miss | output | prefix reason | request reason | miss source | prior history est | budget after |',
+    '| ---: | ---: | ---: | ---: | ---: | --- | --- | --- | ---: | ---: |',
   ];
   for (const turn of report.turns) {
     const prior = turn.promptSegments?.find((segment) => segment.kind === 'prior_history');
@@ -283,6 +324,8 @@ function renderMarkdown(report, jsonPath) {
       turn.cacheMissInput ?? 0,
       turn.output ?? 0,
       turn.prefixChangeReason ?? '',
+      turn.requestShapeChangeReason ?? '',
+      turn.cacheMissShapeSource ?? turn.cacheMissInputSource ?? '',
       prior?.estimatedTokens ?? 0,
       turn.contextBudget?.estimatedTokensAfter ?? 0,
     ].join(' | ') + ' |');

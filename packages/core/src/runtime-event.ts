@@ -17,6 +17,7 @@
 import type { AttachmentRef } from './events.js';
 import type { PermissionRequest, PermissionResponse } from './permission.js';
 import type {
+  CacheMissInputSource,
   ContextBudgetDiagnostic,
   PrefixChangeReason,
   PromptSegmentEstimate,
@@ -173,6 +174,7 @@ export interface RuntimeEventTokenUsage {
   cacheHitInput?: number;
   cacheMissInput?: number;
   cacheWriteInput?: number;
+  cacheMissInputSource?: CacheMissInputSource;
   reasoning?: number;
   total?: number;
   rawFinishReason?: string;
@@ -184,6 +186,8 @@ export interface RuntimeEventTokenUsage {
   contextRemaining?: number;
   prefixHash?: string;
   prefixChangeReason?: PrefixChangeReason;
+  requestShapeHash?: string;
+  requestShapeChangeReason?: PrefixChangeReason;
   promptSegments?: PromptSegmentEstimate[];
   contextBudget?: ContextBudgetDiagnostic;
 }

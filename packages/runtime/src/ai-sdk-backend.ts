@@ -394,6 +394,8 @@ export class AiSdkBackend implements AgentBackend {
         trace.modelStreamStarted(activeTools, {
           prefixHash: requestShape.prefixHash,
           prefixChangeReason: requestShape.prefixChangeReason,
+          requestShapeHash: requestShape.requestShapeHash,
+          requestShapeChangeReason: requestShape.requestShapeChangeReason,
           promptSegments,
           ...(priorReplay.contextBudget ? { contextBudget: priorReplay.contextBudget } : {}),
         });
@@ -487,6 +489,8 @@ export class AiSdkBackend implements AgentBackend {
               ...tokenUsage,
               prefixHash: requestShape.prefixHash,
               prefixChangeReason: requestShape.prefixChangeReason,
+              requestShapeHash: requestShape.requestShapeHash,
+              requestShapeChangeReason: requestShape.requestShapeChangeReason,
             });
             const tu: TokenUsageMessage = {
               type: 'token_usage',
@@ -497,6 +501,7 @@ export class AiSdkBackend implements AgentBackend {
               output: tokenUsage.outputTokens,
               cacheHitInput: tokenUsage.cacheHitInputTokens,
               cacheMissInput: tokenUsage.cacheMissInputTokens,
+              cacheMissInputSource: tokenUsage.cacheMissInputSource,
               cacheWriteInput: tokenUsage.cacheWriteInputTokens,
               reasoning: tokenUsage.reasoningTokens,
               total: tokenUsage.totalTokens,
@@ -505,6 +510,8 @@ export class AiSdkBackend implements AgentBackend {
               ...(tokenUsage.cacheWriteInputTokens > 0 ? { cacheCreation: tokenUsage.cacheWriteInputTokens } : {}),
               prefixHash: requestShape.prefixHash,
               prefixChangeReason: requestShape.prefixChangeReason,
+              requestShapeHash: requestShape.requestShapeHash,
+              requestShapeChangeReason: requestShape.requestShapeChangeReason,
               promptSegments,
               ...(priorReplay.contextBudget ? { contextBudget: priorReplay.contextBudget } : {}),
             };
@@ -518,6 +525,7 @@ export class AiSdkBackend implements AgentBackend {
               output: tokenUsage.outputTokens,
               cacheHitInput: tokenUsage.cacheHitInputTokens,
               cacheMissInput: tokenUsage.cacheMissInputTokens,
+              cacheMissInputSource: tokenUsage.cacheMissInputSource,
               cacheWriteInput: tokenUsage.cacheWriteInputTokens,
               reasoning: tokenUsage.reasoningTokens,
               total: tokenUsage.totalTokens,
@@ -526,6 +534,8 @@ export class AiSdkBackend implements AgentBackend {
               ...(tokenUsage.cacheWriteInputTokens > 0 ? { cacheCreation: tokenUsage.cacheWriteInputTokens } : {}),
               prefixHash: requestShape.prefixHash,
               prefixChangeReason: requestShape.prefixChangeReason,
+              requestShapeHash: requestShape.requestShapeHash,
+              requestShapeChangeReason: requestShape.requestShapeChangeReason,
               promptSegments,
               ...(priorReplay.contextBudget ? { contextBudget: priorReplay.contextBudget } : {}),
             } satisfies TokenUsageEvent);
@@ -588,6 +598,9 @@ export class AiSdkBackend implements AgentBackend {
           outputTokens: tokenUsage?.outputTokens ?? 0,
           cacheHitInputTokens: tokenUsage?.cacheHitInputTokens ?? 0,
           cacheMissInputTokens: tokenUsage?.cacheMissInputTokens ?? 0,
+          ...(tokenUsage?.cacheMissInputSource !== undefined
+            ? { cacheMissInputSource: tokenUsage.cacheMissInputSource }
+            : {}),
           cachedInputTokens: tokenUsage?.cachedInputTokens ?? 0,
           cacheWriteInputTokens: tokenUsage?.cacheWriteInputTokens ?? 0,
           reasoningTokens: tokenUsage?.reasoningTokens ?? 0,
@@ -601,6 +614,8 @@ export class AiSdkBackend implements AgentBackend {
           ...(requestShapeForTelemetry !== undefined ? {
             prefixHash: requestShapeForTelemetry.prefixHash,
             prefixChangeReason: requestShapeForTelemetry.prefixChangeReason,
+            requestShapeHash: requestShapeForTelemetry.requestShapeHash,
+            requestShapeChangeReason: requestShapeForTelemetry.requestShapeChangeReason,
           } : {}),
           ...(promptSegmentsForTelemetry.length > 0 ? { promptSegments: promptSegmentsForTelemetry } : {}),
           ...(contextBudgetForTelemetry !== undefined ? { contextBudget: contextBudgetForTelemetry } : {}),

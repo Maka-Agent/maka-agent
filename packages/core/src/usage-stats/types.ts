@@ -43,6 +43,7 @@ export interface UsageBucket {
   cacheMissTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  cacheMissInputSource?: CacheMissInputSource;
   reasoningTokens: number;
   totalTokens: number;
   costUsd: number;
@@ -72,6 +73,8 @@ export interface UsageLogRow {
   turnId?: string;
   prefixHash?: string;
   prefixChangeReason?: PrefixChangeReason;
+  requestShapeHash?: string;
+  requestShapeChangeReason?: PrefixChangeReason;
   promptSegments?: PromptSegmentEstimate[];
   contextBudget?: ContextBudgetDiagnostic;
 }
@@ -119,6 +122,9 @@ export interface LlmCallRecord {
   startedAt: number;
   prefixHash?: string;
   prefixChangeReason?: PrefixChangeReason;
+  requestShapeHash?: string;
+  requestShapeChangeReason?: PrefixChangeReason;
+  cacheMissInputSource?: CacheMissInputSource;
   promptSegments?: PromptSegmentEstimate[];
   contextBudget?: ContextBudgetDiagnostic;
 }
@@ -132,6 +138,8 @@ export type PrefixChangeReason =
   | 'history_projection_changed'
   | 'stable'
   | 'unknown';
+
+export type CacheMissInputSource = 'explicit' | 'derived';
 
 export type PromptSegmentKind =
   | 'system_prompt'
@@ -160,6 +168,10 @@ export interface ContextBudgetDiagnostic {
   droppedTurns: number;
   keptEvents: number;
   droppedEvents: number;
+  prunedToolResults?: number;
+  prunedToolResultEstimatedTokensBefore?: number;
+  prunedToolResultEstimatedTokensAfter?: number;
+  archivePlaceholders?: number;
 }
 
 export interface ToolInvocationRecord {
