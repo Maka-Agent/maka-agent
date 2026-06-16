@@ -482,6 +482,7 @@ function projectTokenUsage(
     output: usage.output,
     ...(usage.cacheHitInput !== undefined ? { cacheHitInput: usage.cacheHitInput } : {}),
     ...(usage.cacheMissInput !== undefined ? { cacheMissInput: usage.cacheMissInput } : {}),
+    ...(usage.cacheMissInputSource !== undefined ? { cacheMissInputSource: usage.cacheMissInputSource } : {}),
     ...(usage.cacheWriteInput !== undefined ? { cacheWriteInput: usage.cacheWriteInput } : {}),
     ...(usage.reasoning !== undefined ? { reasoning: usage.reasoning } : {}),
     ...(usage.total !== undefined ? { total: usage.total } : {}),
@@ -491,6 +492,10 @@ function projectTokenUsage(
     ...(usage.costUsd !== undefined ? { costUsd: usage.costUsd } : {}),
     ...(usage.prefixHash !== undefined ? { prefixHash: usage.prefixHash } : {}),
     ...(usage.prefixChangeReason !== undefined ? { prefixChangeReason: usage.prefixChangeReason } : {}),
+    ...(usage.requestShapeHash !== undefined ? { requestShapeHash: usage.requestShapeHash } : {}),
+    ...(usage.requestShapeChangeReason !== undefined
+      ? { requestShapeChangeReason: usage.requestShapeChangeReason }
+      : {}),
     ...(usage.promptSegments !== undefined ? { promptSegments: usage.promptSegments } : {}),
     ...(usage.contextBudget !== undefined ? { contextBudget: usage.contextBudget } : {}),
   });
@@ -808,6 +813,7 @@ function semanticMessage(message: StoredMessage): unknown {
         output: message.output,
         cacheHitInput: message.cacheHitInput,
         cacheMissInput: message.cacheMissInput,
+        cacheMissInputSource: message.cacheMissInputSource,
         cacheWriteInput: message.cacheWriteInput,
         reasoning: message.reasoning,
         total: message.total,
@@ -817,6 +823,8 @@ function semanticMessage(message: StoredMessage): unknown {
         costUsd: message.costUsd,
         prefixHash: message.prefixHash,
         prefixChangeReason: message.prefixChangeReason,
+        requestShapeHash: message.requestShapeHash,
+        requestShapeChangeReason: message.requestShapeChangeReason,
         promptSegments: message.promptSegments,
         contextBudget: message.contextBudget,
       };

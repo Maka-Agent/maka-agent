@@ -147,6 +147,7 @@ class FileTelemetryRepo implements TelemetryRepo {
         cacheMissTokens: row.cacheMissInputTokens,
         cacheReadTokens: row.cacheHitInputTokens,
         cacheWriteTokens: row.cacheWriteInputTokens,
+        ...(row.cacheMissInputSource ? { cacheMissInputSource: row.cacheMissInputSource } : {}),
         reasoningTokens: row.reasoningTokens,
         totalTokens: row.totalTokens,
         costUsd: row.costUsd,
@@ -157,6 +158,8 @@ class FileTelemetryRepo implements TelemetryRepo {
         ...(row.turnId ? { turnId: row.turnId } : {}),
         ...(row.prefixHash ? { prefixHash: row.prefixHash } : {}),
         ...(row.prefixChangeReason ? { prefixChangeReason: row.prefixChangeReason } : {}),
+        ...(row.requestShapeHash ? { requestShapeHash: row.requestShapeHash } : {}),
+        ...(row.requestShapeChangeReason ? { requestShapeChangeReason: row.requestShapeChangeReason } : {}),
         ...(row.promptSegments ? { promptSegments: row.promptSegments } : {}),
         ...(row.contextBudget ? { contextBudget: row.contextBudget } : {}),
       } satisfies UsageLogRow));

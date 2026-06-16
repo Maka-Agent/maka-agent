@@ -305,6 +305,9 @@ export function mapSessionEventToRuntimeEvent(
             output: event.output,
             ...(event.cacheHitInput !== undefined ? { cacheHitInput: event.cacheHitInput } : {}),
             ...(event.cacheMissInput !== undefined ? { cacheMissInput: event.cacheMissInput } : {}),
+            ...(event.cacheMissInputSource !== undefined
+              ? { cacheMissInputSource: event.cacheMissInputSource }
+              : {}),
             ...(event.cacheWriteInput !== undefined ? { cacheWriteInput: event.cacheWriteInput } : {}),
             ...(event.reasoning !== undefined ? { reasoning: event.reasoning } : {}),
             ...(event.total !== undefined ? { total: event.total } : {}),
@@ -318,6 +321,10 @@ export function mapSessionEventToRuntimeEvent(
             ...(event.prefixHash !== undefined ? { prefixHash: event.prefixHash } : {}),
             ...(event.prefixChangeReason !== undefined
               ? { prefixChangeReason: event.prefixChangeReason }
+              : {}),
+            ...(event.requestShapeHash !== undefined ? { requestShapeHash: event.requestShapeHash } : {}),
+            ...(event.requestShapeChangeReason !== undefined
+              ? { requestShapeChangeReason: event.requestShapeChangeReason }
               : {}),
             ...(event.promptSegments !== undefined ? { promptSegments: event.promptSegments } : {}),
             ...(event.contextBudget !== undefined ? { contextBudget: event.contextBudget } : {}),

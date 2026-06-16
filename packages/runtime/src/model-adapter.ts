@@ -7,6 +7,7 @@ import type {
 } from '@maka/core/events';
 import { PROVIDER_DEFAULTS, type LlmConnection } from '@maka/core/llm-connections';
 import { generalizedErrorMessage } from '@maka/core/redaction';
+import type { CacheMissInputSource } from '@maka/core/usage-stats/types';
 import type { ModelMessage } from 'ai';
 
 import type { AsyncEventQueue } from './async-queue.js';
@@ -287,6 +288,7 @@ export interface NormalizedAiSdkUsage {
   outputTokens: number;
   cacheHitInputTokens: number;
   cacheMissInputTokens: number;
+  cacheMissInputSource: CacheMissInputSource;
   cacheWriteInputTokens: number;
   reasoningTokens: number;
   totalTokens: number;
@@ -341,6 +343,8 @@ export function normalizeAiSdkUsage(
   const cacheMissInputTokens =
     explicitCacheMissInputTokens
     ?? Math.max(0, inputTokens - cacheHitInputTokens - cacheWriteInputTokens);
+  const cacheMissInputSource: CacheMissInputSource =
+    explicitCacheMissInputTokens !== undefined ? 'explicit' : 'derived';
   const reasoningTokens =
     finiteToken(usage.reasoningTokens)
     ?? finiteTokenFromBreakdown(usage.outputTokens, 'reasoning')
@@ -361,6 +365,7 @@ export function normalizeAiSdkUsage(
     outputTokens,
     cacheHitInputTokens,
     cacheMissInputTokens,
+    cacheMissInputSource,
     cacheWriteInputTokens,
     reasoningTokens,
     totalTokens,

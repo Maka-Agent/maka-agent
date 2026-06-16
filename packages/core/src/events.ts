@@ -11,6 +11,7 @@
 
 import type { PermissionRequest, PermissionResponse, ToolCategory } from './permission.js';
 import type {
+  CacheMissInputSource,
   ContextBudgetDiagnostic,
   PrefixChangeReason,
   PromptSegmentEstimate,
@@ -328,6 +329,7 @@ export interface TokenUsageEvent extends BaseEvent {
   cacheHitInput?: number;
   cacheMissInput?: number;
   cacheWriteInput?: number;
+  cacheMissInputSource?: CacheMissInputSource;
   reasoning?: number;
   total?: number;
   rawFinishReason?: string;
@@ -339,6 +341,8 @@ export interface TokenUsageEvent extends BaseEvent {
   contextRemaining?: number;
   prefixHash?: string;
   prefixChangeReason?: PrefixChangeReason;
+  requestShapeHash?: string;
+  requestShapeChangeReason?: PrefixChangeReason;
   promptSegments?: PromptSegmentEstimate[];
   contextBudget?: ContextBudgetDiagnostic;
 }

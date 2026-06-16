@@ -12,6 +12,7 @@
 import type { AttachmentRef, ToolResultContent } from './events.js';
 import type { PermissionMode } from './permission.js';
 import type {
+  CacheMissInputSource,
   ContextBudgetDiagnostic,
   PrefixChangeReason,
   PromptSegmentEstimate,
@@ -237,6 +238,7 @@ export interface TokenUsageMessage {
   cacheHitInput?: number;
   cacheMissInput?: number;
   cacheWriteInput?: number;
+  cacheMissInputSource?: CacheMissInputSource;
   reasoning?: number;
   total?: number;
   rawFinishReason?: string;
@@ -247,6 +249,8 @@ export interface TokenUsageMessage {
   costUsd?: number;
   prefixHash?: string;
   prefixChangeReason?: PrefixChangeReason;
+  requestShapeHash?: string;
+  requestShapeChangeReason?: PrefixChangeReason;
   promptSegments?: PromptSegmentEstimate[];
   contextBudget?: ContextBudgetDiagnostic;
 }

@@ -105,6 +105,7 @@ describe('ModelAdapter stream and error normalization', () => {
         outputTokens: 5,
         cacheHitInputTokens: 7,
         cacheMissInputTokens: 10,
+        cacheMissInputSource: 'derived',
         cachedInputTokens: 7,
         cacheWriteInputTokens: 3,
         reasoningTokens: 2,
@@ -135,6 +136,7 @@ describe('ModelAdapter stream and error normalization', () => {
         outputTokens: 20,
         cacheHitInputTokens: 40,
         cacheMissInputTokens: 60,
+        cacheMissInputSource: 'explicit',
         cachedInputTokens: 40,
         cacheWriteInputTokens: 0,
         reasoningTokens: 8,
@@ -185,6 +187,7 @@ describe('ModelAdapter stream and error normalization', () => {
         outputTokens: 20,
         cacheHitInputTokens: 70,
         cacheMissInputTokens: 30,
+        cacheMissInputSource: 'explicit',
         cachedInputTokens: 70,
         cacheWriteInputTokens: 0,
         reasoningTokens: 9,
@@ -224,6 +227,7 @@ describe('ModelAdapter stream and error normalization', () => {
         outputTokens: 2,
         cacheHitInputTokens: 1408,
         cacheMissInputTokens: 52,
+        cacheMissInputSource: 'explicit',
         cachedInputTokens: 1408,
         cacheWriteInputTokens: 0,
         reasoningTokens: 0,
@@ -252,6 +256,15 @@ describe('ModelAdapter stream and error normalization', () => {
         cacheWriteInputTokens: 20,
       })?.cacheMissInputTokens,
       50,
+    );
+    assert.equal(
+      normalizeAiSdkUsage({
+        inputTokens: 100,
+        outputTokens: 10,
+        cachedInputTokens: 30,
+        cacheWriteInputTokens: 20,
+      })?.cacheMissInputSource,
+      'derived',
     );
 
     assert.equal(

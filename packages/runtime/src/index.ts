@@ -70,6 +70,7 @@ export type { StreamWatchdogInput, StreamWatchdogPhase, StreamWatchdogTimeout } 
 export { getAIModel, buildProviderOptions } from './model-factory.js';
 export type { ModelFactoryInput as GetAIModelInput } from './model-factory.js';
 export {
+  ARCHIVED_TOOL_RESULT_PLACEHOLDER_KIND,
   applyRuntimeEventContextBudget,
   buildPromptSegmentEstimates,
   estimateModelMessagesChars,
@@ -79,6 +80,8 @@ export {
 export type {
   BudgetedRuntimeContext,
   ContextBudgetPolicy,
+  StaleToolResultPrunePolicy,
+  ArchivedToolResultPlaceholder,
   PromptSegmentInput,
 } from './context-budget.js';
 export { testConnection } from './test-connection.js';

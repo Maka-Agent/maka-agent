@@ -18,6 +18,29 @@ export interface ContextBudgetPolicy {
   minRecentTurns?: number;
   /** Estimate conversion. Defaults to 4 chars/token, intentionally conservative for mixed text. */
   charsPerToken?: number;
+  /** Optional replay-only pruning for stale oversized tool results before whole-turn compaction. */
+  staleToolResultPrune?: StaleToolResultPrunePolicy;
+}
+
+export interface StaleToolResultPrunePolicy {
+  enabled: boolean;
+  /** Tool result payloads above this estimate are replaced with archive placeholders. Defaults to 2048. */
+  maxResultEstimatedTokens?: number;
+  /** Keep this many newest turns' tool results full. Defaults to ContextBudgetPolicy.minRecentTurns, then 1. */
+  minRecentTurnsFull?: number;
+}
+
+export const ARCHIVED_TOOL_RESULT_PLACEHOLDER_KIND = 'maka.archived_tool_result';
+const DEFAULT_MAX_TOOL_RESULT_ESTIMATED_TOKENS = 2048;
+
+export interface ArchivedToolResultPlaceholder {
+  kind: typeof ARCHIVED_TOOL_RESULT_PLACEHOLDER_KIND;
+  runtimeEventId: string;
+  toolCallId: string;
+  toolName: string;
+  originalEstimatedTokens: number;
+  originalBytes: number;
+  reason: 'stale_tool_result_pruned_before_compact';
 }
 
 export interface BudgetedRuntimeContext {
@@ -40,14 +63,19 @@ export function applyRuntimeEventContextBudget(
   events: readonly RuntimeEvent[],
   policy: ContextBudgetPolicy | undefined,
 ): BudgetedRuntimeContext | undefined {
-  const enabled = Boolean(policy?.maxHistoryEstimatedTokens || policy?.maxHistoryTurns);
+  const prunePolicy = policy?.staleToolResultPrune;
+  const pruneEnabled = prunePolicy?.enabled === true;
+  const enabled = Boolean(policy?.maxHistoryEstimatedTokens || policy?.maxHistoryTurns || pruneEnabled);
   if (!enabled) return undefined;
+  if (!policy) return undefined;
   const charsPerToken = policy?.charsPerToken ?? 4;
   const maxTokens = finitePositive(policy?.maxHistoryEstimatedTokens);
   const maxTurns = finitePositive(policy?.maxHistoryTurns);
   const minRecentTurns = Math.max(0, Math.floor(policy?.minRecentTurns ?? 1));
-  const turnGroups = groupEventsByTurn(events, charsPerToken);
   const estimatedTokensBefore = estimateRuntimeEventsTokens(events, charsPerToken);
+  const pruned = pruneStaleToolResultsBeforeCompact(events, policy, charsPerToken);
+  const budgetEvents = pruned.events;
+  const turnGroups = groupEventsByTurn(budgetEvents, charsPerToken);
 
   const keptTurnIds = new Set<string>();
   let keptTokens = 0;
@@ -65,7 +93,7 @@ export function applyRuntimeEventContextBudget(
     keptTokens += group.estimatedTokens;
   }
 
-  const keptEvents = events.filter((event) => keptTurnIds.has(event.turnId));
+  const keptEvents = budgetEvents.filter((event) => keptTurnIds.has(turnKey(event)));
   const diagnostic: ContextBudgetDiagnostic = {
     enabled: true,
     ...(policy?.name ? { policyName: policy.name } : {}),
@@ -76,7 +104,15 @@ export function applyRuntimeEventContextBudget(
     keptTurns: keptTurnIds.size,
     droppedTurns: Math.max(0, turnGroups.length - keptTurnIds.size),
     keptEvents: keptEvents.length,
-    droppedEvents: Math.max(0, events.length - keptEvents.length),
+    droppedEvents: Math.max(0, budgetEvents.length - keptEvents.length),
+    ...(pruned.prunedToolResults > 0
+      ? {
+          prunedToolResults: pruned.prunedToolResults,
+          prunedToolResultEstimatedTokensBefore: pruned.estimatedTokensBefore,
+          prunedToolResultEstimatedTokensAfter: pruned.estimatedTokensAfter,
+          archivePlaceholders: pruned.prunedToolResults,
+        }
+      : {}),
   };
   return { events: keptEvents, diagnostic };
 }
@@ -123,7 +159,7 @@ function groupEventsByTurn(events: readonly RuntimeEvent[], charsPerToken: numbe
   const order: string[] = [];
   const byTurn = new Map<string, RuntimeEvent[]>();
   for (const event of events) {
-    const key = event.turnId || '<unknown-turn>';
+    const key = turnKey(event);
     const group = byTurn.get(key);
     if (group) group.push(event);
     else {
@@ -135,6 +171,94 @@ function groupEventsByTurn(events: readonly RuntimeEvent[], charsPerToken: numbe
     turnId,
     estimatedTokens: estimateRuntimeEventsTokens(byTurn.get(turnId) ?? [], charsPerToken),
   }));
+}
+
+function pruneStaleToolResultsBeforeCompact(
+  events: readonly RuntimeEvent[],
+  policy: ContextBudgetPolicy,
+  charsPerToken: number,
+): {
+  events: RuntimeEvent[];
+  prunedToolResults: number;
+  estimatedTokensBefore: number;
+  estimatedTokensAfter: number;
+} {
+  const prunePolicy = policy.staleToolResultPrune;
+  if (prunePolicy?.enabled !== true) {
+    return { events: [...events], prunedToolResults: 0, estimatedTokensBefore: 0, estimatedTokensAfter: 0 };
+  }
+
+  const maxResultEstimatedTokens =
+    finitePositive(prunePolicy.maxResultEstimatedTokens)
+    ?? DEFAULT_MAX_TOOL_RESULT_ESTIMATED_TOKENS;
+  const minRecentTurnsFull = Math.max(
+    0,
+    Math.floor(prunePolicy.minRecentTurnsFull ?? policy.minRecentTurns ?? 1),
+  );
+  const protectedTurnIds = recentTurnIds(events, minRecentTurnsFull);
+
+  let prunedToolResults = 0;
+  let estimatedTokensBefore = 0;
+  let estimatedTokensAfter = 0;
+  const prunedEvents = events.map((event) => {
+    const content = event.content;
+    if (
+      event.partial ||
+      content?.kind !== 'function_response' ||
+      protectedTurnIds.has(turnKey(event))
+    ) {
+      return event;
+    }
+
+    const resultBytes = stableJsonLength(content.result);
+    const resultEstimatedTokens = estimateTokens(resultBytes, charsPerToken);
+    if (resultEstimatedTokens <= maxResultEstimatedTokens) return event;
+
+    const placeholder: ArchivedToolResultPlaceholder = {
+      kind: ARCHIVED_TOOL_RESULT_PLACEHOLDER_KIND,
+      runtimeEventId: event.id,
+      toolCallId: content.id,
+      toolName: content.name,
+      originalEstimatedTokens: resultEstimatedTokens,
+      originalBytes: resultBytes,
+      reason: 'stale_tool_result_pruned_before_compact',
+    };
+    const placeholderEstimatedTokens = estimateTokens(stableJsonLength(placeholder), charsPerToken);
+    prunedToolResults += 1;
+    estimatedTokensBefore += resultEstimatedTokens;
+    estimatedTokensAfter += placeholderEstimatedTokens;
+    return {
+      ...event,
+      content: {
+        ...content,
+        result: placeholder,
+      },
+    };
+  });
+
+  return {
+    events: prunedEvents,
+    prunedToolResults,
+    estimatedTokensBefore,
+    estimatedTokensAfter,
+  };
+}
+
+function recentTurnIds(events: readonly RuntimeEvent[], count: number): Set<string> {
+  if (count <= 0) return new Set();
+  const order: string[] = [];
+  const seen = new Set<string>();
+  for (const event of events) {
+    const key = turnKey(event);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    order.push(key);
+  }
+  return new Set(order.slice(Math.max(0, order.length - count)));
+}
+
+function turnKey(event: RuntimeEvent): string {
+  return event.turnId || '<unknown-turn>';
 }
 
 function estimateRuntimeEventChars(event: RuntimeEvent): number {
