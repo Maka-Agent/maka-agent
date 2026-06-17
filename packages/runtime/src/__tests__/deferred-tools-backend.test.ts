@@ -139,6 +139,37 @@ describe('AiSdkBackend deferred tool loading', () => {
     );
   });
 
+  test('high-water "after" hash stays consistent with the final recorded requestShapeHash across a same-turn load (GPT-Pro P3)', async () => {
+    const records: LlmCallRecord[] = [];
+    const implCalls: string[] = [];
+    const be = backend(loadBrowserThenFinishModel(), implCalls, { recordLlmCall: (r) => records.push(r) });
+    // Real high-water reasons only arise from the synthesis-cache subsystem
+    // (selectSynthesisCacheForReplay needs valid cache blocks + matching
+    // history). Inject just the marker by wrapping buildPriorMessages so this
+    // targets the diagnostics-consistency invariant, not that subsystem.
+    type PriorReplayish = { contextBudget?: Record<string, unknown> };
+    const patch = be as unknown as { buildPriorMessages: (input: unknown) => Promise<PriorReplayish> };
+    const realBuildPriorMessages = patch.buildPriorMessages.bind(be);
+    patch.buildPriorMessages = async (input: unknown) => {
+      const prior = await realBuildPriorMessages(input);
+      return { ...prior, contextBudget: { ...(prior.contextBudget ?? {}), highWaterReason: 'synthesis_cache_select' } };
+    };
+
+    await drain(be.send({ turnId: 'turn-1', text: 'load browser', context: [] }));
+
+    assert.equal(records.length, 1, 'one llm-call record for the turn');
+    const cb = records[0].contextBudget;
+    assert.ok(cb?.highWaterRequestShapeHashAfter, 'a high-water "after" hash was recorded');
+    // The same-turn load makes the final active set differ from step-0, so this
+    // equality fails if "after" is left at the step-0 hash (the bug).
+    assert.equal(
+      cb.highWaterRequestShapeHashAfter,
+      records[0].requestShapeHash,
+      'high-water "after" must equal the final recorded requestShapeHash',
+    );
+    assert.equal(cb.highWaterRequestShapeHashBefore, undefined, 'first turn has no pre-turn baseline');
+  });
+
   test('no catalog: a deferred-tagged tool stays advertised (GPT-Pro P3)', async () => {
     const captured: string[][] = [];
     const implCalls: string[] = [];

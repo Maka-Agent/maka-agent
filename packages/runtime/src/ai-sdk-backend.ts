@@ -567,16 +567,27 @@ export class AiSdkBackend implements AgentBackend {
             }, priorShapeBaseline),
           };
         };
+        // Publish a diagnostics snapshot to every telemetry sink at once so the
+        // cost record, the prefix baseline, and the context-budget high-water
+        // "after" hash never diverge — they must all describe the same active
+        // tool set. A same-turn deferred load re-publishes the final snapshot
+        // below; the high-water "before" hash is the pre-turn baseline, set once.
+        let turnDiagnostics = computeTurnDiagnostics(activeTools);
+        const publishTurnDiagnostics = (diag: typeof turnDiagnostics): void => {
+          turnDiagnostics = diag;
+          promptSegmentsForTelemetry = diag.promptSegments;
+          requestShapeForTelemetry = diag.requestShape;
+          this.priorRequestShape = diag.requestShape;
+          if (priorReplay.contextBudget?.highWaterReason) {
+            priorReplay.contextBudget.highWaterRequestShapeHashAfter = diag.requestShape.requestShapeHash;
+          }
+        };
         // Step-0 (turn-start) view: literally what the first request carries, so
         // the stream-start trace reports it as the prefix actually sent.
-        let turnDiagnostics = computeTurnDiagnostics(activeTools);
         if (priorReplay.contextBudget?.highWaterReason) {
           priorReplay.contextBudget.highWaterRequestShapeHashBefore = priorShapeBaseline?.requestShapeHash;
-          priorReplay.contextBudget.highWaterRequestShapeHashAfter = turnDiagnostics.requestShape.requestShapeHash;
         }
-        promptSegmentsForTelemetry = turnDiagnostics.promptSegments;
-        requestShapeForTelemetry = turnDiagnostics.requestShape;
-        this.priorRequestShape = turnDiagnostics.requestShape;
+        publishTurnDiagnostics(turnDiagnostics);
         trace.modelStreamStarted(activeTools, {
           prefixHash: turnDiagnostics.requestShape.prefixHash,
           prefixChangeReason: turnDiagnostics.requestShape.prefixChangeReason,
@@ -633,10 +644,7 @@ export class AiSdkBackend implements AgentBackend {
         // grows it).
         const finalActiveTools = currentRepairToolNames();
         if (finalActiveTools.length !== activeTools.length) {
-          turnDiagnostics = computeTurnDiagnostics(finalActiveTools);
-          promptSegmentsForTelemetry = turnDiagnostics.promptSegments;
-          requestShapeForTelemetry = turnDiagnostics.requestShape;
-          this.priorRequestShape = turnDiagnostics.requestShape;
+          publishTurnDiagnostics(computeTurnDiagnostics(finalActiveTools));
         }
 
         // PR-AGENT-ITERATION-GRACE-0 (external bot research #A1): when the
