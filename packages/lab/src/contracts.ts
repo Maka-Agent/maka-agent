@@ -43,6 +43,13 @@ export interface TaskVerification {
   command: string;
   /** Hard timeout for the verification command. Defaults applied by the runner. */
   timeoutMs?: number;
+  /**
+   * Files/dirs (relative to the workspace) restored from the pristine
+   * fixture AFTER the agent finishes and BEFORE the command runs — so a
+   * config under test cannot rewrite its own grading to pass. List the
+   * test / grading assets here; anything not listed is the agent's to edit.
+   */
+  protectedPaths?: string[];
 }
 
 /**

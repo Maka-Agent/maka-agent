@@ -3,7 +3,9 @@ import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
-import { BackendRegistry, FakeBackend } from '@maka/runtime';
+import { BackendRegistry, FakeBackend, type AgentBackend, type SessionStore } from '@maka/runtime';
+import type { BackendKind, SessionEvent, SessionHeader } from '@maka/core';
+import type { BackendSendInput, PermissionDecision } from '@maka/core/backend-types';
 import type { Config, Task } from '../contracts.js';
 import { runExperiment } from '../runner.js';
 
@@ -12,6 +14,59 @@ const registerFakeBackend = (registry: BackendRegistry): void => {
     new FakeBackend({ sessionId: ctx.sessionId, header: ctx.header, store: ctx.store }),
   );
 };
+
+/**
+ * A malicious config: it rewrites the grading test in its own cwd to one
+ * that always passes, then completes normally. Used to prove clean-room
+ * grading reverts the tamper before scoring.
+ */
+class TamperBackend implements AgentBackend {
+  readonly kind: BackendKind = 'fake';
+  readonly sessionId: string;
+  constructor(private readonly ctx: { sessionId: string; header: SessionHeader; store: SessionStore }) {
+    this.sessionId = ctx.sessionId;
+  }
+  async *send(input: BackendSendInput): AsyncIterable<SessionEvent> {
+    const turnId = input.turnId;
+    const messageId = 'tamper-msg';
+    // Rewrite the grading script in its own cwd to one that always passes.
+    await writeFile(join(this.ctx.header.cwd, 'check.mjs'), 'process.exit(0);\n', 'utf8');
+    const text = 'rewrote the grading script to pass';
+    const ts = Date.now();
+    await this.ctx.store.appendMessage(this.sessionId, {
+      type: 'assistant',
+      id: messageId,
+      turnId,
+      ts,
+      text,
+      modelId: this.ctx.header.model,
+    });
+    yield { type: 'text_complete', id: 'tamper-tc', turnId, ts, messageId, text };
+    yield { type: 'complete', id: 'tamper-c', turnId, ts, stopReason: 'end_turn' };
+  }
+  async stop(): Promise<void> {}
+  async respondToPermission(_decision: PermissionDecision): Promise<void> {}
+  async dispose(): Promise<void> {}
+}
+
+const registerTamperBackend = (registry: BackendRegistry): void => {
+  registry.register('fake', (ctx) =>
+    new TamperBackend({ sessionId: ctx.sessionId, header: ctx.header, store: ctx.store }),
+  );
+};
+
+// A fixture whose grading script exits non-zero against the buggy source —
+// the only way `node check.mjs` passes is if the grading script is replaced.
+// (Plain exit-code grading, not `node --test`, so the verification child
+// doesn't collide with the lab's own test runner.)
+async function writeBuggyFixture(fixtureDir: string): Promise<void> {
+  await writeFile(join(fixtureDir, 'src.mjs'), 'export const add = (a, b) => a - b;\n', 'utf8');
+  await writeFile(
+    join(fixtureDir, 'check.mjs'),
+    "import { add } from './src.mjs';\nprocess.exit(add(2, 3) === 5 ? 0 : 1);\n",
+    'utf8',
+  );
+}
 
 const fakeConfig: Config = {
   id: 'fake-cfg',
@@ -91,6 +146,51 @@ describe('runExperiment (walking skeleton)', () => {
       assert.equal(result.status, 'completed');
       assert.equal(result.passed, false);
       assert.notEqual(result.exitCode, 0);
+    });
+  });
+});
+
+describe('clean-room grading (a config cannot rewrite its own test to pass)', () => {
+  test('protectedPaths reverts the tampered test before scoring', async () => {
+    await withDirs(async (fixtureDir, storageRoot) => {
+      await writeBuggyFixture(fixtureDir);
+      const task: Task = {
+        id: 'tamper-task',
+        instruction: 'fix the bug',
+        workspaceDir: fixtureDir,
+        verification: { command: 'node check.mjs', protectedPaths: ['check.mjs'] },
+      };
+
+      const result = await runExperiment(fakeConfig, task, {
+        storageRoot,
+        registerBackends: registerTamperBackend,
+      });
+
+      // The run completed normally, but the cheated grading script was
+      // restored to the original, which still fails the unfixed buggy source.
+      assert.equal(result.status, 'completed');
+      assert.equal(result.passed, false);
+      assert.notEqual(result.exitCode, 0);
+    });
+  });
+
+  test('without protectedPaths the tamper wins — proving the guard is load-bearing', async () => {
+    await withDirs(async (fixtureDir, storageRoot) => {
+      await writeBuggyFixture(fixtureDir);
+      const task: Task = {
+        id: 'tamper-unguarded',
+        instruction: 'fix the bug',
+        workspaceDir: fixtureDir,
+        verification: { command: 'node check.mjs' }, // nothing protected
+      };
+
+      const result = await runExperiment(fakeConfig, task, {
+        storageRoot,
+        registerBackends: registerTamperBackend,
+      });
+
+      assert.equal(result.status, 'completed');
+      assert.equal(result.passed, true); // the rewritten always-pass script graded it
     });
   });
 });

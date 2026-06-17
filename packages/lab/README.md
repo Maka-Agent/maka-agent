@@ -54,18 +54,32 @@ relative to the spec file, so a spec travels with its fixtures.
   pipeline; it never edits files, so a task passes only if its fixture
   already satisfies the verification.
 - **`ai-sdk`** — a real model. Reads the key from `apiKeyEnv`; the lab
-  carries no secrets at rest. Runs headlessly: read/edit/shell are
-  auto-allowed, but irreversible/host-reaching categories (delete,
-  destructive git, privileged, browser) are **denied by default** — the
-  workspace is a copy, not a sandbox, so a tool can still reach outside it
-  via absolute paths or the network. Opt into the dangerous categories
-  (`allowDangerousTools`) only inside a real OS/container sandbox. See
-  `examples/fix-add.spec.json` — a buggy `add()` the model must fix until
-  `node --test` passes:
+  carries no secrets at rest.
+
+  **No host isolation yet.** A real run executes the model's tool calls
+  (shell, file writes) on your machine with your privileges — the same
+  exposure as running Maka or any local agent directly. The throwaway
+  workspace keeps a run from mutating the source fixture, but a tool can
+  still read host files, your environment, or the network. Irreversible
+  host-reaching categories (delete, destructive git, privileged, browser)
+  are denied by default, which only narrows the blast radius. **Run only
+  models and tasks you trust.** Per-run container isolation (mount the
+  workspace only, env allowlist, network policy) is the planned hardening;
+  `allowDangerousTools` is meant for inside such a sandbox.
 
   ```sh
   DEEPSEEK_API_KEY=… maka-lab run examples/fix-add.spec.json --out /tmp/out
   ```
+
+## Grading
+
+Verification runs the task's `command` in the workspace; exit code 0 = pass.
+To stop a config from grading itself, list the test/grading files in
+`verification.protectedPaths`: they are restored from the pristine fixture
+*after* the agent finishes and *before* the command runs, so a model that
+rewrote its own test to pass has that edit reverted. `examples/fix-add`
+protects `test.mjs` — the model may edit `src.mjs`, never the test that
+grades it.
 
 ## Scope
 

@@ -10,7 +10,7 @@ import {
   createSessionStore,
 } from '@maka/storage';
 import type { Config, ResultRecord, Task } from './contracts.js';
-import { prepareWorkspace } from './sandbox.js';
+import { prepareWorkspace, restoreProtectedPaths } from './sandbox.js';
 import { runVerification } from './evaluator.js';
 
 export interface RunExperimentDeps {
@@ -100,6 +100,11 @@ export async function runExperiment(
         await manager.respondToPermission(session.id, { requestId, decision, rememberForTurn: true });
       }
     }
+
+    // Clean-room grading: restore the verification assets from the pristine
+    // fixture so anything the agent wrote over its own test is reverted
+    // before it is graded.
+    await restoreProtectedPaths(task.workspaceDir, workspace.dir, task.verification.protectedPaths ?? []);
 
     const evaluation = await runVerification(
       task.verification.command,

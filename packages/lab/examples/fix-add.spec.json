@@ -10,7 +10,7 @@
       "id": "fix-add",
       "instruction": "The test in test.mjs is failing because of a bug in src.mjs. Read both files, fix the bug in src.mjs so the test passes, then run `node --test` to confirm. Only edit src.mjs.",
       "workspaceDir": "./fix-add",
-      "verification": { "command": "node --test", "timeoutMs": 120000 }
+      "verification": { "command": "node --test", "timeoutMs": 120000, "protectedPaths": ["test.mjs"] }
     }
   ]
 }

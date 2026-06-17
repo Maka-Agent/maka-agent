@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
-import { prepareWorkspace } from '../sandbox.js';
+import { prepareWorkspace, restoreProtectedPaths } from '../sandbox.js';
 
 async function withFixture<T>(fn: (fixtureDir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), 'maka-lab-fixture-'));
@@ -49,6 +49,42 @@ describe('prepareWorkspace', () => {
       await writeFile(join(fixtureDir, 'real.txt'), 'x', 'utf8');
       await symlink('/etc/hosts', join(fixtureDir, 'escape'));
       await assert.rejects(prepareWorkspace(fixtureDir), /symlink/);
+    });
+  });
+});
+
+describe('restoreProtectedPaths', () => {
+  test('reverts agent edits to protected files, keeps the rest', async () => {
+    await withFixture(async (fixtureDir) => {
+      await writeFile(join(fixtureDir, 'test.mjs'), 'ORIGINAL', 'utf8');
+      await writeFile(join(fixtureDir, 'src.mjs'), 'src', 'utf8');
+
+      const ws = await prepareWorkspace(fixtureDir);
+      try {
+        // the agent tampers with both files
+        await writeFile(join(ws.dir, 'test.mjs'), 'CHEATED', 'utf8');
+        await writeFile(join(ws.dir, 'src.mjs'), 'edited', 'utf8');
+
+        await restoreProtectedPaths(fixtureDir, ws.dir, ['test.mjs']);
+
+        // protected file is back to pristine; the unprotected edit survives
+        assert.equal(await readFile(join(ws.dir, 'test.mjs'), 'utf8'), 'ORIGINAL');
+        assert.equal(await readFile(join(ws.dir, 'src.mjs'), 'utf8'), 'edited');
+      } finally {
+        await ws.cleanup();
+      }
+    });
+  });
+
+  test('rejects a protected path that escapes the workspace', async () => {
+    await withFixture(async (fixtureDir) => {
+      const ws = await prepareWorkspace(fixtureDir);
+      try {
+        await assert.rejects(restoreProtectedPaths(fixtureDir, ws.dir, ['../escape']), /relative/);
+        await assert.rejects(restoreProtectedPaths(fixtureDir, ws.dir, ['/etc/hosts']), /relative/);
+      } finally {
+        await ws.cleanup();
+      }
     });
   });
 });

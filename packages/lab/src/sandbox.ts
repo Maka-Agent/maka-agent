@@ -1,6 +1,6 @@
-import { cp, lstat, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { cp, lstat, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 
 /**
  * A throwaway copy of a task fixture. The copy keeps a run from mutating
@@ -42,4 +42,28 @@ export async function prepareWorkspace(fixtureDir: string): Promise<PreparedWork
     dir,
     cleanup: () => rm(dir, { recursive: true, force: true }),
   };
+}
+
+/**
+ * Clean-room grading: restore the listed paths in the workspace from the
+ * pristine fixture, overwriting whatever the agent left there. Run between
+ * the agent turn and the verification command so a config can't rewrite
+ * its own test to pass. Each path is removed first (drops any agent-planted
+ * symlink) then re-copied from the source.
+ */
+export async function restoreProtectedPaths(
+  sourceDir: string,
+  workspaceDir: string,
+  paths: string[],
+): Promise<void> {
+  const source = await realpath(sourceDir);
+  for (const rel of paths) {
+    if (isAbsolute(rel) || rel.split(/[\\/]+/).includes('..')) {
+      throw new Error(`protectedPaths must be relative and stay inside the workspace: ${rel}`);
+    }
+    const to = join(workspaceDir, rel);
+    await rm(to, { recursive: true, force: true });
+    await mkdir(dirname(to), { recursive: true });
+    await cp(join(source, rel), to, { recursive: true });
+  }
 }
