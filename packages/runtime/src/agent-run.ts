@@ -34,7 +34,7 @@ export interface AgentRunActiveSession {
 export interface AgentRunHooks {
   ensureActive(sessionId: string, header: SessionHeader): Promise<AgentRunActiveSession>;
   registerRun(active: AgentRunActiveSession, run: AgentRun): void;
-  unregisterRun(active: AgentRunActiveSession, run: AgentRun): void;
+  unregisterRun(active: AgentRunActiveSession, run: AgentRun): void | Promise<void>;
   updateHeader(sessionId: string, patch: Partial<SessionHeader>): Promise<SessionHeader>;
   updateStatus(sessionId: string, status: SessionStatus, blockedReason?: SessionBlockedReason, ts?: number): Promise<void>;
   appendTurnState(
@@ -48,7 +48,7 @@ export interface AgentRunHooks {
 
 export type AgentRunLineage = Partial<Pick<
   UserMessageInput,
-  'parentTurnId' | 'retriedFromTurnId' | 'regeneratedFromTurnId' | 'branchOfTurnId' | 'parentSessionId'
+  'parentRunId' | 'parentTurnId' | 'retriedFromTurnId' | 'regeneratedFromTurnId' | 'branchOfTurnId' | 'parentSessionId'
 >>;
 
 export interface AgentRunInput {
@@ -61,6 +61,7 @@ export interface AgentRunInput {
   newId: () => string;
   now: () => number;
   hooks: AgentRunHooks;
+  recordSessionMessages?: boolean;
 }
 
 export interface AgentRunBeginResult {
@@ -101,6 +102,7 @@ export class AgentRun {
     this.turnId = input.userInput.turnId;
     this.header = input.header;
     this.lineage = {
+      ...(input.userInput.parentRunId ? { parentRunId: input.userInput.parentRunId } : {}),
       ...(input.userInput.parentTurnId ? { parentTurnId: input.userInput.parentTurnId } : {}),
       ...(input.userInput.retriedFromTurnId ? { retriedFromTurnId: input.userInput.retriedFromTurnId } : {}),
       ...(input.userInput.regeneratedFromTurnId ? { regeneratedFromTurnId: input.userInput.regeneratedFromTurnId } : {}),
@@ -139,16 +141,18 @@ export class AgentRun {
   async begin(): Promise<AgentRunBeginResult> {
     await this.createRunRecord();
 
-    const userMsg: UserMessage = {
-      type: 'user',
-      id: this.input.newId(),
-      turnId: this.turnId,
-      ts: this.input.now(),
-      text: this.input.userInput.text,
-      ...(this.input.userInput.attachments ? { attachments: this.input.userInput.attachments } : {}),
-    };
-    await this.input.store.appendMessage(this.sessionId, userMsg);
-    await this.input.hooks.appendTurnState(this.sessionId, this.turnId, 'running', this.lineage);
+    if (this.recordsSessionMessages()) {
+      const userMsg: UserMessage = {
+        type: 'user',
+        id: this.input.newId(),
+        turnId: this.turnId,
+        ts: this.input.now(),
+        text: this.input.userInput.text,
+        ...(this.input.userInput.attachments ? { attachments: this.input.userInput.attachments } : {}),
+      };
+      await this.input.store.appendMessage(this.sessionId, userMsg);
+      await this.input.hooks.appendTurnState(this.sessionId, this.turnId, 'running', this.lineage);
+    }
 
     this.lastTs = this.input.now();
 
@@ -192,7 +196,7 @@ export class AgentRun {
         ? { status: 'aborted' }
         : (transition ?? { status: 'active' });
       const turnStatus = turnStatusFromEvent(ev);
-      if (turnStatus && !this.stopped) {
+      if (turnStatus && !this.stopped && this.recordsSessionMessages()) {
         await this.input.hooks.appendTurnState(this.sessionId, this.turnId, turnStatus.status, this.lineage, {
           ts: ev.ts,
           errorClass: turnStatus.errorClass,
@@ -206,10 +210,12 @@ export class AgentRun {
       }
       this.turnFailed = true;
       this.finalStatus = transition ?? { status: 'blocked', blockedReason: 'unknown' };
-      await this.input.hooks.appendTurnState(this.sessionId, this.turnId, 'failed', this.lineage, {
-        ts: ev.ts,
-        errorClass: ev.reason ?? ev.code ?? 'unknown',
-      });
+      if (this.recordsSessionMessages()) {
+        await this.input.hooks.appendTurnState(this.sessionId, this.turnId, 'failed', this.lineage, {
+          ts: ev.ts,
+          errorClass: ev.reason ?? ev.code ?? 'unknown',
+        });
+      }
       this.markRunFailed(ev.reason ?? ev.code ?? 'unknown', ev.message, ev.ts);
     }
   }
@@ -229,9 +235,11 @@ export class AgentRun {
       return;
     }
     this.finalStatus = { status: 'blocked', blockedReason: 'unknown' };
-    await this.input.hooks.appendTurnState(this.sessionId, this.turnId, 'failed', this.lineage, {
-      errorClass: error instanceof Error ? error.name : 'unknown',
-    }).catch(() => {});
+    if (this.recordsSessionMessages()) {
+      await this.input.hooks.appendTurnState(this.sessionId, this.turnId, 'failed', this.lineage, {
+        errorClass: error instanceof Error ? error.name : 'unknown',
+      }).catch(() => {});
+    }
     this.markRunFailed(error instanceof Error ? error.name : 'unknown', errorMessage(error), this.input.now());
   }
 
@@ -240,7 +248,7 @@ export class AgentRun {
     this.finalized = true;
     const lastTs = this.lastTs || this.input.now();
     if (this.active) {
-      this.input.hooks.unregisterRun(this.active, this);
+      await this.input.hooks.unregisterRun(this.active, this);
       if (this.stopped) this.finalStatus = { status: 'aborted' };
     }
     const nextStatus = this.active && this.active.activeRuns.size > 0
@@ -256,7 +264,7 @@ export class AgentRun {
     } catch {
       // The user-visible turn already completed; preserve existing behavior.
     }
-    if (this.sawCompletion) {
+    if (this.sawCompletion && this.recordsSessionMessages()) {
       await this.input.store.appendMessage(this.sessionId, {
         type: 'system_note',
         id: this.input.newId(),
@@ -266,6 +274,10 @@ export class AgentRun {
       } satisfies SystemNoteMessage).catch(() => {});
     }
     await this.finishRun(this.finalStatus, lastTs);
+  }
+
+  private recordsSessionMessages(): boolean {
+    return this.input.recordSessionMessages !== false;
   }
 
   private async createRunRecord(): Promise<void> {
@@ -284,6 +296,7 @@ export class AgentRun {
       createdAt,
       updatedAt: createdAt,
       ...this.lineage,
+      ...(this.input.userInput.agentName ? { agentName: this.input.userInput.agentName } : {}),
     };
     try {
       await this.input.runStore.createRun(header);
@@ -306,6 +319,7 @@ export class AgentRun {
   }
 
   private async buildPriorRuntimeContext(): Promise<PriorRuntimeContext | undefined> {
+    if (this.lineage.parentRunId) return undefined;
     if (
       !this.input.runStore ||
       !this.input.runtimeEventStore ||
@@ -313,7 +327,11 @@ export class AgentRun {
       !this.runtimeEventStoreAvailable
     ) return undefined;
     const runs = await this.input.runStore.listSessionRuns(this.sessionId);
-    const priorRuns = runs.filter((run) => run.runId !== this.runId && run.turnId !== this.turnId);
+    const priorRuns = runs.filter((run) =>
+      run.runId !== this.runId &&
+      run.turnId !== this.turnId &&
+      !run.parentRunId
+    );
     if (priorRuns.length === 0) return undefined;
 
     const ordered: Array<{ event: RuntimeEvent; runIndex: number; eventIndex: number }> = [];

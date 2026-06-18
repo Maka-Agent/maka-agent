@@ -31,11 +31,25 @@ export interface UserMessageInput {
   turnId: string;
   text: string;
   attachments?: AttachmentRef[];
+  parentRunId?: string;
+  agentName?: string;
   parentTurnId?: string;
   retriedFromTurnId?: string;
   regeneratedFromTurnId?: string;
   branchOfTurnId?: string;
   parentSessionId?: string;
+}
+
+export interface AgentSpec {
+  name: string;
+  systemPrompt: string;
+}
+
+export interface ChildAgentTurnInput {
+  turnId: string;
+  parentRunId: string;
+  spec: AgentSpec;
+  prompt: string;
 }
 
 export interface RetryTurnInput {

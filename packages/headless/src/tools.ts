@@ -1,5 +1,9 @@
 import type { MakaTool } from '@maka/runtime';
-import { buildBuiltinTools } from '@maka/runtime';
+import {
+  buildBuiltinTools,
+  buildSubagentProjectionTools,
+  buildSubagentSpawnTool,
+} from '@maka/runtime';
 import { z } from 'zod';
 import type { IsolatedToolExecutor } from './isolation.js';
 
@@ -12,7 +16,12 @@ import type { IsolatedToolExecutor } from './isolation.js';
  */
 export function buildIsolatedHeadlessTools(executor: IsolatedToolExecutor): MakaTool[] {
   const pureTools = buildBuiltinTools().filter((tool) => tool.name !== 'Bash');
-  return [buildIsolatedBashTool(executor), ...pureTools];
+  return [
+    buildIsolatedBashTool(executor),
+    ...pureTools,
+    buildSubagentSpawnTool(),
+    ...buildSubagentProjectionTools(),
+  ];
 }
 
 export function buildIsolatedBashTool(executor: IsolatedToolExecutor): MakaTool {

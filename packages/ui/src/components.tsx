@@ -6507,6 +6507,7 @@ function permissionValuePreview(value: unknown): string {
  *   destructive tone
  * - `office_document`: Office adapter stdout/stderr/diagnostic cards
  * - `explore_agent`: bounded read-only subagent findings
+ * - `subagent`: foreground child-agent run summary
  * - `json`: pretty-printed in a code block
  * - `text` / others: plain `<pre>` fallback
  *
@@ -6573,6 +6574,10 @@ function OverlayPreview(props: { content: ToolResultContent }) {
 
   if (content.kind === 'explore_agent') {
     return <ExploreAgentPreview result={content} />;
+  }
+
+  if (content.kind === 'subagent') {
+    return <SubagentPreview result={content} />;
   }
 
   if (content.kind === 'rive_workflow') {
@@ -6665,6 +6670,66 @@ function formatRiveWorkflowNode(node: NonNullable<Extract<ToolResultContent, { k
     node.worker ? `worker=${node.worker}` : '',
   ].filter(Boolean).join(' · ');
   return attrs ? `- ${label}: ${attrs}` : `- ${label}`;
+}
+
+type SubagentResult = Extract<ToolResultContent, { kind: 'subagent' }>;
+
+const SUBAGENT_STATUS_LABEL: Record<SubagentResult['status'], string> = {
+  completed: '已完成',
+  failed: '失败',
+  cancelled: '已取消',
+  running: '运行中',
+  waiting_permission: '等待权限',
+};
+
+function SubagentPreview(props: {
+  result: SubagentResult;
+}) {
+  const { result } = props;
+  const duration = formatDuration(result.durationMs);
+  const status = presentSubagentStatus(result.status);
+  const summary = typeof result.summary === 'string' ? result.summary.trim() : '';
+  const artifactCount = result.artifactIds.length;
+  const meta = [
+    status,
+    presentSubagentPermission(result.permissionMode),
+    duration ? `耗时 ${duration}` : '',
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <div className="maka-overlay-preview maka-subagent-preview" data-kind="subagent" data-status={result.status}>
+      <header className="maka-explore-agent-head">
+        <strong>{redactSecrets(result.agentName || 'Subagent')}</strong>
+        <small>{meta}</small>
+      </header>
+      {summary.length > 0 && (
+        <section className="maka-explore-agent-section" aria-label="子代理结果摘要">
+          <strong>结果摘要</strong>
+          <p>{redactSecrets(summary)}</p>
+        </section>
+      )}
+      {result.failureClass && (
+        <div className="maka-explore-agent-message" role="note">
+          {redactSecrets(result.failureClass)}
+        </div>
+      )}
+      {artifactCount > 0 && (
+        <section className="maka-explore-agent-section" aria-label="子代理产物">
+          <strong>产物</strong>
+          <p>{artifactCount} 个</p>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function presentSubagentStatus(status: SubagentResult['status']): string {
+  return SUBAGENT_STATUS_LABEL[status] ?? status;
+}
+
+function presentSubagentPermission(permissionMode: SubagentResult['permissionMode']): string {
+  if (permissionMode === 'explore') return '只读';
+  return permissionMode;
 }
 
 function ExploreAgentPreview(props: {

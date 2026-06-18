@@ -53,6 +53,8 @@ export type { InvocationContext } from './invocation-context.js';
  * of the flow, not inside it.
  */
 export interface FlowInput {
+  /** Parent AgentRun id when this flow is running a child agent turn. */
+  parentRunId?: string;
   /** User turn text. */
   text: string;
   /** Optional attachments bound to the user message. */

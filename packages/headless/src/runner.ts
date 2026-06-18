@@ -4,6 +4,7 @@ import type { BackendKind } from '@maka/core';
 import {
   BackendRegistry,
   SessionManager,
+  buildChildAgentTools,
   type InvocationResult,
 } from '@maka/runtime';
 import {
@@ -17,6 +18,7 @@ import type { HeadlessBackendContext, RealBackendIsolation } from './isolation.j
 import { validateRealBackendIsolation } from './isolation.js';
 import { prepareWorkspace, restoreProtectedPaths } from './sandbox.js';
 import { runVerification } from './evaluator.js';
+import { buildIsolatedHeadlessTools } from './tools.js';
 
 export interface RunExperimentDeps {
   /**
@@ -120,6 +122,9 @@ export async function runExperiment(
       runStore: createAgentRunStore(deps.storageRoot),
       runtimeEventStore: createRuntimeEventStore(deps.storageRoot),
       backends,
+      ...(deps.realBackendIsolation?.toolExecutor
+        ? { childTools: buildChildAgentTools(buildIsolatedHeadlessTools(deps.realBackendIsolation.toolExecutor)) }
+        : {}),
       newId,
       now,
       runtimeSource: 'test',

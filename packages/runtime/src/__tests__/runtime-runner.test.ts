@@ -15,7 +15,7 @@ import type {
   RuntimeEvent,
   RuntimeEventStatus,
 } from '@maka/core/runtime-event';
-import type { AgentFlow, RunnableAgentFlow } from '../agent-flow.js';
+import type { AgentFlow, FlowInput, RunnableAgentFlow } from '../agent-flow.js';
 
 // ============================================================================
 // Test fakes / helpers
@@ -61,13 +61,15 @@ void _flowContextIsCanonicalContext;
  */
 class ScriptFlow implements RunnableAgentFlow {
   readonly seen: InvocationContext[] = [];
+  readonly seenInputs: FlowInput[] = [];
   constructor(
     private readonly script: (ctx: InvocationContext) =>
       RuntimeEvent[] | Promise<RuntimeEvent[]>,
   ) {}
 
-  async *run(ctx: InvocationContext): AsyncIterable<RuntimeEvent> {
+  async *run(ctx: InvocationContext, input: FlowInput): AsyncIterable<RuntimeEvent> {
     this.seen.push(ctx);
+    this.seenInputs.push(input);
     for (const ev of await this.script(ctx)) {
       yield ev;
     }
@@ -571,5 +573,17 @@ describe('RuntimeRunner', () => {
     await runner.run(makeRequest());
 
     expect(seenInput?.context).toEqual([]);
+  });
+
+  test('flow input carries parentRunId from invocation lineage', async () => {
+    const providers = makeProviders();
+    const flow = new ScriptFlow((ctx) => [flowTerminalEvent(ctx, 'completed')]);
+    const runner = new RuntimeRunner({ flow, providers });
+
+    await runner.run(makeRequest({
+      lineage: { parentRunId: 'parent-run-1' },
+    }));
+
+    expect(flow.seenInputs[0]?.parentRunId).toBe('parent-run-1');
   });
 });

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import { buildChildAgentTools } from '@maka/runtime';
 import { buildIsolatedBashTool, buildIsolatedHeadlessTools } from '../tools.js';
 
 describe('isolated headless tools', () => {
@@ -50,6 +51,10 @@ describe('isolated headless tools', () => {
     assert.equal(names[0], 'Bash');
     assert.ok(names.includes('Read'));
     assert.ok(names.includes('Write'));
+    assert.ok(names.includes('agent_spawn'));
+    assert.ok(names.includes('agent_list'));
+    assert.ok(names.includes('agent_output'));
     assert.equal(names.filter((name) => name === 'Bash').length, 1);
+    assert.deepEqual(buildChildAgentTools(tools).map((tool) => tool.name), ['Bash', 'Read', 'Glob', 'Grep']);
   });
 });

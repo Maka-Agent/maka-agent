@@ -19,6 +19,12 @@ export type {
   SessionStore,
   BackendFactory,
   BackendFactoryContext,
+  SpawnChildAgentInput,
+  SpawnChildAgentResult,
+  AgentListItem,
+  AgentListResult,
+  AgentOutputInput,
+  AgentOutputResult,
 } from './session-manager.js';
 
 export { PermissionEngine, createDefaultPermissionEngineDeps } from './permission-engine.js';
@@ -60,6 +66,17 @@ export type {
 
 export { buildBuiltinTools } from './builtin-tools.js';
 export type { MakaTool as BuiltinMakaTool, MakaToolContext as BuiltinMakaToolContext } from './builtin-tools.js';
+export {
+  AGENT_LIST_TOOL_NAME,
+  AGENT_OUTPUT_TOOL_NAME,
+  AGENT_SPAWN_TOOL_NAME,
+  CHILD_AGENT_TOOL_NAMES,
+  buildChildAgentTools,
+  buildSubagentListTool,
+  buildSubagentOutputTool,
+  buildSubagentProjectionTools,
+  buildSubagentSpawnTool,
+} from './subagent-tools.js';
 export {
   deriveToolArtifactCandidates,
   extractStdoutRedirectPath,

@@ -55,6 +55,7 @@ import type {
   BackendSendInput,
   PermissionDecision,
 } from '@maka/core/backend-types';
+import type { AgentSpec } from '@maka/core/runtime-inputs';
 import type { LlmConnection } from '@maka/core/llm-connections';
 import type { RuntimeEvent } from '@maka/core/runtime-event';
 import type { LlmCallRecord, ToolInvocationRecord } from '@maka/core/usage-stats/types';
@@ -309,6 +310,14 @@ export interface AiSdkBackendInput {
   /** Optional fire-and-forget telemetry hooks. Tool implementations remain unaware. */
   recordLlmCall?: LlmTelemetryRecorder;
   recordToolInvocation?: ToolTelemetryRecorder;
+  spawnChildAgent?: (input: {
+    parentRunId: string;
+    spec: AgentSpec;
+    prompt: string;
+    abortSignal: AbortSignal;
+  }) => Promise<unknown>;
+  listChildAgents?: () => Promise<unknown>;
+  readChildAgentOutput?: (input: { runId?: string; turnId?: string; maxEvents?: number }) => Promise<unknown>;
   /** Optional diagnostic trace hook for explaining a runtime turn without changing renderer events. */
   recordRunTrace?: RunTraceRecorder;
   /**
@@ -365,6 +374,7 @@ export class AiSdkBackend implements AgentBackend {
   private aborted = false;
   private abortController: AbortController | null = null;
   private currentTurnId: string | null = null;
+  private currentRunId: string | null = null;
   /** Side-channel for tool.execute() callbacks to push events into the iterator. */
   private currentQueue: AsyncEventQueue<SessionEvent> | null = null;
   /** Paused while the backend is waiting on a user permission decision. */
@@ -403,6 +413,10 @@ export class AiSdkBackend implements AgentBackend {
       newId: this.newId,
       now: this.now,
       getPermissionPauseTarget: () => this.currentWatchdog,
+      getCurrentRunId: () => this.currentRunId ?? undefined,
+      spawnChildAgent: input.spawnChildAgent,
+      listChildAgents: input.listChildAgents,
+      readChildAgentOutput: input.readChildAgentOutput,
       getRunTrace: () => this.currentRunTrace,
       permissionTimeoutMs: input.permissionTimeoutMs,
       recordToolInvocation: input.recordToolInvocation,
@@ -417,6 +431,7 @@ export class AiSdkBackend implements AgentBackend {
   async *send(input: BackendSendInput): AsyncIterable<SessionEvent> {
     const turnId = input.turnId;
     this.currentTurnId = turnId;
+    this.currentRunId = input.runId ?? null;
     this.input.permissionEngine.beginTurn(turnId);
     this.abortController = new AbortController();
 
@@ -1530,6 +1545,7 @@ export class AiSdkBackend implements AgentBackend {
     this.abortController = null;
     this.currentQueue = null;
     this.currentTurnId = null;
+    this.currentRunId = null;
     this.currentRunTrace = null;
     this.toolRuntime.resetTurnState();
     this.aborted = false;

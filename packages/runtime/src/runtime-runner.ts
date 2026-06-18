@@ -299,6 +299,7 @@ function buildUserEvent(ctx: InvocationContext, request: InvocationRequest): Run
 
 function buildFlowInput(request: InvocationRequest): FlowInput {
   return {
+    ...(request.lineage?.parentRunId ? { parentRunId: request.lineage.parentRunId } : {}),
     text: request.text,
     context: request.context ?? [],
     ...(request.runtimeContext !== undefined ? { runtimeContext: request.runtimeContext } : {}),
