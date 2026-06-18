@@ -421,7 +421,9 @@ describe('localized main shell contract', () => {
     const listStyle = styles.match(/\.maka-skill-library-list\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
 
     assert.match(skillPanel, /<ul className="maka-skill-library-list" aria-label="技能列表" aria-busy=\{props\.actionBusy \? 'true' : undefined\}>/);
-    assert.match(skillPanel, /<li key=\{skill\.id\} className="maka-skill-library-item">[\s\S]*?<button[\s\S]*?className="maka-skill-library-row"/);
+    assert.match(skillPanel, /<li key=\{skill\.id\} className="maka-skill-library-item">[\s\S]*?<UiButton[\s\S]*?className="maka-skill-library-row"/);
+    assert.match(skillPanel, /<UiButton[\s\S]*variant="ghost"[\s\S]*disabled=\{props\.actionBusy\}[\s\S]*title=\{hoverText\}/);
+    assert.doesNotMatch(skillPanel, /<button[\s\S]*?className="maka-skill-library-row"/);
     assert.match(listStyle, /list-style:\s*none/);
     assert.match(listStyle, /margin:\s*0/);
     assert.match(listStyle, /padding:\s*0/);

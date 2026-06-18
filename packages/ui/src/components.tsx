@@ -819,8 +819,9 @@ function SkillLibraryPanel(props: {
           : `打开技能文件：${skill.id}`;
         return (
           <li key={skill.id} className="maka-skill-library-item">
-            <button
+            <UiButton
               type="button"
+              variant="ghost"
               className="maka-skill-library-row"
               onClick={() => props.onOpenSkill?.(skill.id)}
               disabled={props.actionBusy}
@@ -840,7 +841,7 @@ function SkillLibraryPanel(props: {
                   </span>
                 )}
               </span>
-            </button>
+            </UiButton>
           </li>
         );
       })}
