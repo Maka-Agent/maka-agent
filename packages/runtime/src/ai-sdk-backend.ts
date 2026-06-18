@@ -432,6 +432,7 @@ export class AiSdkBackend implements AgentBackend {
     const turnId = input.turnId;
     this.currentTurnId = turnId;
     this.currentRunId = input.runId ?? null;
+    this.toolRuntime.setArtifactRecorderWait(input.parentRunId !== undefined);
     this.input.permissionEngine.beginTurn(turnId);
     this.abortController = new AbortController();
 

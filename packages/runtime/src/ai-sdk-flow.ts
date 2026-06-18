@@ -474,6 +474,7 @@ export class AiSdkFlow implements AgentFlow, AgentFlowControl {
     try {
       for await (const sessionEvent of this.backend.send({
         runId: ctx.runId,
+        ...(input.parentRunId ? { parentRunId: input.parentRunId } : {}),
         turnId: ctx.turnId,
         text: input.text,
         ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),

@@ -82,6 +82,7 @@ export interface ToolGating {
 export const TOOL_ERROR_RESULT_MAX_CHARS = 4000;
 export const MAX_ACTIVE_SUBAGENT_TOOLS_PER_TURN = 5;
 export const DEFAULT_PERMISSION_TIMEOUT_MS = 300_000;
+export const DEFAULT_ARTIFACT_RECORDER_WAIT_TIMEOUT_MS = 1_000;
 
 const SUBAGENT_TOOL_LIMIT_MESSAGE = '只读探索并发过多：同一轮最多 5 个子代理。请等待已有探索完成后再继续。';
 
@@ -106,12 +107,14 @@ export interface ToolRuntimeInput {
   readChildAgentOutput?: (input: { runId?: string; turnId?: string; maxEvents?: number }) => Promise<unknown>;
   getRunTrace?: () => RunTraceLike | null;
   permissionTimeoutMs?: number;
+  artifactRecorderWaitTimeoutMs?: number;
   recordToolInvocation?: ToolTelemetryRecorder;
   recordToolArtifacts?: ToolArtifactRecorder;
 }
 
 export class ToolRuntime {
   private activeSubagentToolCount = 0;
+  private waitForArtifactRecorder = false;
   /**
    * Tool-availability gating for the execute boundary. Set by the backend each
    * turn from `ToolAvailabilityRuntime`. Undefined when gating is off (economy
@@ -142,9 +145,14 @@ export class ToolRuntime {
     this.gating = gating;
   }
 
+  setArtifactRecorderWait(wait: boolean): void {
+    this.waitForArtifactRecorder = wait;
+  }
+
   resetTurnState(): void {
     this.activeSubagentToolCount = 0;
     this.gating = undefined;
+    this.waitForArtifactRecorder = false;
   }
 
   async writeSyntheticToolResult(
@@ -428,7 +436,7 @@ export class ToolRuntime {
           status: toolResultStatus,
         });
 
-        await recordToolArtifactsSafely(
+        const artifactRecording = recordToolArtifactsSafely(
           {
             sessionId: this.input.sessionId,
             turnId,
@@ -450,6 +458,24 @@ export class ToolRuntime {
             });
           },
         );
+        if (this.waitForArtifactRecorder) {
+          await waitForArtifactRecorder(
+            artifactRecording,
+            this.input.artifactRecorderWaitTimeoutMs ?? DEFAULT_ARTIFACT_RECORDER_WAIT_TIMEOUT_MS,
+            (message) => {
+              queue.push({
+                type: 'tool_progress',
+                id: this.input.newId(),
+                turnId,
+                ts: this.input.now(),
+                toolUseId,
+                chunk: message,
+              });
+            },
+          );
+        } else {
+          void artifactRecording;
+        }
 
         return result;
       } finally {
@@ -623,6 +649,34 @@ export function classifyError(error: unknown): string {
   if (text.includes('timeout')) return 'Timeout';
   if (text.includes('network') || text.includes('fetch')) return 'Network';
   return error.name || 'Other';
+}
+
+async function waitForArtifactRecorder(
+  recording: Promise<void>,
+  timeoutMs: number,
+  onWarning: (message: string) => void,
+): Promise<void> {
+  if (timeoutMs <= 0) {
+    void recording;
+    onWarning('Artifact recorder still running; artifacts may appear later.');
+    return;
+  }
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), timeoutMs);
+  });
+  try {
+    const result = await Promise.race([
+      recording.then(() => 'recorded' as const),
+      timeout,
+    ]);
+    if (result === 'timeout') {
+      onWarning(`Artifact recorder timed out after ${timeoutMs}ms; artifacts may appear later.`);
+    }
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 export function errorReasonFromClass(errorClass: string): string | undefined {

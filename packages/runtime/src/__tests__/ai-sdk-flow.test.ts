@@ -481,6 +481,23 @@ describe('AiSdkFlow seam', () => {
     );
   });
 
+  test('forwards child parentRunId to the wrapped backend', async () => {
+    const backend = new ScriptedBackend({
+      events: [
+        ev({ type: 'complete', stopReason: 'end_turn' }),
+      ],
+    });
+    const flow = new AiSdkFlow({ backend });
+
+    await collect(flow.run(ctx, {
+      text: 'child prompt',
+      parentRunId: 'parent-run-1',
+      context: [],
+    }));
+
+    assert.equal(backend.sendInputs[0]?.parentRunId, 'parent-run-1');
+  });
+
   test('bridges FlowInput.abortSignal onto backend.stop("user_stop")', async () => {
     let releaseGate: () => void = () => {};
     const gate = new Promise<void>((resolve) => {
