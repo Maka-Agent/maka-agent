@@ -17,7 +17,7 @@ import {
   type SubscriptionAccountState,
   type UpdateConnectionInput,
 } from '@maka/core';
-import { RelativeTime, useToast, useModalA11y } from '@maka/ui';
+import { Button, Input, RelativeTime, useToast, useModalA11y } from '@maka/ui';
 import { formatRelativeTimestamp } from '@maka/core';
 import { PasswordInput } from './password-input';
 
@@ -1273,15 +1273,15 @@ function AddProviderForm(props: {
       )}
       <label>
         <span>连接标识</span>
-        <input value={slug} onChange={(event) => setSlug(event.currentTarget.value)} placeholder="my-provider" disabled={isExperimental || busy} aria-label="模型供应商连接标识" />
+        <Input value={slug} onChange={(event) => setSlug(event.currentTarget.value)} placeholder="my-provider" disabled={isExperimental || busy} aria-label="模型供应商连接标识" />
       </label>
       <label>
         <span>显示名称</span>
-        <input value={name} onChange={(event) => setName(event.currentTarget.value)} placeholder={display.name} disabled={isExperimental || busy} aria-label="模型供应商显示名称" />
+        <Input value={name} onChange={(event) => setName(event.currentTarget.value)} placeholder={display.name} disabled={isExperimental || busy} aria-label="模型供应商显示名称" />
       </label>
       <label>
         <span>服务地址 {requiresBaseUrl ? '（必填）' : ''}</span>
-        <input
+        <Input
           value={baseUrl}
           onChange={(event) => setBaseUrl(event.currentTarget.value)}
           placeholder={defaults.baseUrl || 'https://…'}
@@ -1291,7 +1291,7 @@ function AddProviderForm(props: {
       </label>
       <label>
         <span>默认模型</span>
-        <input
+        <Input
           value={defaultModel}
           onChange={(event) => setDefaultModel(event.currentTarget.value)}
           placeholder={defaults.fallbackModels[0] || 'model-id'}
@@ -1301,10 +1301,10 @@ function AddProviderForm(props: {
       </label>
       {error && <p className="providerError">{error}</p>}
       <div className="providerActions">
-        <button className="maka-button" type="button" disabled={busy} onClick={props.onCancel}>取消</button>
-        <button className="maka-button" data-variant="primary" type="button" disabled={busy || isExperimental} onClick={submit}>
+        <Button className="maka-button" variant="ghost" type="button" disabled={busy} onClick={props.onCancel}>取消</Button>
+        <Button className="maka-button" type="button" disabled={busy || isExperimental} onClick={submit}>
           {busy ? '保存中…' : '保存供应商'}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -1632,11 +1632,11 @@ function ConnectionDetail(props: {
       </header>
       <label>
         <span>连接标识</span>
-        <input value={connection.slug} disabled aria-label="模型连接标识" />
+        <Input value={connection.slug} disabled aria-label="模型连接标识" />
       </label>
       <label>
         <span>服务地址 {hasFixedOAuthBaseUrl ? '（OAuth 固定）' : ''}</span>
-        <input
+        <Input
           value={hasFixedOAuthBaseUrl ? defaults.baseUrl : baseUrl}
           onChange={(event) => setBaseUrl(event.currentTarget.value)}
           placeholder={defaults.baseUrl}
@@ -1709,20 +1709,20 @@ function ConnectionDetail(props: {
         </a>
       )}
       <div className="providerActions">
-        <button className="maka-button" data-variant="primary" type="button" disabled={detailActionBusy || !hasSaveChanges} onClick={save}>
+        <Button className="maka-button" type="button" disabled={detailActionBusy || !hasSaveChanges} onClick={save}>
           {busy ? '保存中…' : '保存修改'}
-        </button>
-        <button className="maka-button" type="button" disabled={detailActionBusy || !hasUsableCredential} onClick={runTest}>
+        </Button>
+        <Button className="maka-button" variant="secondary" type="button" disabled={detailActionBusy || !hasUsableCredential} onClick={runTest}>
           {testing ? '测试中…' : '测试连接'}
-        </button>
+        </Button>
         {!props.isDefault && connection.enabled && (
-          <button className="maka-button" type="button" disabled={detailActionBusy} onClick={setAsDefault}>
+          <Button className="maka-button" variant="secondary" type="button" disabled={detailActionBusy} onClick={setAsDefault}>
             {settingDefault ? '设置中…' : '设为默认'}
-          </button>
+          </Button>
         )}
-        <button className="maka-button" data-variant="destructive" type="button" disabled={detailActionBusy} onClick={remove}>
+        <Button className="maka-button" variant="destructive" type="button" disabled={detailActionBusy} onClick={remove}>
           {deleting ? '删除中…' : '删除'}
-        </button>
+        </Button>
       </div>
     </div>
   );

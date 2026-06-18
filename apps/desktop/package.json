@@ -42,8 +42,10 @@
     "ws": "^8.21.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "@types/ws": "^8.18.1"
+    "@types/ws": "^8.18.1",
+    "tailwindcss": "^4.3.1"
   }
 }

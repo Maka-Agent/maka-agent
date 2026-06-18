@@ -55,6 +55,10 @@ const ALLOW = new Map([
     'message routed through generalizedErrorMessage.',
   ],
   [
+    'packages/headless/src/cli.ts',
+    'CLI entrypoint prints command progress, usage, and failures to stdout/stderr by design.',
+  ],
+  [
     'scripts/check-console.mjs',
     'this script — explicit allow.',
   ],
