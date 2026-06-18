@@ -98,6 +98,17 @@ import {
   type ToolOutputChunk,
   type TurnViewModel,
 } from './materialize.js';
+import {
+  Badge,
+  Button as UiButton,
+  Card,
+  DialogClose,
+  DialogContent,
+  DialogRoot,
+  Input,
+  Textarea as UiTextarea,
+  cn,
+} from './ui.js';
 
 /**
  * PR-SIDEBAR-IA-0 Phase 2 + fixup (xuan msg `47e204f2`, `91401163`;
@@ -704,40 +715,41 @@ export interface EmptyStateProps {
 }
 
 export function EmptyState(props: EmptyStateProps) {
-  const className = props.extraClassName
-    ? `maka-empty-state ${props.extraClassName}`
-    : 'maka-empty-state';
+  const className = cn(
+    'maka-empty-state grid place-items-center gap-3 rounded-xl border border-border bg-card/70 p-8 text-center text-card-foreground shadow-maka-panel',
+    props.extraClassName,
+  );
   return (
-    <div className={className} data-empty-view={props.dataEmptyView}>
-      <props.Icon className="maka-empty-state-icon" strokeWidth={1.5} />
-      <div className="maka-empty-state-title">{props.title}</div>
-      <div className="maka-empty-state-body">{props.body}</div>
+    <Card className={className} data-empty-view={props.dataEmptyView}>
+      <props.Icon className="maka-empty-state-icon size-10 text-muted-foreground" strokeWidth={1.5} />
+      <div className="maka-empty-state-title text-base font-semibold text-foreground">{props.title}</div>
+      <div className="maka-empty-state-body max-w-[48ch] text-sm leading-6 text-muted-foreground">{props.body}</div>
       {(props.cta || props.secondaryCta) && (
-        <div className="maka-empty-state-actions">
+        <div className="maka-empty-state-actions mt-2 flex flex-wrap items-center justify-center gap-2">
           {props.cta && (
-            <button
+            <UiButton
               className="maka-button maka-empty-state-cta"
               type="button"
               onClick={props.cta.onClick}
               disabled={props.cta.disabled}
             >
               {props.cta.label}
-            </button>
+            </UiButton>
           )}
           {props.secondaryCta && (
-            <button
+            <UiButton
+              variant="ghost"
               className="maka-button maka-empty-state-cta"
-              data-variant="ghost"
               type="button"
               onClick={props.secondaryCta.onClick}
               disabled={props.secondaryCta.disabled}
             >
               {props.secondaryCta.label}
-            </button>
+            </UiButton>
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -2257,33 +2269,33 @@ export function SearchModal(props: {
   const resultsTruncated = showResults && results.some((result) => result.truncated === true);
 
   return (
-    <div
-      className="maka-modal-backdrop maka-search-modal-backdrop"
-      role="presentation"
-      onClick={() => props.onClose()}
+    <DialogRoot
+      open
+      onOpenChange={(open) => {
+        if (!open) props.onClose();
+      }}
     >
-      <div
+      <DialogContent
         ref={dialogRef}
-        className="maka-modal maka-search-modal"
-        role="dialog"
-        aria-modal="true"
+        className="maka-modal maka-search-modal w-[min(92vw,640px)] p-0"
         aria-labelledby="maka-search-modal-title"
-        onClick={(event) => event.stopPropagation()}
+        showClose={false}
       >
         <header className="maka-search-modal-header">
           <h2 id="maka-search-modal-title" className="maka-search-modal-title">搜索</h2>
-          <button
+          <DialogClose
+            render={<UiButton variant="quiet" size="icon-sm" />}
             type="button"
             className="maka-search-modal-close"
             onClick={() => props.onClose()}
             aria-label="关闭搜索"
           >
-            ×
-          </button>
+            <X size={16} strokeWidth={1.8} aria-hidden="true" />
+          </DialogClose>
         </header>
         <div className="maka-search-modal-input-row">
           <Search size={16} strokeWidth={1.75} aria-hidden="true" className="maka-search-modal-input-icon" />
-          <input
+          <Input
             ref={inputRef}
             type="search"
             className="maka-search-modal-input"
@@ -2340,14 +2352,16 @@ export function SearchModal(props: {
             spellCheck={false}
           />
           {query.length > 0 && (
-            <button
+            <UiButton
+              variant="quiet"
+              size="icon-sm"
               type="button"
               className="maka-search-modal-clear"
               aria-label="清空搜索"
               onClick={clearSearchQuery}
             >
               <X size={14} strokeWidth={1.8} aria-hidden="true" />
-            </button>
+            </UiButton>
           )}
         </div>
         <div className="maka-search-modal-body" role="region" aria-label="搜索状态和结果" aria-live="polite">
@@ -2394,8 +2408,9 @@ export function SearchModal(props: {
               <ul id="maka-search-modal-results" className="maka-search-modal-results" role="listbox" aria-label="搜索结果">
                 {results.map((result, index) => (
                   <li key={`${result.target?.kind === 'thread' ? result.target.sessionId : index}-${index}`}>
-                    <button
-                      ref={(node) => { resultRefs.current[index] = node; }}
+                    <UiButton
+                      variant="ghost"
+                      ref={(node) => { resultRefs.current[index] = node as HTMLButtonElement | null; }}
                       id={`maka-search-modal-result-${index}`}
                       type="button"
                       role="option"
@@ -2418,15 +2433,15 @@ export function SearchModal(props: {
                         // per kenji SEARCH gate (no path / no URL exposure).
                         <div className="maka-search-modal-result-snippet">{renderSearchSnippet(result.snippet, trimmed)}</div>
                       )}
-                    </button>
+                    </UiButton>
                   </li>
                 ))}
               </ul>
             </>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </DialogRoot>
   );
 }
 
@@ -5697,9 +5712,10 @@ export const Composer = forwardRef<
       onSubmit={submit}
     >
       <div className="maka-composer-inner composerInner">
-        <textarea
+        <UiTextarea
           ref={textareaRef}
           name="text"
+          className="maka-composer-textarea min-h-[44px] resize-none border-0 bg-transparent px-0 py-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
           placeholder={copy.placeholder}
           aria-label={copy.textareaAriaLabel}
           disabled={props.disabled}
@@ -5734,7 +5750,9 @@ export const Composer = forwardRef<
           </span>
           <div>
             {!props.streaming && props.onImportTextFile && (
-              <button
+              <UiButton
+                variant="quiet"
+                size="icon-sm"
                 className="maka-composer-tool-button"
                 type="button"
                 disabled={props.disabled || importActionBusy}
@@ -5745,10 +5763,12 @@ export const Composer = forwardRef<
                 title={pendingImportAction === 'file' ? '正在导入文件内容' : '导入文件内容'}
               >
                 <Paperclip size={14} strokeWidth={1.75} aria-hidden="true" />
-              </button>
+              </UiButton>
             )}
             {!props.streaming && props.onImportFolderOutline && (
-              <button
+              <UiButton
+                variant="quiet"
+                size="icon-sm"
                 className="maka-composer-tool-button"
                 type="button"
                 disabled={props.disabled || importActionBusy}
@@ -5759,12 +5779,12 @@ export const Composer = forwardRef<
                 title={pendingImportAction === 'folder' ? '正在导入文件夹目录' : '导入文件夹目录'}
               >
                 <FolderOpen size={14} strokeWidth={1.75} aria-hidden="true" />
-              </button>
+              </UiButton>
             )}
             {props.streaming ? (
-              <button
+              <UiButton
                 className="maka-button"
-                data-variant="primary"
+                variant="default"
                 type="button"
                 disabled={props.stopPending}
                 onClick={() => {
@@ -5775,11 +5795,11 @@ export const Composer = forwardRef<
                 data-pending={props.stopPending ? 'true' : undefined}
               >
                 {props.stopPending ? '停止中…' : buttonCopy.stopLabel}
-              </button>
+              </UiButton>
             ) : (
-              <button className="maka-button" data-variant="primary" type="submit" disabled={sendDisabled}>
+              <UiButton className="maka-button" variant="default" type="submit" disabled={sendDisabled}>
                 {buttonCopy.sendLabel}
-              </button>
+              </UiButton>
             )}
           </div>
         </div>
@@ -6195,7 +6215,7 @@ export function PermissionDialog(props: {
   const [rememberForTurn, setRememberForTurn] = useState(false);
   const [responsePending, setResponsePending] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const dialogRef = useRef<HTMLElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const responsePendingRef = useRef(false);
   const permissionMountedRef = useRef(true);
   const activePermissionRequestIdRef = useRef(props.request.requestId);
@@ -6256,14 +6276,14 @@ export function PermissionDialog(props: {
   const waitLabel = formatPermissionRequestWait(health.ageMs);
 
   return (
-    <div className="maka-modal-backdrop permissionBackdrop">
-      <section
+    <DialogRoot open disablePointerDismissal>
+      <DialogContent
         ref={dialogRef}
-        className="maka-modal permissionDialog"
+        className="maka-modal permissionDialog w-[min(92vw,720px)] p-0"
         role="alertdialog"
-        aria-modal="true"
         aria-labelledby="permissionTitle"
         data-tone={preset.tone}
+        showClose={false}
       >
         <div className="maka-modal-header maka-permission-header">
           <span className="maka-permission-icon" aria-hidden="true">
@@ -6272,7 +6292,7 @@ export function PermissionDialog(props: {
           <div>
             <h2 className="maka-modal-title" id="permissionTitle">需要确认权限</h2>
             <p className="maka-modal-subtitle">
-              <code className="maka-permission-tool">{props.request.toolName}</code>
+              <Badge variant={isDestructive ? 'destructive' : 'secondary'} className="maka-permission-tool font-mono">{props.request.toolName}</Badge>
               <span aria-hidden="true"> · </span>
               <span className="maka-reason-text" data-reason={props.request.reason}>{preset.label}</span>
               <span aria-hidden="true"> · </span>
@@ -6317,19 +6337,19 @@ export function PermissionDialog(props: {
           )}
         </div>
         <div className="maka-modal-footer permissionActions">
-          <button className="maka-button" data-variant="ghost" type="button" disabled={responsePending} onClick={() => submit('deny')}>拒绝</button>
-          <button
+          <UiButton className="maka-button" variant="ghost" type="button" disabled={responsePending} onClick={() => submit('deny')}>拒绝</UiButton>
+          <UiButton
             className="maka-button"
-            data-variant={isDestructive ? 'destructive' : 'primary'}
+            variant={isDestructive ? 'destructive' : 'default'}
             type="button"
             disabled={responsePending}
             onClick={() => submit('allow')}
           >
             {responsePending ? '正在提交…' : isDestructive ? '我已确认，允许' : '允许'}
-          </button>
+          </UiButton>
         </div>
-      </section>
-    </div>
+      </DialogContent>
+    </DialogRoot>
   );
 }
 

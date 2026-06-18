@@ -76,7 +76,7 @@ import {
 } from '@maka/core';
 import { BOT_PROVIDERS, MAX_ALLOWED_USER_IDS, createDefaultSettings, parseAllowedUserIdsFromText } from '@maka/core/settings';
 import { PROVIDER_DEFAULTS } from '@maka/core/llm-connections';
-import { RelativeTime, redactSecrets, useModalA11y, useToast } from '@maka/ui';
+import { Button, DialogContent, DialogRoot, RelativeTime, redactSecrets, useModalA11y, useToast } from '@maka/ui';
 import { normalizeSearchUrl } from '@maka/core';
 import { ProvidersPanel } from './ProvidersPanel';
 import { PasswordInput } from './password-input';
@@ -736,14 +736,17 @@ export function SettingsModal(props: {
   useModalA11y(dialogRef, props.onClose, activeNavRef);
 
   return (
-    <div className="settingsModalBackdrop" role="presentation" onClick={props.onClose}>
-      <div
+    <DialogRoot
+      open
+      onOpenChange={(open) => {
+        if (!open) props.onClose();
+      }}
+    >
+      <DialogContent
         ref={dialogRef}
-        className="settingsModal"
-        role="dialog"
-        aria-modal="true"
+        className="settingsModal w-[min(96vw,1120px)] p-0"
         aria-label="设置"
-        onClick={(event) => event.stopPropagation()}
+        showClose={false}
       >
         <SettingsSurface
           connections={props.connections}
@@ -762,8 +765,8 @@ export function SettingsModal(props: {
           onOpenDailyReview={props.onOpenDailyReview}
           onOpenSession={props.onOpenSession}
         />
-      </div>
-    </div>
+      </DialogContent>
+    </DialogRoot>
   );
 }
 
@@ -949,9 +952,9 @@ function SettingsSurface(props: {
       <section className="settingsMainPane">
         <header className="settingsPageHeader">
           <h2>{activeItem.label}</h2>
-          <button className="settingsCloseButton" type="button" aria-label="关闭设置" onClick={props.onClose}>
+          <Button className="settingsCloseButton" variant="quiet" size="icon-sm" type="button" aria-label="关闭设置" onClick={props.onClose}>
             <X strokeWidth={1.75} aria-hidden="true" />
-          </button>
+          </Button>
         </header>
 
         <div className="settingsPageContent">
@@ -1273,9 +1276,9 @@ function AboutSettingsPage() {
       </SettingsRows>
 
       <div className="settingsActionRow">
-        <button type="button" className="maka-button" disabled={copyingEnvSummary} aria-describedby={envSummaryHelpId} onClick={() => void copyEnvSummary()}>
+        <Button type="button" className="maka-button" disabled={copyingEnvSummary} aria-describedby={envSummaryHelpId} onClick={() => void copyEnvSummary()}>
           {copyingEnvSummary ? '复制中…' : '复制环境信息'}
-        </button>
+        </Button>
       </div>
       <p id={envSummaryHelpId} className="settingsHelpText">
         如果遇到问题，复制以上信息会同时带上版本号与平台细节，方便定位。复制内容不包含工作区路径（避免泄露用户名）。
@@ -1328,14 +1331,14 @@ function DailyReviewSettingsPage(props: { onOpenDailyReview?: () => void }) {
             主内容栏里的 "每日回顾" 支持今日 / 本周 / 本月切换、左右翻页、复制 / 保存 Markdown 摘要，也可以把当前范围粘到输入框继续追问。
           </p>
           {props.onOpenDailyReview && (
-            <button
+            <Button
               type="button"
               className="maka-button"
               onClick={props.onOpenDailyReview}
               style={{ marginTop: 8 }}
             >
               打开每日回顾
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -1527,7 +1530,7 @@ function VoiceModelsSettingsPage() {
       </dl>
 
       <div className="settingsActionRow">
-        <button
+        <Button
           className="maka-button"
           type="button"
           onClick={() => void runCaptureSmoke()}
@@ -1537,7 +1540,7 @@ function VoiceModelsSettingsPage() {
           data-pending={isBusy ? 'true' : undefined}
         >
           {isBusy ? '自检中…' : '运行录音自检'}
-        </button>
+        </Button>
       </div>
 
       <div id={smokeStatusId} className="settingsNotice" data-tone={smoke.status === 'error' ? undefined : 'passive'} role="status">
