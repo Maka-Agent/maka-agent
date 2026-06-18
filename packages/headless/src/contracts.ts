@@ -29,9 +29,14 @@ export interface Task {
    * never mutated — the agent only ever touches the throwaway copy.
    */
   workspaceDir: string;
-  /** How the run is scored. Lives on the Task, never the Config, so a
-   *  config under test cannot grade itself. */
-  verification: TaskVerification;
+  /**
+   * Legacy command verifier. Still accepted as an alias for
+   * `verifier: { kind: "command", ...verification }`.
+   */
+  verification?: TaskVerification;
+  /** How the run is officially verified. Lives on the Task, never the Config. */
+  verifier?: VerifierSpec;
+  benchmark?: BenchmarkContract;
 }
 
 export interface TaskVerification {
@@ -56,6 +61,58 @@ export interface TaskVerification {
   protectedPaths: string[];
 }
 
+export type VerifierSpec =
+  | CommandVerifierSpec
+  | TerminalBenchVerifierSpec
+  | SweBenchVerifierSpec;
+
+export interface CommandVerifierSpec {
+  kind: 'command';
+  command: string;
+  timeoutMs?: number;
+  protectedPaths: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+}
+
+export interface TerminalBenchVerifierSpec {
+  kind: 'terminal_bench';
+  adapter: 'terminal-bench';
+  instanceId: string;
+  protectedPaths?: string[];
+  adapterOptions?: Record<string, unknown>;
+}
+
+export interface SweBenchVerifierSpec {
+  kind: 'swe_bench';
+  adapter: 'swe-bench';
+  instanceId: string;
+  protectedPaths?: string[];
+  adapterOptions?: Record<string, unknown>;
+}
+
+export interface BenchmarkContract {
+  source?: 'local' | 'terminal_bench' | 'swe_bench';
+  instanceId?: string;
+  official?: boolean;
+  denominator?: 'scored_only' | 'eligible';
+  metadata?: Record<string, unknown>;
+}
+
+export interface SubmittedSnapshot {
+  id: string;
+  workspaceRoot: string;
+  snapshotPath: string;
+  artifactRefs: Array<Record<string, unknown>>;
+  createdAt: number;
+  manifestHash?: string;
+}
+
+export interface ArtifactFreezeResult {
+  submittedSnapshot: SubmittedSnapshot;
+  warnings?: string[];
+}
+
 /**
  * The variable under test. References Maka's existing model/connection
  * selection — it does NOT invent a model format. The toolset is a
@@ -77,8 +134,20 @@ export interface ResultRecord {
   runId: string;
   /** Did the agent invocation finish (vs. error out mid-run)? */
   status: 'completed' | 'failed';
+  /** Explicit runner status; legacy `status` is preserved for JSONL readers. */
+  runnerCompleted?: boolean;
   /** Did the Task's verification command pass? */
   passed: boolean;
+  /** Whether the final scorer produced an official pass/fail for this cell. */
+  scored?: boolean;
+  /** Whether this cell belongs in the official benchmark denominator. */
+  eligible?: boolean;
+  /** Why a cell was excluded from the official denominator. */
+  excludedReason?: string;
+  verifierKind?: VerifierSpec['kind'];
+  scoreResultId?: string;
+  verifierResultId?: string;
+  submittedSnapshotId?: string;
   /** Verification command exit code (null if it never ran / errored to spawn). */
   exitCode: number | null;
   /** Trajectory length proxy: number of RuntimeEvents emitted. */

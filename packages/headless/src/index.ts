@@ -2,7 +2,20 @@
 // (sandbox.ts), the verification runner (evaluator.ts), and the backend wiring
 // (backends.ts) are internals the runner owns, not part of the API. Minimal
 // usage is `runExperiment(config, task, { storageRoot })`.
-export type { Config, Task, TaskVerification, ResultRecord } from './contracts.js';
+export type {
+  ArtifactFreezeResult,
+  BenchmarkContract,
+  CommandVerifierSpec,
+  Config,
+  ResultRecord,
+  SubmittedSnapshot,
+  SweBenchVerifierSpec,
+  Task,
+  TaskVerification,
+  TerminalBenchVerifierSpec,
+  VerifierSpec,
+} from './contracts.js';
+export type { FinalScore, FinalScorer, FinalScorerInput } from './scorer.js';
 export type {
   AutonomousDecision,
   AutonomousResultTaxonomy,
@@ -65,7 +78,9 @@ export type {
 export { AutonomousAgentLoop, runAutonomousTask } from './autonomous-agent-loop.js';
 export { runExperiment, type RunExperimentDeps } from './runner.js';
 export { runMatrix, type ExperimentSpec } from './matrix.js';
-export { readResults, writeResults, toComparisonTable } from './results.js';
+export { defaultFinalScorer } from './scorer.js';
+export { readResults, summarizeMatrix, writeResults, toComparisonTable, type MatrixSummary } from './results.js';
+export { normalizeVerifier } from './verifier.js';
 export type {
   HeadlessBackendContext,
   IsolatedCommandInput,

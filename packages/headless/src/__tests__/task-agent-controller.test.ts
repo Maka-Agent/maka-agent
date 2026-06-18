@@ -89,6 +89,42 @@ const registerReportingBackend = (registry: BackendRegistry): void => {
   );
 };
 
+class ProtectedTamperBackend implements AgentBackend {
+  readonly kind: BackendKind = 'fake';
+  readonly sessionId: string;
+
+  constructor(private readonly ctx: { sessionId: string; header: SessionHeader; store: SessionStore }) {
+    this.sessionId = ctx.sessionId;
+  }
+
+  async *send(input: BackendSendInput): AsyncIterable<SessionEvent> {
+    const { turnId } = input;
+    const ts = Date.now();
+    const messageId = 'tamper-message';
+    await writeFile(join(this.ctx.header.cwd, 'check.mjs'), 'process.exit(0);\n', 'utf8');
+    await this.ctx.store.appendMessage(this.sessionId, {
+      type: 'assistant',
+      id: messageId,
+      turnId,
+      ts,
+      text: 'tampered with verifier asset',
+      modelId: this.ctx.header.model,
+    });
+    yield { type: 'text_complete', id: 'tamper-text', turnId, ts, messageId, text: 'tampered with verifier asset' };
+    yield { type: 'complete', id: 'tamper-complete', turnId, ts, stopReason: 'end_turn' };
+  }
+
+  async stop(): Promise<void> {}
+  async respondToPermission(_decision: PermissionDecision): Promise<void> {}
+  async dispose(): Promise<void> {}
+}
+
+const registerProtectedTamperBackend = (registry: BackendRegistry): void => {
+  registry.register('fake', (ctx) =>
+    new ProtectedTamperBackend({ sessionId: ctx.sessionId, header: ctx.header, store: ctx.store }),
+  );
+};
+
 class FailingBackend implements AgentBackend {
   readonly kind: BackendKind = 'fake';
   readonly sessionId: string;
@@ -261,9 +297,74 @@ describe('runTaskOnce', () => {
 
       assert.equal(result.resultRecord.status, 'completed');
       assert.equal(result.resultRecord.passed, false);
+      assert.equal(result.resultRecord.runnerCompleted, true);
+      assert.equal(result.resultRecord.scored, true);
+      assert.equal(result.resultRecord.eligible, true);
       assert.equal(result.projection.status, 'completed');
       assert.equal(result.projection.result?.passed, false);
       assert.equal(result.projection.latestScoreResult?.taxonomy, 'verification_failed');
+    });
+  });
+
+  test('records benchmark adapter hooks as unsupported instead of silently scoring', async () => {
+    await withDirs(async (fixtureDir, storageRoot) => {
+      const task: Task = {
+        id: 'terminal-bench-hook',
+        instruction: 'do the thing',
+        workspaceDir: fixtureDir,
+        verifier: {
+          kind: 'terminal_bench',
+          adapter: 'terminal-bench',
+          instanceId: 'terminal-bench/example',
+          protectedPaths: [],
+        },
+      };
+
+      const result = await runTaskOnce(fakeConfig, task, {
+        storageRoot,
+        registerBackends: registerFakeBackend,
+      });
+
+      assert.equal(result.resultRecord.status, 'completed');
+      assert.equal(result.resultRecord.runnerCompleted, true);
+      assert.equal(result.resultRecord.passed, false);
+      assert.equal(result.resultRecord.scored, false);
+      assert.equal(result.resultRecord.eligible, false);
+      assert.equal(result.resultRecord.errorClass, 'unsupported_adapter');
+      assert.equal(result.projection.status, 'completed');
+      assert.equal(result.projection.latestVerifierResult?.kind, 'terminal_bench');
+      assert.equal(result.projection.latestVerifierResult?.errorClass, 'unsupported_adapter');
+      assert.equal(result.projection.latestScoreResult?.taxonomy, 'unsupported_adapter');
+    });
+  });
+
+  test('freezes submitted workspace before restoring protected paths for verifier', async () => {
+    await withDirs(async (fixtureDir, storageRoot) => {
+      await writeFile(join(fixtureDir, 'src.mjs'), 'export const add = (a, b) => a - b;\n', 'utf8');
+      await writeFile(
+        join(fixtureDir, 'check.mjs'),
+        "import { add } from './src.mjs';\nprocess.exit(add(2, 3) === 5 ? 0 : 1);\n",
+        'utf8',
+      );
+      const task: Task = {
+        id: 'freeze-before-restore',
+        instruction: 'fix the bug',
+        workspaceDir: fixtureDir,
+        verification: { command: 'node check.mjs', protectedPaths: ['check.mjs'] },
+      };
+
+      const result = await runTaskOnce(fakeConfig, task, {
+        storageRoot,
+        registerBackends: registerProtectedTamperBackend,
+      });
+
+      assert.equal(result.resultRecord.status, 'completed');
+      assert.equal(result.resultRecord.passed, false);
+      assert.equal(result.resultRecord.scored, true);
+      assert.equal(result.projection.latestVerifierResult?.exitCode, 1);
+      const snapshot = result.projection.latestScoreResult?.details?.submittedSnapshot as { snapshotPath?: string } | undefined;
+      assert.ok(snapshot?.snapshotPath, 'expected submitted snapshot metadata in score details');
+      assert.equal(await readFile(join(snapshot.snapshotPath, 'check.mjs'), 'utf8'), 'process.exit(0);\n');
     });
   });
 

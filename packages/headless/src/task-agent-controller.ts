@@ -26,8 +26,9 @@ import type { Config, ResultRecord, Task } from './contracts.js';
 import { registerFakeBackend } from './backends.js';
 import type { HeadlessBackendContext } from './isolation.js';
 import { validateRealBackendIsolation } from './isolation.js';
-import { prepareWorkspace, restoreProtectedPaths } from './sandbox.js';
-import { runVerification } from './evaluator.js';
+import { freezeSubmittedWorkspace, prepareScoringWorkspace, prepareWorkspace, restoreProtectedPaths } from './sandbox.js';
+import { defaultFinalScorer } from './scorer.js';
+import { normalizeVerifier, runVerifier, verifierProtectedPaths } from './verifier.js';
 import {
   backendNeedsIsolation,
   type RunExperimentDeps,
@@ -107,6 +108,7 @@ export async function runTaskOnce(
   const agentRunStore = deps.agentRunStore ?? createAgentRunStore(deps.storageRoot);
   const runtimeEventStore = deps.runtimeEventStore ?? createRuntimeEventStore(deps.storageRoot);
   const startedAt = now();
+  const verifier = normalizeVerifier(task);
 
   if (createTaskRun) {
     await appendTaskEvent(taskRunStore, taskRunId, {
@@ -210,51 +212,78 @@ export async function runTaskOnce(
       ts: now(),
       startedAt: now(),
     });
-    await restoreProtectedPaths(task.workspaceDir, workspace.dir, task.verification.protectedPaths);
-    const evaluation = await runVerification(
-      task.verification.command,
-      workspace.dir,
-      task.verification.timeoutMs,
-    );
-
+    const runnerCompleted = invocation.status === 'completed';
+    const frozen = await freezeSubmittedWorkspace({
+      workspaceDir: workspace.dir,
+      artifactRefs: runtimeSummary.artifactRefs,
+      now,
+      newId,
+    });
+    const scoringWorkspace = await prepareScoringWorkspace(frozen.submittedSnapshot);
+    let verifierResult: VerifierResult;
+    try {
+      await restoreProtectedPaths(task.workspaceDir, scoringWorkspace.dir, verifierProtectedPaths(verifier));
+      const verifierStartedAt = now();
+      verifierResult = await runVerifier({
+        verifier,
+        taskRunId,
+        attemptId,
+        ts: verifierStartedAt,
+        id: newId(),
+        workspaceDir: scoringWorkspace.dir,
+        submittedSnapshotId: frozen.submittedSnapshot.id,
+        scoringWorkspaceId: scoringWorkspace.dir,
+      });
+    } finally {
+      await scoringWorkspace.cleanup();
+    }
+    const finalScore = defaultFinalScorer({
+      config,
+      task,
+      runnerCompleted,
+      runnerStatus: invocation.status,
+      invocationFailure: invocation.failure,
+      submittedSnapshot: frozen.submittedSnapshot,
+      verifierResult,
+    });
     const finishedAt = now();
+    const scoreResultId = newId();
     const resultRecord = resultRecordFromInvocation({
       config,
       task,
       sessionId: header.id,
       invocation,
-      evaluation,
+      verifierResult,
+      finalScore,
+      submittedSnapshotId: frozen.submittedSnapshot.id,
+      scoreResultId,
       startedAt,
       finishedAt,
     });
-    const taxonomy = taxonomyFromResultRecord(resultRecord);
-    const verifierResult: VerifierResult = {
-      id: newId(),
-      taskRunId,
-      attemptId,
-      ts: finishedAt,
-      kind: 'command',
-      passed: resultRecord.status === 'completed' && evaluation.passed,
-      exitCode: evaluation.exitCode,
-      command: task.verification.command,
-      ...(evaluation.timedOut ? { error: 'verification timed out' } : {}),
-    };
+    const taxonomy = finalScore.taxonomy;
     const scoreResult: ScoreResult = {
-      id: newId(),
+      id: scoreResultId,
       taskRunId,
       attemptId,
       ts: finishedAt,
-      passed: resultRecord.status === 'completed' && evaluation.passed,
+      passed: finalScore.passed,
+      scored: finalScore.scored,
+      eligible: finalScore.eligible,
+      ...(finalScore.errorClass ? { errorClass: finalScore.errorClass } : {}),
+      ...(finalScore.excludedReason ? { excludedReason: finalScore.excludedReason } : {}),
       taxonomy,
       details: {
         steps: resultRecord.steps,
         invocationStatus: invocation.status,
         ...(invocation.failure?.class ? { runtimeFailureClass: invocation.failure.class } : {}),
-        verifierExitCode: evaluation.exitCode,
+        verifierExitCode: verifierResult.exitCode ?? null,
         runtimeRefs: runtimeSummary.runtimeRefs,
         artifactRefs: runtimeSummary.artifactRefs,
+        submittedSnapshot: frozen.submittedSnapshot,
+        scoringWorkspaceContract: 'v1_copy_snapshot_then_restore_protected_paths_in_disposable_scoring_workspace',
         isolation: runtimeSummary.isolation,
         budget: runtimeSummary.budget,
+        ...(finalScore.details ? { finalScore: finalScore.details } : {}),
       },
     };
     const runResult: TaskRunResult = {
@@ -471,7 +500,10 @@ function resultRecordFromInvocation(input: {
   task: Task;
   sessionId: string;
   invocation: InvocationResult;
-  evaluation: Awaited<ReturnType<typeof runVerification>>;
+  verifierResult: VerifierResult;
+  finalScore: ReturnType<typeof defaultFinalScorer>;
+  submittedSnapshotId: string;
+  scoreResultId: string;
   startedAt: number;
   finishedAt: number;
 }): ResultRecord {
@@ -482,16 +514,26 @@ function resultRecordFromInvocation(input: {
     sessionId: input.sessionId,
     runId: input.invocation.runId,
     status,
-    passed: status === 'completed' && input.evaluation.passed,
-    exitCode: input.evaluation.exitCode,
+    runnerCompleted: status === 'completed',
+    passed: input.finalScore.passed,
+    scored: input.finalScore.scored,
+    eligible: input.finalScore.eligible,
+    ...(input.finalScore.excludedReason ? { excludedReason: input.finalScore.excludedReason } : {}),
+    verifierKind: input.verifierResult.kind,
+    verifierResultId: input.verifierResult.id,
+    scoreResultId: input.scoreResultId,
+    submittedSnapshotId: input.submittedSnapshotId,
+    exitCode: input.verifierResult.exitCode ?? null,
     steps: input.invocation.events.length,
     durationMs: input.finishedAt - input.startedAt,
     startedAt: input.startedAt,
     finishedAt: input.finishedAt,
-    ...(status === 'failed'
+    ...(input.finalScore.errorClass ? { errorClass: input.finalScore.errorClass } : {}),
+    ...(!input.finalScore.scored && input.finalScore.errorClass
+      ? { error: input.finalScore.excludedReason ?? input.invocation.failure?.message ?? input.finalScore.errorClass }
+      : status === 'failed'
       ? {
           error: input.invocation.failure?.message ?? input.invocation.failure?.class ?? 'run did not complete',
-          ...(input.invocation.failure?.class ? { errorClass: input.invocation.failure.class } : {}),
         }
       : {}),
   };
@@ -641,6 +683,9 @@ function attemptStatusFromResult(
     case 'verification_failed':
     case 'verification_error':
     case 'agent_failed':
+    case 'invalid_setup':
+    case 'unsupported_adapter':
+    case 'isolation_required':
     case 'setup_failed':
     case 'infra_failed':
       return 'failed';
@@ -677,6 +722,9 @@ function terminalEventFromResult(
     case 'verification_failed':
     case 'verification_error':
     case 'agent_failed':
+    case 'invalid_setup':
+    case 'unsupported_adapter':
+    case 'isolation_required':
     case 'setup_failed':
     case 'infra_failed':
       return { type: 'task_run_failed', ...base, error };
@@ -696,6 +744,12 @@ function errorMessageFromTaxonomy(taxonomy: AutonomousResultTaxonomy): string {
       return 'agent run failed';
     case 'agent_incomplete':
       return 'agent run incomplete';
+    case 'invalid_setup':
+      return 'invalid setup';
+    case 'unsupported_adapter':
+      return 'unsupported verifier adapter';
+    case 'isolation_required':
+      return 'isolated executor required';
     case 'setup_failed':
       return 'task setup failed';
     case 'infra_failed':

@@ -1,4 +1,4 @@
-import type { ResultRecord, TaskVerification } from './contracts.js';
+import type { ResultRecord, TaskVerification, VerifierSpec } from './contracts.js';
 
 export type TaskRunStatus =
   | 'queued'
@@ -45,6 +45,9 @@ export type AutonomousResultTaxonomy =
   | 'verification_error'
   | 'agent_failed'
   | 'agent_incomplete'
+  | 'invalid_setup'
+  | 'unsupported_adapter'
+  | 'isolation_required'
   | 'setup_failed'
   | 'infra_failed'
   | 'policy_denied'
@@ -58,6 +61,9 @@ export type ResultTaxonomy = AutonomousResultTaxonomy;
 export function taxonomyFromResultRecord(record: ResultRecord): AutonomousResultTaxonomy {
   if (record.status === 'completed') {
     if (record.passed) return 'passed';
+    if (record.errorClass === 'unsupported_adapter') return 'unsupported_adapter';
+    if (record.errorClass === 'invalid_setup') return 'invalid_setup';
+    if (record.errorClass === 'isolation_required') return 'isolation_required';
     return record.exitCode === null ? 'verification_error' : 'verification_failed';
   }
 
@@ -72,6 +78,11 @@ export function taxonomyFromResultRecord(record: ResultRecord): AutonomousResult
   if (includesAny(failureText, ['blocked', 'waiting_permission'])) return 'blocked';
   if (includesAny(failureText, ['policy', 'permission', 'denied'])) return 'policy_denied';
   if (includesAny(failureText, ['incomplete', 'tool_calls', 'no_submit', 'truncated'])) return 'agent_incomplete';
+  if (includesAny(failureText, ['verification_error'])) return 'verification_error';
+  if (includesAny(failureText, ['verification_failed'])) return 'verification_failed';
+  if (includesAny(failureText, ['unsupported_adapter'])) return 'unsupported_adapter';
+  if (includesAny(failureText, ['invalid_setup'])) return 'invalid_setup';
+  if (includesAny(failureText, ['isolation_required', 'isolated executor'])) return 'isolation_required';
   if (includesAny(failureText, ['setup', 'fixture', 'config', 'preflight'])) return 'setup_failed';
   if (includesAny(failureText, ['infra', 'infrastructure', 'harbor', 'container', 'docker', 'fetch', 'materialize', 'network'])) {
     return 'infra_failed';
@@ -169,12 +180,18 @@ export interface VerifierResult {
   taskRunId: string;
   attemptId?: string;
   ts: number;
-  kind: 'command';
+  kind: VerifierSpec['kind'];
   passed: boolean;
-  exitCode: number | null;
+  exitCode?: number | null;
   command?: string;
   durationMs?: number;
+  stdout?: string;
+  stderr?: string;
+  timedOut?: boolean;
   error?: string;
+  errorClass?: string;
+  submittedSnapshotId?: string;
+  scoringWorkspaceId?: string;
 }
 
 export interface ScoreResult {
@@ -183,6 +200,10 @@ export interface ScoreResult {
   attemptId?: string;
   ts: number;
   passed: boolean;
+  scored?: boolean;
+  eligible?: boolean;
+  errorClass?: string;
+  excludedReason?: string;
   score?: number;
   maxScore?: number;
   taxonomy: AutonomousResultTaxonomy;

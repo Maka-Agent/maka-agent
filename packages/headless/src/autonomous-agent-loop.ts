@@ -608,6 +608,9 @@ function terminalEventFromResultRecord(
     case 'verification_failed':
     case 'verification_error':
     case 'agent_failed':
+    case 'invalid_setup':
+    case 'unsupported_adapter':
+    case 'isolation_required':
     case 'setup_failed':
     case 'infra_failed':
       return { type: 'task_run_failed', ...base, error };
@@ -653,6 +656,12 @@ function errorMessageFromTaxonomy(taxonomy: AutonomousResultTaxonomy): string {
       return 'agent run failed';
     case 'agent_incomplete':
       return 'agent run incomplete';
+    case 'invalid_setup':
+      return 'invalid setup';
+    case 'unsupported_adapter':
+      return 'unsupported verifier adapter';
+    case 'isolation_required':
+      return 'isolated executor required';
     case 'setup_failed':
       return 'task setup failed';
     case 'infra_failed':
