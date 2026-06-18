@@ -76,7 +76,24 @@ import {
 } from '@maka/core';
 import { BOT_PROVIDERS, MAX_ALLOWED_USER_IDS, createDefaultSettings, parseAllowedUserIdsFromText } from '@maka/core/settings';
 import { PROVIDER_DEFAULTS } from '@maka/core/llm-connections';
-import { Button, DialogContent, DialogRoot, Input, RelativeTime, Textarea, redactSecrets, useModalA11y, useToast } from '@maka/ui';
+import {
+  Button,
+  DialogContent,
+  DialogRoot,
+  Input,
+  RelativeTime,
+  SelectItem,
+  SelectPopup,
+  SelectPortal,
+  SelectPositioner,
+  SelectRoot,
+  SelectTrigger,
+  SelectValue,
+  Textarea,
+  redactSecrets,
+  useModalA11y,
+  useToast,
+} from '@maka/ui';
 import { normalizeSearchUrl } from '@maka/core';
 import { ProvidersPanel } from './ProvidersPanel';
 import { PasswordInput } from './password-input';
@@ -137,6 +154,40 @@ function onSettingsRadioGroupKeyDown<T extends string>(
 function radioTabIndex<T extends string>(value: T, current: T, values: readonly T[]): 0 | -1 {
   if (value === current) return 0;
   return !values.includes(current) && values[0] === value ? 0 : -1;
+}
+
+function SettingsSelect<T extends string>(props: {
+  value: T;
+  options: ReadonlyArray<readonly [T, string]>;
+  onChange(value: T): void;
+  ariaLabel: string;
+  disabled?: boolean;
+}) {
+  return (
+    <SelectRoot
+      value={props.value}
+      items={props.options.map(([value, label]) => ({ value, label }))}
+      disabled={props.disabled}
+      onValueChange={(value) => {
+        if (value !== null) props.onChange(value);
+      }}
+    >
+      <SelectTrigger className="settingsBaseSelectTrigger w-full" aria-label={props.ariaLabel}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectPortal>
+        <SelectPositioner alignItemWithTrigger={false} sideOffset={6}>
+          <SelectPopup className="settingsBaseSelectPopup">
+            {props.options.map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </SelectPositioner>
+      </SelectPortal>
+    </SelectRoot>
+  );
 }
 
 // `SettingsNavGroup` + `NAV_GROUP_ORDER` moved to `nav-group-summary.ts`
@@ -354,14 +405,16 @@ function BotWeChatFields(props: {
         />
       </label>
       <div className="settingsBotAdvanced">
-        <button
+        <Button
           type="button"
+          variant="quiet"
+          size="sm"
           className="settingsBotAdvancedToggle"
           aria-expanded={advancedOpen}
           onClick={() => setAdvancedOpen((current) => !current)}
         >
           {advancedOpen ? '收起高级设置' : '高级设置（公众号 / 本机 bridge 地址）'}
-        </button>
+        </Button>
         {advancedOpen && (
           <div className="settingsBotAdvancedBody">
             <label className="settingsField">
@@ -517,9 +570,16 @@ function WeChatScanLoginModal(props: {
       >
         <header className="settingsBotScanLoginHeader">
           <h3>微信扫码登录</h3>
-          <button type="button" className="settingsCloseButton" aria-label="关闭" onClick={props.onClose}>
+          <Button
+            type="button"
+            variant="quiet"
+            size="icon-sm"
+            className="settingsCloseButton"
+            aria-label="关闭"
+            onClick={props.onClose}
+          >
             <X strokeWidth={1.75} aria-hidden="true" />
-          </button>
+          </Button>
         </header>
         <div className="settingsBotScanLoginBody">
           {qr?.qrcodeUrl && (status === 'waiting' || status === 'confirmed') ? (
@@ -540,13 +600,13 @@ function WeChatScanLoginModal(props: {
         </div>
         <div className="settingsBotScanLoginActions" role="group" aria-label="微信扫码登录操作">
           {(status === 'expired' || status === 'error') && (
-            <button className="settingsBotAction" type="button" onClick={() => void fetchQr()}>
+            <Button className="settingsBotAction" type="button" variant="secondary" onClick={() => void fetchQr()}>
               刷新二维码
-            </button>
+            </Button>
           )}
-          <button className="settingsBotAction" type="button" onClick={props.onClose}>
+          <Button className="settingsBotAction" type="button" variant="secondary" onClick={props.onClose}>
             {status === 'confirmed' ? '关闭' : '取消'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -637,14 +697,16 @@ function WechatQrLoginModal(props: {
             <h3 id="settingsWechatQrTitle">微信扫码登录</h3>
             <p>使用手机微信扫描二维码，并在手机上确认登录本机 wechat-bridge。</p>
           </div>
-          <button
+          <Button
             type="button"
+            variant="quiet"
+            size="icon-sm"
             className="settingsWechatQrClose"
             aria-label="关闭微信扫码登录"
             onClick={props.onClose}
           >
             <X size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </div>
 
         <div className="settingsWechatQrBody">
@@ -659,9 +721,9 @@ function WechatQrLoginModal(props: {
           ) : expired ? (
             <div className="settingsWechatQrState" data-tone="warning">
               二维码已过期
-              <button type="button" className="settingsWechatQrSecondary" disabled={loading} onClick={reloadQrCode}>
+              <Button type="button" variant="secondary" className="settingsWechatQrSecondary" disabled={loading} onClick={reloadQrCode}>
                 {loading ? '刷新中…' : '刷新二维码'}
-              </button>
+              </Button>
             </div>
           ) : qrDataUrl ? (
             <>
@@ -674,16 +736,16 @@ function WechatQrLoginModal(props: {
             <div className="settingsWechatQrState" data-tone="error" role="alert">
               <strong>{error.error}</strong>
               <span>{error.hint}</span>
-              <button type="button" className="settingsWechatQrSecondary" disabled={loading} onClick={reloadQrCode}>
+              <Button type="button" variant="secondary" className="settingsWechatQrSecondary" disabled={loading} onClick={reloadQrCode}>
                 {loading ? '重试中…' : '重试'}
-              </button>
+              </Button>
             </div>
           ) : (
             <div className="settingsWechatQrState" data-tone="loading">
               bridge 正在生成二维码
-              <button type="button" className="settingsWechatQrSecondary" disabled={loading} onClick={reloadQrCode}>
+              <Button type="button" variant="secondary" className="settingsWechatQrSecondary" disabled={loading} onClick={reloadQrCode}>
                 {loading ? '获取中…' : '重新获取'}
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -3658,14 +3720,16 @@ function MemorySettingsPage(props: {
           <strong>模型上下文预览</strong>
           <div>
             <span>{promptPreviewWillInject ? '发送时会注入' : '当前不会注入'}</span>
-            <button
+            <Button
               type="button"
+              variant="quiet"
+              size="sm"
               className="settingsInlineTextButton"
               disabled={!localMemoryPromptPreview || isMemoryActionPending('memory:prompt-preview:copy')}
               onClick={() => void copyLocalMemoryPromptPreview()}
             >
               {isMemoryActionPending('memory:prompt-preview:copy') ? '复制中…' : '复制上下文'}
-            </button>
+            </Button>
           </div>
         </div>
         <small>只展示生效记忆会进入 prompt 的内容；已归档条目不会注入，疑似密钥会遮蔽。</small>
@@ -3691,9 +3755,15 @@ function MemorySettingsPage(props: {
               placeholder="筛选标题、内容、ID 或标签"
             />
             {normalizedMemoryEntryQuery ? (
-              <button type="button" className="settingsInlineTextButton" onClick={() => setMemoryEntryQuery('')}>
+              <Button
+                type="button"
+                variant="quiet"
+                size="sm"
+                className="settingsInlineTextButton"
+                onClick={() => setMemoryEntryQuery('')}
+              >
                 清除
-              </button>
+              </Button>
             ) : null}
             <small>
               {normalizedMemoryEntryQuery
@@ -3911,34 +3981,40 @@ function MemoryEntryList(props: {
                 {(props.onCopyReference || props.onFocusDraft || props.onStatusChange) && (
                   <div className="settingsMemoryEntryActions" role="group" aria-label={`${entry.title}记忆操作`}>
                     {props.onCopyReference && (
-                      <button
+                      <Button
                         type="button"
+                        variant="quiet"
+                        size="sm"
                         className="settingsInlineTextButton"
                         disabled={copyPending}
                         onClick={() => void props.onCopyReference?.(entry)}
                       >
                         {copyPending ? '复制中…' : '复制引用'}
-                      </button>
+                      </Button>
                     )}
                     {props.onFocusDraft && (
-                      <button
+                      <Button
                         type="button"
+                        variant="quiet"
+                        size="sm"
                         className="settingsInlineTextButton"
                         onClick={() => void props.onFocusDraft?.(entry)}
                       >
                         定位草稿
-                      </button>
+                      </Button>
                     )}
                     {props.onStatusChange && (
-                      <button
+                      <Button
                         type="button"
+                        variant="quiet"
+                        size="sm"
                         className="settingsInlineTextButton"
                         aria-label={statusActionAriaLabel}
                         disabled={props.busy}
                         onClick={() => void props.onStatusChange?.(entry, props.archived ? 'active' : 'archived')}
                       >
                         {statusActionLabel}
-                      </button>
+                      </Button>
                     )}
                   </div>
                 )}
@@ -4169,15 +4245,16 @@ function NetworkSettingsPage(props: {
           <div className="settingsFormGrid settingsFormGridProxy">
             <label>
               <span>代理协议</span>
-              <select
+              <SettingsSelect
                 value={proxyDraft.protocol}
-                onChange={(event) => void updateProxy({ protocol: event.currentTarget.value as NetworkProxySettings['protocol'] })}
-                aria-label="代理协议"
-              >
-                <option value="http">HTTP/HTTPS</option>
-                <option value="https">HTTPS</option>
-                <option value="socks5">SOCKS5</option>
-              </select>
+                ariaLabel="代理协议"
+                options={[
+                  ['http', 'HTTP/HTTPS'],
+                  ['https', 'HTTPS'],
+                  ['socks5', 'SOCKS5'],
+                ] satisfies Array<readonly [NetworkProxySettings['protocol'], string]>}
+                onChange={(protocol) => void updateProxy({ protocol })}
+              />
             </label>
             <label>
               <span>服务器地址</span>
@@ -4460,14 +4537,15 @@ function OpenGatewaySettingsPage(props: {
       <div className="settingsFormGrid settingsFormGridProxy">
         <label>
           <span>监听地址</span>
-          <select
+          <SettingsSelect
             value={gatewayDraft.host}
-            onChange={(event) => void updateGateway({ host: event.currentTarget.value as AppSettings['openGateway']['host'] })}
-            aria-label="开放网关监听地址"
-          >
-            <option value="127.0.0.1">127.0.0.1</option>
-            <option value="0.0.0.0">0.0.0.0</option>
-          </select>
+            ariaLabel="开放网关监听地址"
+            options={[
+              ['127.0.0.1', '127.0.0.1'],
+              ['0.0.0.0', '0.0.0.0'],
+            ] satisfies Array<readonly [AppSettings['openGateway']['host'], string]>}
+            onChange={(host) => void updateGateway({ host })}
+          />
         </label>
         <label>
           <span>端口</span>
@@ -5011,15 +5089,15 @@ function BotChatSettingsPage(props: {
             </label>
             <label className="settingsField">
               <span>域名</span>
-              <select
-                className="settingsBotDomainSelect"
+              <SettingsSelect
                 value={channel.domain ?? 'feishu.cn'}
-                onChange={(event) => updateChannel({ domain: event.currentTarget.value })}
-                aria-label="飞书域名"
-              >
-                <option value="feishu.cn">飞书 (feishu.cn)</option>
-                <option value="larksuite.com">Lark (larksuite.com)</option>
-              </select>
+                ariaLabel="飞书域名"
+                options={[
+                  ['feishu.cn', '飞书 (feishu.cn)'],
+                  ['larksuite.com', 'Lark (larksuite.com)'],
+                ]}
+                onChange={(domain) => updateChannel({ domain })}
+              />
             </label>
           </>
         )}
@@ -5178,54 +5256,65 @@ function BotChatSettingsPage(props: {
         <div className="settingsBotActionStack" role="group" aria-label={`${BOT_LABELS[selected].label}机器人操作`}>
           {selected === 'wechat' ? (
             <>
-              <button
+              <Button
                 className="settingsBotAction"
                 type="button"
+                variant="secondary"
                 disabled={botActionBusy}
                 onClick={() => setScanLoginOpen(true)}
               >
                 扫码登录
-              </button>
+              </Button>
               {(channel.token || selectedStatus?.identity) && (
-                <button
+                <Button
                   className="settingsBotAction"
                   type="button"
+                  variant="secondary"
                   disabled={botActionBusy}
                   onClick={() => void disconnectWechatLogin()}
                 >
                   {selectedBotActionPending === 'disconnect' ? '断开中…' : '断开微信登录'}
-                </button>
+                </Button>
               )}
-              <button
+              <Button
                 className="settingsBotAction"
                 type="button"
+                variant="secondary"
                 disabled={botActionBusy}
                 onClick={() => setWechatQrOpen(true)}
               >
                 本机桥接二维码
-              </button>
-              <button
+              </Button>
+              <Button
                 className="settingsBotAction"
                 type="button"
+                variant="secondary"
                 disabled={botActionBusy}
                 onClick={testChannel}
               >
                 {selectedBotActionPending === 'test' ? '测试中…' : '测试连接'}
-              </button>
+              </Button>
             </>
           ) : support === 'runtime' && !selectedStatus?.running ? (
-            <button
+            <Button
               className="settingsBotAction"
               type="button"
+              variant="secondary"
               disabled={botActionBusy}
               onClick={testAndConnect}
             >
               {selectedBotActionPending === 'connect' ? '连接中…' : '测试并连接'}
-            </button>
+            </Button>
           ) : (
-            <button className="settingsBotAction" type="button" disabled={botActionBusy || support === 'planned'} onClick={testChannel}>
+            <Button
+              className="settingsBotAction"
+              type="button"
+              variant="secondary"
+              disabled={botActionBusy || support === 'planned'}
+              onClick={testChannel}
+            >
               {selectedBotActionPending === 'test' ? '测试中…' : support === 'runtime' ? '测试连接' : '测试并连接'}
-            </button>
+            </Button>
           )}
           {/* PR-BOT-RESTART-RACE-0: keep the restart button mounted
               while a restart is in-flight, even if the bridge's
@@ -5235,9 +5324,15 @@ function BotChatSettingsPage(props: {
               button unmounts mid-click and the user sees no
               resolution feedback. */}
           {support === 'runtime' && (selectedStatus?.running || restarting) && selected !== 'wechat' && (
-            <button className="settingsBotAction" type="button" disabled={botActionBusy} onClick={restartChannel}>
+            <Button
+              className="settingsBotAction"
+              type="button"
+              variant="secondary"
+              disabled={botActionBusy}
+              onClick={restartChannel}
+            >
               {restarting ? '重启中…' : '重启监听'}
-            </button>
+            </Button>
           )}
         </div>
         {wechatQrOpen && (
@@ -5506,11 +5601,16 @@ function UsageSettingsPage(props: {
           {usageDraft.showDetails && (
             <>
               <Input value={usageDraft.modelFilter} onChange={(event) => void updateUsage({ modelFilter: event.currentTarget.value })} placeholder="按模型或工具筛选…" aria-label="按模型或工具筛选请求记录" />
-              <select value={usageDraft.status} onChange={(event) => void updateUsage({ status: event.currentTarget.value as typeof usageDraft.status })} aria-label="请求状态筛选">
-                <option value="all">全部状态</option>
-                <option value="success">成功</option>
-                <option value="error">错误</option>
-              </select>
+              <SettingsSelect
+                value={usageDraft.status}
+                ariaLabel="请求状态筛选"
+                options={[
+                  ['all', '全部状态'],
+                  ['success', '成功'],
+                  ['error', '错误'],
+                ] satisfies Array<readonly [typeof usageDraft.status, string]>}
+                onChange={(status) => void updateUsage({ status })}
+              />
             </>
           )}
           <label>

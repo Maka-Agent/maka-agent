@@ -17,7 +17,7 @@ import {
   type SubscriptionAccountState,
   type UpdateConnectionInput,
 } from '@maka/core';
-import { Button, Input, RelativeTime, useToast, useModalA11y } from '@maka/ui';
+import { Button, Input, RelativeTime, Textarea, useToast, useModalA11y } from '@maka/ui';
 import { formatRelativeTimestamp } from '@maka/core';
 import { PasswordInput } from './password-input';
 
@@ -263,9 +263,9 @@ export function ProvidersPanel({ bridge }: { bridge: ConnectionsBridge }) {
             <h3>模型供应商</h3>
             <p>选择 API Key 服务、本地模型、OAuth 账号登录，或自定义 OpenAI 兼容接口。</p>
           </div>
-          <button className="maka-button" type="button" onClick={() => startAdd('openai-compatible')}>
+          <Button className="maka-button" type="button" onClick={() => startAdd('openai-compatible')}>
             自定义
-          </button>
+          </Button>
         </div>
 
         <div
@@ -385,14 +385,16 @@ function ProviderConfigSheetOverlay(props: { onClose(): void; children: ReactNod
         aria-label="模型供应商配置"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <button
+        <Button
           type="button"
+          variant="quiet"
+          size="icon-sm"
           className="providerConfigSheetClose"
           aria-label="关闭模型配置"
           onClick={props.onClose}
         >
           <X strokeWidth={1.75} aria-hidden="true" />
-        </button>
+        </Button>
         {props.children}
       </section>
     </div>
@@ -765,15 +767,15 @@ function ClaudeSubscriptionModal(props: { onClose(): void }) {
             <h3>Claude Code</h3>
             <p>登录 Claude Pro / Max 后，会同步成已启用模型连接。</p>
           </div>
-          <button
+          <Button
             type="button"
             className="maka-button"
-            data-variant="ghost"
+            variant="ghost"
             onClick={props.onClose}
             aria-label="关闭"
           >
             ×
-          </button>
+          </Button>
         </header>
         <ClaudeSubscriptionCard />
       </section>
@@ -946,15 +948,15 @@ function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClo
             <h3>{display.name}</h3>
             <p>{display.detail}</p>
           </div>
-          <button
+          <Button
             type="button"
             className="maka-button"
-            data-variant="ghost"
+            variant="ghost"
             onClick={props.onClose}
             aria-label="关闭"
           >
             ×
-          </button>
+          </Button>
         </header>
         <div className="settingsConnectionRow" data-status={runtimeState}>
           <p className="settingsConnectionDetail">
@@ -968,25 +970,24 @@ function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClo
           )}
           <div className="settingsConnectionActions">
             {!isLoggedIn ? (
-              <button
+              <Button
                 type="button"
                 className="maka-button"
-                data-variant="primary"
                 onClick={() => void startLogin()}
                 disabled={actionBusy}
               >
                 {pendingAction === 'login' ? '打开浏览器…' : `登录 ${display.shortName}`}
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
                 className="maka-button"
-                data-variant="ghost"
+                variant="ghost"
                 onClick={() => void logout()}
                 disabled={actionBusy}
               >
                 {pendingAction === 'logout' ? '退出中…' : '退出登录'}
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -1868,18 +1869,18 @@ function ModelTable(props: {
             默认模型只用于新建会话；已有会话会保留创建时的模型选择。
           </small>
         </div>
-        <button
+        <Button
           className="maka-button"
           type="button"
           disabled={!props.canRefresh}
           onClick={props.onRefresh}
         >
           {props.fetchingModels ? '拉取中…' : '刷新模型列表'}
-        </button>
+        </Button>
       </header>
 
       {props.modelChoices.length > 6 && (
-        <input
+        <Input
           type="search"
           className="modelTableSearch"
           placeholder={`在 ${props.modelChoices.length} 个模型中搜索…`}
@@ -1892,14 +1893,15 @@ function ModelTable(props: {
       )}
 
       {defaultHidden && (
-        <button
+        <Button
           type="button"
+          variant="ghost"
           className="modelTableDefaultHint"
           onClick={() => setQuery('')}
           title="清空搜索"
         >
           当前默认 <code>{props.defaultModel}</code> 不在搜索结果中 · 点这里清空搜索
-        </button>
+        </Button>
       )}
 
       {props.modelChoices.length === 0 ? (
@@ -2112,13 +2114,13 @@ function ClaudeSubscriptionCard() {
           Claude 登录开关读取失败：{experimentalGateError}
         </small>
         <div className="settingsConnectionActions">
-          <button
+          <Button
             type="button"
             className="maka-button"
             onClick={() => void refreshExperimentalGate()}
           >
             重试
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -2314,10 +2316,9 @@ function ClaudeSubscriptionCard() {
 
       <div className="settingsConnectionActions">
         {canStartClaudeLogin || claudeLoginPending ? (
-          <button
+          <Button
             type="button"
             className="maka-button"
-            data-variant="primary"
             onClick={() => void startLogin()}
             disabled={actionBusy || claudeLoginPending}
           >
@@ -2328,26 +2329,26 @@ function ClaudeSubscriptionCard() {
               : state?.runtimeState === 'refresh_failed' || state?.runtimeState === 'storage_failed'
                 ? '重新登录'
                 : '登录订阅'}
-          </button>
+          </Button>
         ) : (
           <>
-            <button
+            <Button
               type="button"
               className="maka-button"
               onClick={() => void refreshQuota()}
               disabled={actionBusy}
             >
               {pendingAction === 'quota' ? '刷新中…' : '刷新配额'}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               className="maka-button"
-              data-variant="ghost"
+              variant="ghost"
               onClick={() => void logout()}
               disabled={actionBusy}
             >
               {pendingAction === 'logout' ? '退出中…' : '退出登录'}
-            </button>
+            </Button>
           </>
         )}
       </div>
@@ -2361,7 +2362,7 @@ function ClaudeSubscriptionCard() {
           {stateHint && (
             <small>提示：你的 state 以 <code>{stateHint}</code> 开头。</small>
           )}
-          <textarea
+          <Textarea
             value={pasteValue}
             onChange={(event) => setPasteValue(event.currentTarget.value)}
             placeholder="粘贴授权码（格式：xxx#yyy）"
@@ -2372,24 +2373,23 @@ function ClaudeSubscriptionCard() {
           />
           {pasteError && <small className="settingsErrorText">{pasteError}</small>}
           <div className="settingsConnectionActions">
-            <button
+            <Button
               type="button"
               className="maka-button"
-              data-variant="primary"
               onClick={() => void submitPaste()}
               disabled={actionBusy || pasteValue.trim().length === 0}
             >
               {pendingAction === 'submit' ? '提交中…' : '提交授权码'}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               className="maka-button"
-              data-variant="ghost"
+              variant="ghost"
               onClick={() => void cancelLogin()}
               disabled={actionBusy}
             >
               {pendingAction === 'cancel' ? '取消中…' : '取消'}
-            </button>
+            </Button>
           </div>
         </div>
       )}

@@ -39,9 +39,13 @@ describe('Settings form accessibility labels', () => {
   it('keeps migrated Settings text fields and action buttons on shared UI primitives', async () => {
     const settings = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
     const passwordInput = await readRepo('apps/desktop/src/renderer/settings/password-input.tsx');
+    const providersPanel = await readRepo('apps/desktop/src/renderer/settings/ProvidersPanel.tsx');
 
-    assert.match(settings, /import \{ Button, DialogContent, DialogRoot, Input, RelativeTime, Textarea,/);
+    assert.match(settings, /SelectItem,[\s\S]*SelectPopup,[\s\S]*SelectPortal,[\s\S]*SelectPositioner,[\s\S]*SelectRoot,[\s\S]*SelectTrigger,[\s\S]*SelectValue,/);
     assert.match(passwordInput, /import \{ Button, Input, useToast \} from '@maka\/ui';/);
+    assert.match(providersPanel, /import \{ Button, Input, RelativeTime, Textarea, useToast, useModalA11y \} from '@maka\/ui';/);
+    assert.match(settings, /function SettingsSelect<T extends string>/);
+    assert.match(settings, /<SelectPositioner alignItemWithTrigger=\{false\} sideOffset=\{6\}>/);
 
     for (const [path, source] of [
       ['SettingsModal.tsx', settings],
@@ -49,8 +53,13 @@ describe('Settings form accessibility labels', () => {
     ] as const) {
       assert.doesNotMatch(source, /<input\b/, `${path} must use the shared Input primitive for Settings text fields`);
       assert.doesNotMatch(source, /<textarea\b/, `${path} must use the shared Textarea primitive for Settings text areas`);
+      assert.doesNotMatch(source, /<select\b/, `${path} must use the Base UI Select primitive for Settings selects`);
       assert.doesNotMatch(source, /className="maka-button/, `${path} must not keep legacy maka-button styling on migrated actions`);
     }
+
+    assert.doesNotMatch(providersPanel, /<input\b/, 'ProvidersPanel must use the shared Input primitive for Settings text fields');
+    assert.doesNotMatch(providersPanel, /<textarea\b/, 'ProvidersPanel must use the shared Textarea primitive for Settings text areas');
+    assert.doesNotMatch(providersPanel, /<select\b/, 'ProvidersPanel must use the Base UI Select primitive for Settings selects');
   });
 
   it('keeps shared Settings password copy actions guarded and failure-visible', async () => {
@@ -106,7 +115,10 @@ describe('Settings form accessibility labels', () => {
       '请求状态筛选',
       'MEMORY.md 内容',
     ]) {
-      assert.ok(settings.includes(`aria-label="${label}"`), `SettingsModal must label ${label}`);
+      assert.ok(
+        settings.includes(`aria-label="${label}"`) || settings.includes(`ariaLabel="${label}"`),
+        `SettingsModal must label ${label}`,
+      );
     }
 
     for (const label of [
