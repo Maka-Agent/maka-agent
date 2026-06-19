@@ -339,6 +339,52 @@ describe('failed runs surface as an error (not a silent ⚠️ + exit 0)', () =>
       assert.equal(result.passed, false);
     });
   });
+
+  test('complete(stopReason=error) with no preceding error event classifies as runtime_error in ResultRecord', async () => {
+    // Reproduces the DeepSeek-reasoner smoke: the backend ended with
+    // stopReason='error' but never emitted a preceding error event. The
+    // benchmark ResultRecord.errorClass must read 'runtime_error' (not
+    // 'failed' or 'unknown') so scoring can distinguish runtime failures
+    // from max_tokens / incomplete_tool_calls / verification_failed.
+    class BareErrorCompleteBackend implements AgentBackend {
+      readonly kind: BackendKind = 'fake';
+      readonly sessionId: string;
+      constructor(private readonly ctx: { sessionId: string; header: SessionHeader; store: SessionStore }) {
+        this.sessionId = ctx.sessionId;
+      }
+      async *send(input: BackendSendInput): AsyncIterable<SessionEvent> {
+        const { turnId } = input;
+        const ts = Date.now();
+        // NO preceding error event — just a bare complete(error).
+        yield { type: 'complete', id: 'bare-err-c', turnId, ts, stopReason: 'error' };
+      }
+      async stop(): Promise<void> {}
+      async respondToPermission(_decision: PermissionDecision): Promise<void> {}
+      async dispose(): Promise<void> {}
+    }
+    await withDirs(async (fixtureDir, storageRoot) => {
+      await writeFile(join(fixtureDir, 'marker.txt'), 'present', 'utf8');
+      const task: Task = {
+        id: 'bare-error',
+        instruction: 'do the thing',
+        workspaceDir: fixtureDir,
+        verification: { command: 'test -f marker.txt', protectedPaths: [] },
+      };
+
+      const result = await runExperiment(fakeConfig, task, {
+        storageRoot,
+        registerBackends: (registry) => {
+          registry.register('fake', (ctx) =>
+            new BareErrorCompleteBackend({ sessionId: ctx.sessionId, header: ctx.header, store: ctx.store }),
+          );
+        },
+      });
+
+      assert.equal(result.status, 'failed');
+      assert.equal(result.errorClass, 'runtime_error');
+      assert.equal(result.passed, false);
+    });
+  });
 });
 
 describe('engine-level grading-boundary validation (not only the CLI)', () => {

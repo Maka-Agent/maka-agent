@@ -346,6 +346,21 @@ function failureFromTerminalEvent(event: RuntimeEvent): InvocationFailure | unde
   const status: RuntimeEventStatus | undefined = event.status;
   if (status === undefined || status === 'completed') return undefined;
   const content = event.content;
+  // A failed terminal event may carry an error content (reason/code) from
+  // the provider or backend. Prefer that precise class over the bare status.
+  // A failed terminal with NO error content (e.g. complete(stopReason=error)
+  // with no preceding error event) classifies as 'runtime_error' — not the
+  // bare 'failed' — so benchmark scoring can distinguish it from other
+  // failure modes and the run ledger stays consistent with the invocation.
+  if (status === 'failed') {
+    const message = content?.kind === 'error' ? content.message : undefined;
+    const classFromContent = content?.kind === 'error' ? (content.reason ?? content.code) : undefined;
+    return {
+      class: classFromContent ?? 'runtime_error',
+      ...(message ? { message } : {}),
+      terminalStatus: status,
+    };
+  }
   const message = content?.kind === 'error' ? content.message : undefined;
   return {
     class: status,
