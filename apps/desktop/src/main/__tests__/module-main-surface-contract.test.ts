@@ -98,8 +98,10 @@ describe('module main surface contract', () => {
 
     assert.match(skillsModeBlock, /<SkillsModuleMain/);
     assert.match(skillsModuleMain, /className="maka-main detailPane maka-module-main agents-chat-panel" aria-label="技能"/);
+    assert.match(skillsModuleMain, /className="maka-module-main-actions" role="group" aria-label="技能操作"/);
     assert.match(skillsModuleMain, /<SkillLibraryPanel/);
     assert.doesNotMatch(sidebarListBlock, /<SkillLibraryPanel/);
+    assert.doesNotMatch(sidebarListBlock, /maka-skill-examples/);
     assert.doesNotMatch(sidebarListBlock, /title="技能库"[\s\S]*body="已在右侧内容栏打开。"/);
     assert.match(sidebarListBlock, /<SessionListGroups/);
   });

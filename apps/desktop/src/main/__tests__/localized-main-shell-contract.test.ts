@@ -687,15 +687,19 @@ describe('localized main shell contract', () => {
     const components = await readFile(resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'components.tsx'), 'utf8');
     const styles = await readFile(join(process.cwd(), 'src', 'renderer', 'styles.css'), 'utf8');
     const skillPanel = components.match(/function SkillLibraryPanel[\s\S]*?function formatSkillLibraryDescription/)?.[0] ?? '';
+    const wrapperStyle = styles.match(/\.maka-skill-library\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
     const listStyle = styles.match(/\.maka-skill-library-list\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
 
-    assert.match(skillPanel, /<ul className="maka-skill-library-list" aria-label="技能列表" aria-busy=\{props\.actionBusy \? 'true' : undefined\}>/);
+    assert.match(skillPanel, /<div className="maka-skill-library" aria-busy=\{props\.actionBusy \? 'true' : undefined\}>/);
+    assert.match(skillPanel, /<ul className="maka-skill-library-list" aria-label="技能列表">/);
     assert.match(skillPanel, /<li key=\{skill\.id\} className="maka-skill-library-item">[\s\S]*?<UiButton[\s\S]*?className="maka-skill-library-row"/);
     assert.match(skillPanel, /<UiButton[\s\S]*variant="ghost"[\s\S]*disabled=\{props\.actionBusy\}[\s\S]*title=\{hoverText\}/);
     assert.doesNotMatch(skillPanel, /<button[\s\S]*?className="maka-skill-library-row"/);
+    assert.match(wrapperStyle, /overflow:\s*auto/);
     assert.match(listStyle, /list-style:\s*none/);
     assert.match(listStyle, /margin:\s*0/);
     assert.match(listStyle, /padding:\s*0/);
+    assert.match(listStyle, /overflow:\s*visible/);
   });
 
   it('does not leak absolute skill paths through row hover or accessibility help', async () => {

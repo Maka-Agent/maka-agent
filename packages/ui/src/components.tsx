@@ -656,73 +656,128 @@ function SkillLibraryPanel(props: {
   createPending?: boolean;
   openingSkillId?: string | null;
 }) {
+  const skillCount = props.skills?.length ?? 0;
+  const declaredToolCount = new Set((props.skills ?? []).flatMap((skill) => skill.declaredTools ?? [])).size;
+  const examples = (
+    <section className="maka-skill-examples" aria-label="技能示例">
+      <div className="maka-skill-examples-header">
+        <span className="maka-skill-section-label">推荐模板</span>
+        <span>{props.createPending ? '正在创建本地模板…' : '可复制成工作区 Skill'}</span>
+      </div>
+      <ul className="maka-skill-example-grid" aria-label="技能模板示例">
+        {SKILL_EXAMPLE_CARDS.map((example) => (
+          <li key={example.title} className="maka-skill-example-card">
+            <span className="maka-skill-example-icon" aria-hidden="true">
+              <example.Icon size={16} strokeWidth={1.7} />
+            </span>
+            <strong>{example.title}</strong>
+            <span>{example.body}</span>
+            <small>{example.meta}</small>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+
   if (!props.skills || props.skills.length === 0) {
     return (
-      <EmptyState
-        Icon={Sparkles}
-        title="等待添加 Skill"
-        body={
-          <>
-            把一个含 <code className="maka-empty-state-code">SKILL.md</code> 的文件夹放到工作区的
-            {' '}<code className="maka-empty-state-code">skills/</code> 目录下，刷新后会出现在这里。
-            工作区路径在 设置 · 关于 · 工作区。
-          </>
-        }
-        cta={props.onCreateSkillTemplate ? {
-          label: props.createPending ? '创建中…' : '创建示例技能',
-          onClick: props.onCreateSkillTemplate,
-          disabled: props.actionBusy,
-        } : undefined}
-        secondaryCta={props.onRefreshSkills ? {
-          label: props.refreshPending ? '刷新中…' : '刷新技能',
-          onClick: props.onRefreshSkills,
-          disabled: props.actionBusy,
-        } : undefined}
-      />
+      <div className="maka-skill-library" aria-busy={props.actionBusy ? 'true' : undefined}>
+        {examples}
+        <EmptyState
+          Icon={Sparkles}
+          title="等待添加 Skill"
+          body={
+            <>
+              把一个含 <code className="maka-empty-state-code">SKILL.md</code> 的文件夹放到工作区的
+              {' '}<code className="maka-empty-state-code">skills/</code> 目录下，刷新后会出现在这里。
+              工作区路径在 设置 · 关于 · 工作区。
+            </>
+          }
+          cta={props.onCreateSkillTemplate ? {
+            label: props.createPending ? '创建中…' : '创建示例技能',
+            onClick: props.onCreateSkillTemplate,
+            disabled: props.actionBusy,
+          } : undefined}
+          secondaryCta={props.onRefreshSkills ? {
+            label: props.refreshPending ? '刷新中…' : '刷新技能',
+            onClick: props.onRefreshSkills,
+            disabled: props.actionBusy,
+          } : undefined}
+        />
+      </div>
     );
   }
 
   return (
-    <ul className="maka-skill-library-list" aria-label="技能列表" aria-busy={props.actionBusy ? 'true' : undefined}>
-      {props.skills.map((skill) => {
-        const tools = skill.declaredTools ?? [];
-        const toolsLabel = tools.length > 0 ? tools.join(', ') : '';
-        const description = formatSkillLibraryDescription(skill);
-        const opening = props.openingSkillId === skill.id;
-        const hoverText = tools.length > 0
-          ? `打开技能文件：${skill.id}\n\n声明工具：${toolsLabel}\n权限仍按当前会话策略判断；这里不是授权。`
-          : `打开技能文件：${skill.id}`;
-        return (
-          <li key={skill.id} className="maka-skill-library-item">
-            <UiButton
-              type="button"
-              variant="ghost"
-              className="maka-skill-library-row"
-              onClick={() => props.onOpenSkill?.(skill.id)}
-              disabled={props.actionBusy}
-              title={hoverText}
-            >
-              <span className="maka-skill-library-name">{skill.name}</span>
-              {description && (
-                <span className="maka-skill-library-description">{description}</span>
-              )}
-              <span className="maka-skill-library-meta">
-                <span>{skill.id}</span>
-                {opening && <span>打开中…</span>}
-                {tools.length > 0 && (
-                  <span className="maka-skill-tools" aria-label="声明的工具">
-                    <span className="maka-skill-tools-label">工具</span>
-                    <span>{toolsLabel}</span>
+    <div className="maka-skill-library" aria-busy={props.actionBusy ? 'true' : undefined}>
+      {examples}
+      <section className="maka-skill-installed" aria-label="已安装技能">
+        <div className="maka-skill-installed-header">
+          <span className="maka-skill-section-label">本地技能</span>
+          <span>{skillCount} 个 Skill · {declaredToolCount} 类工具声明</span>
+        </div>
+        <ul className="maka-skill-library-list" aria-label="技能列表">
+          {props.skills.map((skill) => {
+            const tools = skill.declaredTools ?? [];
+            const toolsLabel = tools.length > 0 ? tools.join(', ') : '';
+            const description = formatSkillLibraryDescription(skill);
+            const opening = props.openingSkillId === skill.id;
+            const hoverText = tools.length > 0
+              ? `打开技能文件：${skill.id}\n\n声明工具：${toolsLabel}\n权限仍按当前会话策略判断；这里不是授权。`
+              : `打开技能文件：${skill.id}`;
+            return (
+              <li key={skill.id} className="maka-skill-library-item">
+                <UiButton
+                  type="button"
+                  variant="ghost"
+                  className="maka-skill-library-row"
+                  onClick={() => props.onOpenSkill?.(skill.id)}
+                  disabled={props.actionBusy}
+                  title={hoverText}
+                >
+                  <span className="maka-skill-library-name">{skill.name}</span>
+                  {description && (
+                    <span className="maka-skill-library-description">{description}</span>
+                  )}
+                  <span className="maka-skill-library-meta">
+                    <span>{skill.id}</span>
+                    {opening && <span>打开中…</span>}
+                    {tools.length > 0 && (
+                      <span className="maka-skill-tools" aria-label="声明的工具">
+                        <span className="maka-skill-tools-label">工具</span>
+                        <span>{toolsLabel}</span>
+                      </span>
+                    )}
                   </span>
-                )}
-              </span>
-            </UiButton>
-          </li>
-        );
-      })}
-    </ul>
+                </UiButton>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    </div>
   );
 }
+
+const SKILL_EXAMPLE_CARDS: ReadonlyArray<{
+  title: string;
+  body: string;
+  meta: string;
+  Icon: typeof FileEdit;
+}> = [
+  {
+    title: '文档处理流',
+    body: '润色、批注、检查 DOCX 内容，把重复文档步骤沉进 Skill。',
+    meta: 'Office · 审阅 · 导出',
+    Icon: FileEdit,
+  },
+  {
+    title: '演示资料流',
+    body: '生成结构、整理讲稿、检查 PPTX 页面，让演示准备更稳定。',
+    meta: 'Slides · 提纲 · 校对',
+    Icon: BookOpen,
+  },
+];
 
 function formatSkillLibraryDescription(skill: SkillEntry): string | undefined {
   const raw = skill.description?.trim();
@@ -756,6 +811,7 @@ function SkillsModuleMain(props: {
   onRefreshSkills?(): void | Promise<void>;
   onCreateSkillTemplate?(): void | Promise<void>;
   onOpenSkill?(skillId: string): void | Promise<void>;
+  onOpenSkillsFolder?(): void | Promise<void>;
 }) {
   const [pendingSkillAction, setPendingSkillAction] = useState<string | null>(null);
   const skillActionMountedRef = useRef(true);
@@ -792,17 +848,37 @@ function SkillsModuleMain(props: {
       <header className="maka-module-main-header">
         <div>
           <h2>技能</h2>
-          <p>管理工作区里的 Skill 指令文件。</p>
+          <p>本地 Skill 指令文件和可复用工作流。</p>
         </div>
-        <UiButton
-          className="maka-button maka-button-ghost"
-          variant="ghost"
-          type="button"
-          onClick={() => void runSkillAction('refresh', props.onRefreshSkills)}
-          disabled={!props.onRefreshSkills || skillActionBusy}
-        >
-          {pendingSkillAction === 'refresh' ? '刷新中…' : '刷新'}
-        </UiButton>
+        <div className="maka-module-main-actions" role="group" aria-label="技能操作">
+          <UiButton
+            className="maka-button maka-button-ghost"
+            variant="ghost"
+            type="button"
+            onClick={() => void runSkillAction('folder', props.onOpenSkillsFolder)}
+            disabled={!props.onOpenSkillsFolder || skillActionBusy}
+          >
+            打开目录
+          </UiButton>
+          <UiButton
+            className="maka-button maka-button-ghost"
+            variant="ghost"
+            type="button"
+            onClick={() => void runSkillAction('create', props.onCreateSkillTemplate)}
+            disabled={!props.onCreateSkillTemplate || skillActionBusy}
+          >
+            {pendingSkillAction === 'create' ? '创建中…' : '创建示例'}
+          </UiButton>
+          <UiButton
+            className="maka-button maka-button-ghost"
+            variant="ghost"
+            type="button"
+            onClick={() => void runSkillAction('refresh', props.onRefreshSkills)}
+            disabled={!props.onRefreshSkills || skillActionBusy}
+          >
+            {pendingSkillAction === 'refresh' ? '刷新中…' : '刷新'}
+          </UiButton>
+        </div>
       </header>
       <SkillLibraryPanel
         skills={props.skills}
@@ -3484,6 +3560,7 @@ export function ChatView(props: {
   onRefreshSkills?(): void | Promise<void>;
   onCreateSkillTemplate?(): void | Promise<void>;
   onOpenSkill?(skillId: string): void | Promise<void>;
+  onOpenSkillsFolder?(): void | Promise<void>;
   planReminders?: PlanReminder[];
   onRefreshPlanReminders?: () => void | Promise<void>;
   onCreatePlanReminder?(input: PlanReminderDraftInput): boolean | Promise<boolean> | void | Promise<void>;
@@ -3606,6 +3683,7 @@ export function ChatView(props: {
         onRefreshSkills={props.onRefreshSkills}
         onCreateSkillTemplate={props.onCreateSkillTemplate}
         onOpenSkill={props.onOpenSkill}
+        onOpenSkillsFolder={props.onOpenSkillsFolder}
       />
     );
   }

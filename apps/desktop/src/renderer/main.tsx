@@ -2924,6 +2924,7 @@ function AppShell() {
                 onRefreshSkills={() => refreshSkills()}
                 onCreateSkillTemplate={() => createSkillTemplate()}
                 onOpenSkill={(skillId) => openSkill(skillId)}
+                onOpenSkillsFolder={() => openSkillsFolder()}
                 planReminders={planReminders}
                 onRefreshPlanReminders={() => refreshPlanReminders({ shouldShowError: isAutomationsSurfaceActive })}
                 onCreatePlanReminder={(input) => createPlanReminder(input)}
