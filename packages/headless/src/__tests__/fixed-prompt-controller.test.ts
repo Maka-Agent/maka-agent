@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import type { Config } from '../contracts.js';
 import {
+  readHarborTaskRunOutput,
   runFixedPromptController,
   type FixedPromptWalEvent,
   type HarborTaskRunOutput,
@@ -85,6 +86,77 @@ describe('fixed prompt controller', () => {
       );
     });
   });
+
+  test('records Harbor runner failures as infra events', async () => {
+    await withDir(async (dir) => {
+      const systemPromptPath = join(dir, 'system_prompt.md');
+      const resultsJsonlPath = join(dir, 'results.jsonl');
+      await writeFile(systemPromptPath, 'fixed prompt\n', 'utf8');
+
+      const result = await runFixedPromptController({
+        runId: 'run-1',
+        roundId: 'round-1',
+        config,
+        systemPromptPath,
+        resultsJsonlPath,
+        resultsTsvPath: join(dir, 'results.tsv'),
+        tasks: [{ id: 'task-a', path: '/bench/task-a' }],
+        harborRunner: async () => {
+          throw new Error('container crashed before result.json');
+        },
+        now: () => 100,
+        newId: idFactory(),
+      });
+
+      assert.equal(result.events[0]?.type, 'task_infra_failed');
+      assert.equal(result.events[0]?.taskId, 'task-a');
+      assert.equal(result.events[0]?.eligible, false);
+      assert.equal(result.events[0]?.scored, false);
+      assert.equal(result.events[0]?.errorClass, 'infra_error');
+      assert.match(await readFile(resultsJsonlPath, 'utf8'), /"type":"task_infra_failed"/);
+    });
+  });
+
+  test('reads Harbor reward and Maka cell output artifacts', async () => {
+    await withDir(async (dir) => {
+      const harborResultPath = join(dir, 'result.json');
+      const cellOutputPath = join(dir, 'maka-cell-output.json');
+      await writeFile(harborResultPath, JSON.stringify({ reward: 0 }), 'utf8');
+      await writeFile(cellOutputPath, JSON.stringify(harborOutput({ taskId: 'task-a' }).cell), 'utf8');
+
+      const output = await readHarborTaskRunOutput({ harborResultPath, cellOutputPath });
+
+      assert.equal(output.harbor.reward, 0);
+      assert.equal(output.cell.status, 'completed');
+      assert.equal(output.cell.runtimeRefs.sessionId, 'session-task-a');
+    });
+  });
+
+  test('classifies completed Harbor reward failures as benchmark failures', async () => {
+    await withDir(async (dir) => {
+      const systemPromptPath = join(dir, 'system_prompt.md');
+      await writeFile(systemPromptPath, 'fixed prompt\n', 'utf8');
+
+      const result = await runFixedPromptController({
+        runId: 'run-1',
+        roundId: 'round-1',
+        config,
+        systemPromptPath,
+        resultsJsonlPath: join(dir, 'results.jsonl'),
+        resultsTsvPath: join(dir, 'results.tsv'),
+        tasks: [{ id: 'task-a', path: '/bench/task-a' }],
+        harborRunner: async () => harborOutput({ taskId: 'task-a', reward: 0 }),
+        now: () => 100,
+        newId: idFactory(),
+      });
+
+      assert.equal(result.events[0]?.type, 'task_completed');
+      assert.equal(result.events[0]?.passed, false);
+      assert.equal(result.events[0]?.scored, true);
+      assert.equal(result.events[0]?.eligible, true);
+      assert.equal(result.events[0]?.errorClass, 'verification_failed');
+    });
+  });
 });
 
 function taskCompletedEvent(input: { taskId: string }): FixedPromptWalEvent {
@@ -109,9 +181,9 @@ function taskCompletedEvent(input: { taskId: string }): FixedPromptWalEvent {
   };
 }
 
-function harborOutput(input: { taskId: string }): HarborTaskRunOutput {
+function harborOutput(input: { taskId: string; reward?: number }): HarborTaskRunOutput {
   return {
-    harbor: { reward: 1 },
+    harbor: { reward: input.reward ?? 1 },
     cell: {
       schemaVersion: 1,
       status: 'completed',

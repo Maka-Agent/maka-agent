@@ -29,15 +29,18 @@ export type {
   FixedPromptControllerResult,
   FixedPromptTask,
   FixedPromptTaskCompletedEvent,
+  FixedPromptTaskInfraFailedEvent,
   FixedPromptWalEvent,
   HarborTaskRunInput,
   HarborTaskRunOutput,
   HarborTaskRunner,
+  ReadHarborTaskRunOutputInput,
   RunFixedPromptControllerInput,
 } from './fixed-prompt-controller.js';
 export {
   FIXED_PROMPT_WAL_SCHEMA_VERSION,
   appendFixedPromptWalEvent,
+  readHarborTaskRunOutput,
   readFixedPromptWal,
   runFixedPromptController,
   writeFixedPromptResultsTsv,
