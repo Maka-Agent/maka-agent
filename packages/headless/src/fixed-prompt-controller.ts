@@ -126,7 +126,6 @@ export interface PromptCandidateDecisionEvent {
   originalCommitSha: string;
   heldInPassRateNoiseBand: number;
   heldOutPassRateNoiseBand: number;
-  coverageNoiseBand: number;
   metrics: unknown;
 }
 

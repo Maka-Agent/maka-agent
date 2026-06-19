@@ -90,7 +90,6 @@ export interface DecidePromptAcceptanceInput {
   previousHeldInReferencePassEligibleRate: number | null;
   heldInPassRateNoiseBand: number;
   heldOutPassRateNoiseBand: number;
-  coverageNoiseBand: number;
   originalEvents: readonly FixedPromptTaskWalEvent[];
   lastKeptEvents: readonly FixedPromptTaskWalEvent[];
   candidateEvents: readonly FixedPromptTaskWalEvent[];
@@ -109,7 +108,6 @@ export interface PromptAcceptanceResult {
   originalCommitSha: string;
   heldInPassRateNoiseBand: number;
   heldOutPassRateNoiseBand: number;
-  coverageNoiseBand: number;
   metrics: PromptAcceptanceMetrics;
 }
 
@@ -181,7 +179,6 @@ export function decidePromptAcceptance(input: DecidePromptAcceptanceInput): Prom
     previousHeldInReferencePassEligibleRate: input.previousHeldInReferencePassEligibleRate,
     heldInPassRateNoiseBand: input.heldInPassRateNoiseBand,
     heldOutPassRateNoiseBand: input.heldOutPassRateNoiseBand,
-    coverageNoiseBand: input.coverageNoiseBand,
   });
   const decision: PromptAcceptanceDecision = reason === 'held_in_improved' ? 'keep' : 'discard';
   const heldInReferencePassEligibleRate = nextHeldInReferencePassEligibleRate({
@@ -203,7 +200,6 @@ export function decidePromptAcceptance(input: DecidePromptAcceptanceInput): Prom
     originalCommitSha: input.originalCommitSha,
     heldInPassRateNoiseBand: input.heldInPassRateNoiseBand,
     heldOutPassRateNoiseBand: input.heldOutPassRateNoiseBand,
-    coverageNoiseBand: input.coverageNoiseBand,
     metrics,
   };
 }
@@ -327,7 +323,6 @@ function promptCandidateDecisionEvent(
     originalCommitSha: input.result.originalCommitSha,
     heldInPassRateNoiseBand: input.result.heldInPassRateNoiseBand,
     heldOutPassRateNoiseBand: input.result.heldOutPassRateNoiseBand,
-    coverageNoiseBand: input.result.coverageNoiseBand,
     metrics: input.result.metrics,
   };
 }
@@ -338,7 +333,6 @@ function acceptanceReason(
     previousHeldInReferencePassEligibleRate: number | null;
     heldInPassRateNoiseBand: number;
     heldOutPassRateNoiseBand: number;
-    coverageNoiseBand: number;
   },
 ): PromptAcceptanceReason {
   const heldInCandidate = metrics.candidate.heldIn;
@@ -346,13 +340,18 @@ function acceptanceReason(
   const heldOutCandidate = metrics.candidate.heldOut;
   const heldOutReference = metrics.original.heldOut;
 
-  if (hasBlockingTaskFailure(heldInCandidate) || hasBlockingTaskFailure(heldOutCandidate)) {
+  if (
+    hasBlockingTaskFailure(heldInReference)
+    || hasBlockingTaskFailure(heldOutReference)
+    || hasBlockingTaskFailure(heldInCandidate)
+    || hasBlockingTaskFailure(heldOutCandidate)
+  ) {
     return 'coverage_regressed';
   }
-  if (regressed(heldInCandidate.coverageRate, heldInReference.coverageRate, input.coverageNoiseBand)) {
+  if (coverageRegressed(heldInCandidate.coverageRate, heldInReference.coverageRate)) {
     return 'coverage_regressed';
   }
-  if (regressed(heldOutCandidate.coverageRate, heldOutReference.coverageRate, input.coverageNoiseBand)) {
+  if (coverageRegressed(heldOutCandidate.coverageRate, heldOutReference.coverageRate)) {
     return 'coverage_regressed';
   }
   if (regressed(heldOutCandidate.passEligibleRate, heldOutReference.passEligibleRate, input.heldOutPassRateNoiseBand)) {
@@ -406,4 +405,8 @@ function improved(candidate: number | null, reference: number | null, noiseBand:
 
 function regressed(candidate: number | null, reference: number | null, noiseBand: number): boolean {
   return reference !== null && (candidate === null || candidate < reference - noiseBand);
+}
+
+function coverageRegressed(candidate: number | null, reference: number | null): boolean {
+  return reference !== null && (candidate === null || candidate < reference);
 }

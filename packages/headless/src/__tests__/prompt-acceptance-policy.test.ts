@@ -91,7 +91,6 @@ describe('prompt acceptance policy', () => {
       previousHeldInReferencePassEligibleRate: 0.25,
       heldInPassRateNoiseBand: 0.05,
       heldOutPassRateNoiseBand: 0.05,
-      coverageNoiseBand: 0,
       originalEvents: [
         completed('out-a', true),
         completed('out-b', true),
@@ -267,7 +266,6 @@ describe('prompt acceptance policy', () => {
   test('discards candidate coverage degradation, including infra failures', () => {
     const decision = decidePromptAcceptance({
       ...baseDecisionInput(),
-      coverageNoiseBand: 0,
       lastKeptEvents: [
         completed('in-a', true),
         infraFailed('in-b'),
@@ -282,6 +280,45 @@ describe('prompt acceptance policy', () => {
     assert.equal(decision.decision, 'discard');
     assert.equal(decision.reason, 'coverage_regressed');
     assert.deepEqual(decision.metrics.candidate.heldIn.infraFailedTaskIds, ['in-b']);
+  });
+
+  test('discards any coverage degradation without a noise allowance', () => {
+    const decision = decidePromptAcceptance({
+      ...baseDecisionInput(),
+      heldInTaskIds: ['in-a', 'in-b', 'in-c'],
+      previousHeldInReferencePassEligibleRate: 0.5,
+      lastKeptEvents: [
+        completed('in-a', true),
+        completed('in-b', false),
+        completed('in-c', false),
+      ],
+      candidateEvents: [
+        completed('in-a', true),
+        completed('in-b', true),
+        completed('in-c', false, { scored: false, errorClass: 'max_tokens' }),
+        completed('out-a', true),
+      ],
+    });
+
+    assert.equal(decision.decision, 'discard');
+    assert.equal(decision.reason, 'coverage_regressed');
+  });
+
+  test('discards when a configured held-out floor is missing its original reference', () => {
+    const decision = decidePromptAcceptance({
+      ...baseDecisionInput(),
+      heldOutTaskIds: ['out-a'],
+      originalEvents: [],
+      candidateEvents: [
+        completed('in-a', true),
+        completed('in-b', true),
+        completed('out-a', true),
+      ],
+    });
+
+    assert.equal(decision.decision, 'discard');
+    assert.equal(decision.reason, 'coverage_regressed');
+    assert.deepEqual(decision.metrics.original.heldOut.missingTaskIds, ['out-a']);
   });
 
   test('discards candidates that fall below the held-out original floor', () => {
@@ -368,7 +405,6 @@ function baseDecisionInput() {
     previousHeldInReferencePassEligibleRate: 0.5,
     heldInPassRateNoiseBand: 0.05,
     heldOutPassRateNoiseBand: 0.05,
-    coverageNoiseBand: 0,
     originalEvents: [completed('out-a', true)],
     lastKeptEvents: [completed('in-a', true), completed('in-b', false)],
     candidateEvents: [completed('in-a', true), completed('in-b', true), completed('out-a', true)],
