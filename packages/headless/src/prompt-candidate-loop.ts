@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { lstat, readFile, realpath, writeFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -263,24 +264,32 @@ async function assertRegularSystemPromptFile(systemPromptPath: string, gitRootPa
 }
 
 export function createCliPromptCandidateGit(input: CreateCliPromptCandidateGitInput): PromptCandidateGit {
-  const systemPromptGitPath = toGitRelativePath(input.cwd, input.systemPromptPath);
+  const gitRootPath = realpathSync(findGitRoot(input.cwd));
+  const systemPromptPath = isAbsolute(input.systemPromptPath)
+    ? realpathSync(input.systemPromptPath)
+    : realpathSync(resolve(input.cwd, input.systemPromptPath));
+  const systemPromptGitPath = toGitRelativePath(gitRootPath, systemPromptPath);
   return {
-    gitRootPath: input.cwd,
+    gitRootPath,
     systemPromptGitPath,
     async changedFiles(): Promise<readonly string[]> {
-      const { stdout } = await execFileAsync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: input.cwd });
+      const { stdout } = await execFileAsync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: gitRootPath });
       return stdout
         .split('\n')
         .map((line) => line.slice(3).trim())
         .filter((line) => line.length > 0);
     },
     async commit(message: string): Promise<string> {
-      await execFileAsync('git', ['add', '--', systemPromptGitPath], { cwd: input.cwd });
-      await execFileAsync('git', ['commit', '-m', message], { cwd: input.cwd });
-      const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: input.cwd });
+      await execFileAsync('git', ['add', '--', systemPromptGitPath], { cwd: gitRootPath });
+      await execFileAsync('git', ['commit', '-m', message], { cwd: gitRootPath });
+      const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: gitRootPath });
       return stdout.trim();
     },
   };
+}
+
+function findGitRoot(cwd: string): string {
+  return execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8' }).trim();
 }
 
 function isPathInside(rootPath: string, targetPath: string): boolean {

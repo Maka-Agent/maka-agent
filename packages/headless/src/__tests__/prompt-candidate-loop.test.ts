@@ -410,6 +410,42 @@ describe('prompt candidate loop', () => {
       assert.equal(result.commitSha.length, 40);
     });
   });
+
+  test('CLI git adapter uses repo-root paths when cwd is a subdirectory', async () => {
+    await withDir(async (dir) => {
+      await execFileAsync('git', ['init'], { cwd: dir });
+      await execFileAsync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      await execFileAsync('git', ['config', 'user.name', 'Test User'], { cwd: dir });
+      const packageDir = join(dir, 'packages', 'headless');
+      await mkdir(packageDir, { recursive: true });
+      const programPath = join(packageDir, 'program.md');
+      const systemPromptPath = join(packageDir, 'system_prompt.md');
+      const resultsTsvPath = join(packageDir, 'results.tsv');
+      await writeFile(programPath, 'Improve the prompt conservatively.\n', 'utf8');
+      await writeFile(systemPromptPath, 'original prompt\n', 'utf8');
+      await writeFile(resultsTsvPath, 'task_id\tpassed\ntask-a\tfalse\n', 'utf8');
+      await execFileAsync('git', ['add', '.'], { cwd: dir });
+      await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: dir });
+
+      const result = await runPromptCandidateRound({
+        runId: 'run-1',
+        roundId: 'round-1',
+        programPath,
+        systemPromptPath,
+        resultsTsvPath,
+        resultsJsonlPath: join(packageDir, 'results.jsonl'),
+        heldInDigests: [],
+        metaAgent: async () => ({ systemPrompt: 'candidate prompt\n', summary: 'changed prompt' }),
+        git: createCliPromptCandidateGit({ cwd: packageDir, systemPromptPath: 'system_prompt.md' }),
+        now: () => 100,
+        newId: idFactory(),
+      });
+
+      const subject = await execFileAsync('git', ['log', '-1', '--format=%s'], { cwd: dir });
+      assert.equal(subject.stdout.trim(), 'candidate prompt round-1');
+      assert.equal(result.commitSha.length, 40);
+    });
+  });
 });
 
 function gitNoop(gitRootPath = process.cwd()) {
