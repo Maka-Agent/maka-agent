@@ -204,6 +204,9 @@ export class AgentRun {
       }
       // A complete(error) without a preceding error event leaves failureClass
       // unset — record it now so finalize does not fall back to 'unknown'.
+      // This emits a run_failed event here AND another in finishRun, mirroring
+      // the error-event path (which also double-records). Event-stream
+      // consumers already tolerate duplicate terminal events.
       if (turnStatus?.status === 'failed' && turnStatus.errorClass && !this.failureClass) {
         this.markRunFailed(turnStatus.errorClass, 'turn ended with stopReason=error', ev.ts);
       }
