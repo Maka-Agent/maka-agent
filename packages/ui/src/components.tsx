@@ -3773,10 +3773,12 @@ export function ChatView(props: {
         />
       </header>
       {isLocalSimulationBackend && (
-        <div className="maka-fake-backend-banner" role="status">
+        <Alert variant="info" className="maka-fake-backend-banner" role="status">
           <AlertTriangle size={14} strokeWidth={1.75} aria-hidden="true" />
-          <span>当前会话来自旧的本地模拟连接。要拿到真实 LLM 回复，请到 <strong>设置 · 模型</strong> 添加 Anthropic / OpenAI / GLM 等 API key。</span>
-        </div>
+          <AlertDescription>
+            当前会话来自旧的本地模拟连接。要拿到真实 LLM 回复，请到 <strong>设置 · 模型</strong> 添加 Anthropic / OpenAI / GLM 等 API key。
+          </AlertDescription>
+        </Alert>
       )}
       <div className="maka-chat-shell">
         {props.branchBanner && (
