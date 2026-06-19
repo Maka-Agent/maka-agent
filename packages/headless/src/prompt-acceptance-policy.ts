@@ -1,4 +1,10 @@
-import type { FixedPromptTaskWalEvent } from './fixed-prompt-controller.js';
+import {
+  appendFixedPromptWalEvent,
+  FIXED_PROMPT_WAL_SCHEMA_VERSION,
+  type FixedPromptWalEvent,
+  type FixedPromptTaskWalEvent,
+  type PromptCandidateDecisionEvent,
+} from './fixed-prompt-controller.js';
 
 export type PromptAcceptanceDecision = 'keep' | 'discard';
 
@@ -61,6 +67,22 @@ export interface PromptAcceptanceResult {
   metrics: PromptAcceptanceMetrics;
 }
 
+export interface AppendPromptAcceptanceDecisionInput {
+  resultsJsonlPath: string;
+  id: string;
+  ts: number;
+  result: PromptAcceptanceResult;
+}
+
+export interface PromptAcceptanceState {
+  lastKeptCommitSha: string;
+  decisions: Array<{
+    roundId: string;
+    decision: PromptAcceptanceDecision;
+    candidateCommitSha: string;
+  }>;
+}
+
 export function decidePromptAcceptance(input: DecidePromptAcceptanceInput): PromptAcceptanceResult {
   const metrics: PromptAcceptanceMetrics = {
     original: {
@@ -89,6 +111,32 @@ export function decidePromptAcceptance(input: DecidePromptAcceptanceInput): Prom
   };
 }
 
+export async function appendPromptAcceptanceDecision(
+  input: AppendPromptAcceptanceDecisionInput,
+): Promise<PromptCandidateDecisionEvent> {
+  const event = promptCandidateDecisionEvent(input);
+  await appendFixedPromptWalEvent(input.resultsJsonlPath, event);
+  return event;
+}
+
+export function promptAcceptanceStateFromWal(
+  events: readonly FixedPromptWalEvent[],
+  initialLastKeptCommitSha: string,
+): PromptAcceptanceState {
+  const decisions: PromptAcceptanceState['decisions'] = [];
+  let lastKeptCommitSha = initialLastKeptCommitSha;
+  for (const event of events) {
+    if (event.type !== 'prompt_candidate_decided') continue;
+    lastKeptCommitSha = event.lastKeptCommitSha;
+    decisions.push({
+      roundId: event.roundId,
+      decision: event.decision,
+      candidateCommitSha: event.candidateCommitSha,
+    });
+  }
+  return { lastKeptCommitSha, decisions };
+}
+
 export function summarizePromptAcceptancePartition(
   events: readonly FixedPromptTaskWalEvent[],
   taskIds: readonly string[],
@@ -112,6 +160,26 @@ export function summarizePromptAcceptancePartition(
       return event !== undefined && !event.scored;
     }),
     missingTaskIds: taskIds.filter((taskId) => !byTask.has(taskId)),
+  };
+}
+
+function promptCandidateDecisionEvent(
+  input: AppendPromptAcceptanceDecisionInput,
+): PromptCandidateDecisionEvent {
+  return {
+    schemaVersion: FIXED_PROMPT_WAL_SCHEMA_VERSION,
+    type: 'prompt_candidate_decided',
+    id: input.id,
+    ts: input.ts,
+    runId: input.result.runId,
+    roundId: input.result.roundId,
+    decision: input.result.decision,
+    reason: input.result.reason,
+    candidateCommitSha: input.result.candidateCommitSha,
+    previousLastKeptCommitSha: input.result.previousLastKeptCommitSha,
+    lastKeptCommitSha: input.result.lastKeptCommitSha,
+    originalCommitSha: input.result.originalCommitSha,
+    metrics: input.result.metrics,
   };
 }
 

@@ -37,6 +37,7 @@ export type {
   HarborTaskRunOutput,
   HarborTaskRunner,
   PromptCandidateCommittedEvent,
+  PromptCandidateDecisionEvent,
   ReadHarborTaskRunOutputInput,
   RunFixedPromptControllerInput,
 } from './fixed-prompt-controller.js';
@@ -74,15 +75,19 @@ export {
   runPromptCandidateRound,
 } from './prompt-candidate-loop.js';
 export type {
+  AppendPromptAcceptanceDecisionInput,
   DecidePromptAcceptanceInput,
   PromptAcceptanceDecision,
   PromptAcceptanceMetrics,
   PromptAcceptancePartitionSummary,
   PromptAcceptanceReason,
   PromptAcceptanceResult,
+  PromptAcceptanceState,
 } from './prompt-acceptance-policy.js';
 export {
+  appendPromptAcceptanceDecision,
   decidePromptAcceptance,
+  promptAcceptanceStateFromWal,
   summarizePromptAcceptancePartition,
 } from './prompt-acceptance-policy.js';
 export type {

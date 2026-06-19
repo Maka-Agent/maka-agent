@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import {
+  appendPromptAcceptanceDecision,
   decidePromptAcceptance,
+  promptAcceptanceStateFromWal,
   summarizePromptAcceptancePartition,
 } from '../prompt-acceptance-policy.js';
 import type {
   FixedPromptTaskCompletedEvent,
   FixedPromptTaskWalEvent,
 } from '../fixed-prompt-controller.js';
+import { readFixedPromptWal } from '../fixed-prompt-controller.js';
 
 describe('prompt acceptance policy', () => {
   test('keeps candidates that improve held-in beyond noise without falling below the held-out original floor', () => {
@@ -156,6 +162,51 @@ describe('prompt acceptance policy', () => {
     assert.equal(decision.decision, 'discard');
     assert.equal(decision.reason, 'held_out_regressed');
   });
+
+  test('records KEEP and DISCARD decisions in the WAL and resumes last kept commit', async () => {
+    await withDir(async (dir) => {
+      const resultsJsonlPath = join(dir, 'results.jsonl');
+      const keep = decidePromptAcceptance(baseDecisionInput());
+      await appendPromptAcceptanceDecision({
+        resultsJsonlPath,
+        id: 'decision-1',
+        ts: 100,
+        result: keep,
+      });
+
+      const discard = decidePromptAcceptance({
+        ...baseDecisionInput(),
+        roundId: 'round-3',
+        candidateCommitSha: 'candidate-3',
+        previousLastKeptCommitSha: keep.lastKeptCommitSha,
+        candidateEvents: [
+          completed('in-a', true),
+          completed('in-b', false),
+          completed('out-a', true),
+        ],
+      });
+      await appendPromptAcceptanceDecision({
+        resultsJsonlPath,
+        id: 'decision-2',
+        ts: 101,
+        result: discard,
+      });
+
+      const events = await readFixedPromptWal(resultsJsonlPath);
+      assert.equal(events.length, 2);
+      assert.deepEqual(events.map((event) => event.type), [
+        'prompt_candidate_decided',
+        'prompt_candidate_decided',
+      ]);
+      assert.deepEqual(promptAcceptanceStateFromWal(events, 'original-0'), {
+        lastKeptCommitSha: 'candidate-2',
+        decisions: [
+          { roundId: 'round-2', decision: 'keep', candidateCommitSha: 'candidate-2' },
+          { roundId: 'round-3', decision: 'discard', candidateCommitSha: 'candidate-3' },
+        ],
+      });
+    });
+  });
 });
 
 function baseDecisionInput() {
@@ -217,4 +268,13 @@ function infraFailed(taskId: string): FixedPromptTaskWalEvent {
     errorClass: 'infra_error',
     error: 'container crashed',
   };
+}
+
+async function withDir(fn: (dir: string) => Promise<void>): Promise<void> {
+  const dir = await mkdtemp(join(tmpdir(), 'maka-prompt-acceptance-'));
+  try {
+    await fn(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
