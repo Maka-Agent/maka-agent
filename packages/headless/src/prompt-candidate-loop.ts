@@ -99,6 +99,7 @@ export async function runPromptCandidateRound(
 ): Promise<PromptCandidateRoundResult> {
   const now = input.now ?? Date.now;
   const newId = input.newId ?? randomId;
+  assertHeldInDigestsBelongToHeldInTasks(input.heldInTaskIds, input.heldInDigests);
   assertHeldInAndHeldOutDisjoint(input.heldInTaskIds, input.heldOutDigests ?? []);
   await assertSystemPromptPathMatchesGit(input.systemPromptPath, input.git);
   await assertRegularSystemPromptFile(input.systemPromptPath, input.git.gitRootPath);
@@ -164,6 +165,17 @@ function assertHeldInAndHeldOutDisjoint(
   const overlap = heldOutDigests.find((digest) => heldInTasks.has(digest.taskId));
   if (overlap) {
     throw new Error(`held-in and held-out task sets must be disjoint: ${overlap.taskId}`);
+  }
+}
+
+function assertHeldInDigestsBelongToHeldInTasks(
+  heldInTaskIds: readonly string[],
+  heldInDigests: readonly TrajectoryDigest[],
+): void {
+  const heldInTasks = new Set(heldInTaskIds);
+  const outside = heldInDigests.find((digest) => !heldInTasks.has(digest.taskId));
+  if (outside) {
+    throw new Error(`held-in digests must belong to held-in task set: ${outside.taskId}`);
   }
 }
 
