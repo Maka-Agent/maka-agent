@@ -156,6 +156,7 @@ class FileTelemetryRepo implements TelemetryRepo {
         ...(row.errorClass ? { errorClass: row.errorClass } : {}),
         ...(row.sessionId ? { sessionId: row.sessionId } : {}),
         ...(row.turnId ? { turnId: row.turnId } : {}),
+        ...(row.systemPromptHash ? { systemPromptHash: row.systemPromptHash } : {}),
         ...(row.prefixHash ? { prefixHash: row.prefixHash } : {}),
         ...(row.prefixChangeReason ? { prefixChangeReason: row.prefixChangeReason } : {}),
         ...(row.requestShapeHash ? { requestShapeHash: row.requestShapeHash } : {}),

@@ -1567,6 +1567,15 @@ describe('AiSdkBackend usage telemetry', () => {
     const messages: unknown[] = [];
     const events: SessionEvent[] = [];
     const llmRecords: LlmCallRecord[] = [];
+    const runTraceEvents: Array<{ type: string; data?: Record<string, unknown> }> = [];
+    let pricingLookupCalls = 0;
+    const pricing = {
+      modelKey: 'anthropic:mock-model-id',
+      inputUsdPer1M: 3,
+      outputUsdPer1M: 15,
+      cacheReadUsdPer1M: 0.3,
+      cacheWriteUsdPer1M: 3.75,
+    };
     const chunks: LanguageModelV3StreamPart[] = [
       { type: 'stream-start', warnings: [] },
       { type: 'text-start', id: 'text-1' },
@@ -1613,8 +1622,16 @@ describe('AiSdkBackend usage telemetry', () => {
       tools: [],
       newId: idGenerator(),
       now: monotonicClock(),
+      systemPrompt: 'durable system prompt',
+      lookupPricing: (modelKey) => {
+        pricingLookupCalls += 1;
+        return modelKey === pricing.modelKey ? pricing : null;
+      },
       recordLlmCall: (record) => {
         llmRecords.push(record);
+      },
+      recordRunTrace: (event) => {
+        runTraceEvents.push(event);
       },
     });
 
@@ -1636,6 +1653,8 @@ describe('AiSdkBackend usage telemetry', () => {
       reasoning?: number;
       total?: number;
       rawFinishReason?: string;
+      costUsd?: number;
+      systemPromptHash?: string;
       prefixHash?: string;
       prefixChangeReason?: string;
       requestShapeHash?: string;
@@ -1643,7 +1662,11 @@ describe('AiSdkBackend usage telemetry', () => {
     } | undefined;
     const usageEvent = events.find((event) => event.type === 'token_usage') as
       | Extract<SessionEvent, { type: 'token_usage' }>
+      & { systemPromptHash?: string }
       | undefined;
+    const expectedCostUsd = ((5 * 3) + (3 * 0.3) + (2 * 3.75) + (7 * 15)) / 1_000_000;
+    const usageTrace = runTraceEvents.find((event) => event.type === 'usage_recorded');
+    const startTrace = runTraceEvents.find((event) => event.type === 'model_stream_started');
 
     assert.equal((usageMessage as { type?: string } | undefined)?.type, 'token_usage');
     assert.equal((usageMessage as { turnId?: string } | undefined)?.turnId, 'turn-1');
@@ -1658,6 +1681,9 @@ describe('AiSdkBackend usage telemetry', () => {
     assert.equal(usageMessage?.reasoning, 2);
     assert.equal(usageMessage?.total, 17);
     assert.equal(usageMessage?.rawFinishReason, 'stop');
+    assert.equal(usageMessage?.systemPromptHash, usageEvent?.systemPromptHash);
+    assert.ok(usageMessage?.systemPromptHash);
+    assert.equal(usageMessage?.costUsd, expectedCostUsd);
     assert.equal(usageMessage?.prefixChangeReason, 'first_turn');
     assert.equal(usageMessage?.requestShapeChangeReason, 'first_turn');
     assert.ok(usageMessage?.prefixHash);
@@ -1673,6 +1699,8 @@ describe('AiSdkBackend usage telemetry', () => {
     assert.equal(usageEvent?.reasoning, 2);
     assert.equal(usageEvent?.total, 17);
     assert.equal(usageEvent?.rawFinishReason, 'stop');
+    assert.equal(usageEvent?.systemPromptHash, usageMessage?.systemPromptHash);
+    assert.equal(usageEvent?.costUsd, expectedCostUsd);
     assert.equal(usageEvent?.prefixChangeReason, 'first_turn');
     assert.equal(usageEvent?.requestShapeChangeReason, 'first_turn');
     assert.ok(usageEvent?.prefixHash);
@@ -1687,10 +1715,16 @@ describe('AiSdkBackend usage telemetry', () => {
     assert.equal(llmRecords[0]?.reasoningTokens, 2);
     assert.equal(llmRecords[0]?.totalTokens, 17);
     assert.equal(llmRecords[0]?.rawFinishReason, 'stop');
+    assert.equal(llmRecords[0]?.systemPromptHash, usageMessage?.systemPromptHash);
+    assert.equal(llmRecords[0]?.costUsd, expectedCostUsd);
     assert.equal(llmRecords[0]?.prefixChangeReason, 'first_turn');
     assert.equal(llmRecords[0]?.requestShapeChangeReason, 'first_turn');
     assert.ok(llmRecords[0]?.prefixHash);
     assert.ok(llmRecords[0]?.requestShapeHash);
+    assert.equal(startTrace?.data?.systemPromptHash, usageMessage?.systemPromptHash);
+    assert.equal(usageTrace?.data?.systemPromptHash, usageMessage?.systemPromptHash);
+    assert.equal(usageTrace?.data?.costUsd, expectedCostUsd);
+    assert.equal(pricingLookupCalls, 1);
   });
 });
 

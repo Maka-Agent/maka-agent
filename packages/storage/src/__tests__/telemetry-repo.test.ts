@@ -44,6 +44,7 @@ describe('FileTelemetryRepo', () => {
       await repo.load();
       repo.insertLlmCall(llmRecord({
         id: 'usage_diag',
+        systemPromptHash: 'sys-hash',
         toolSchemaChangeReason: 'tool_source_enabled',
         toolAvailability: {
           mode: 'economy',
@@ -57,6 +58,7 @@ describe('FileTelemetryRepo', () => {
       await flushWrites();
 
       const row = repo.logs({ range: 'all' }).rows[0];
+      assert.equal(row?.systemPromptHash, 'sys-hash');
       assert.equal(row?.toolSchemaChangeReason, 'tool_source_enabled');
       assert.equal(row?.toolAvailability?.mode, 'economy');
       assert.deepEqual(row?.toolAvailability?.enabledSourceIds, ['office']);

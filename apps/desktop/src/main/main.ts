@@ -838,6 +838,7 @@ backends.register('ai-sdk', async (ctx) => {
       childInstruction: ctx.systemPrompt,
     }),
     turnTailPrompt: ({ cwd }) => buildTurnTailPrompt(cwd),
+    lookupPricing,
     recordLlmCall: (event) => recordLlmCall({ repo: telemetryRepo, lookupPricing }, event),
     recordToolInvocation: (event) =>
       recordToolInvocation(

@@ -368,6 +368,7 @@ export interface TokenUsageEvent extends BaseEvent {
   /** Backward-compatible alias for cacheWriteInput. */
   cacheCreation?: number;
   costUsd?: number;
+  systemPromptHash?: string;
   contextRemaining?: number;
   prefixHash?: string;
   prefixChangeReason?: PrefixChangeReason;

@@ -318,6 +318,7 @@ export function mapSessionEventToRuntimeEvent(
             ...(event.contextRemaining !== undefined
               ? { contextRemaining: event.contextRemaining }
               : {}),
+            ...(event.systemPromptHash !== undefined ? { systemPromptHash: event.systemPromptHash } : {}),
             ...(event.prefixHash !== undefined ? { prefixHash: event.prefixHash } : {}),
             ...(event.prefixChangeReason !== undefined
               ? { prefixChangeReason: event.prefixChangeReason }
