@@ -36,6 +36,34 @@ function openingTags(source: string, tagName: 'input' | 'select' | 'textarea'): 
 }
 
 describe('Settings form accessibility labels', () => {
+  it('keeps Settings secondary surfaces close to QoderWork card geometry', async () => {
+    const styles = await readRepo('apps/desktop/src/renderer/styles.css');
+    const connectionRow = styles.match(/\.settingsConnectionRow\s*\{[\s\S]*?\}/)?.[0] ?? '';
+    const connectionBadge = styles.match(/\.settingsConnectionBadge\s*\{[\s\S]*?\}/)?.[0] ?? '';
+    const settingsBadge = styles.match(/\.settingsBadge\s*\{[\s\S]*?\}/)?.[0] ?? '';
+    const authContract = styles.match(/\.settingsAuthContract\s*\{[\s\S]*?\}/)?.[0] ?? '';
+    const providerSurfaces = styles.match(/\.providerEmpty,\n\.providerCard,\n\.settingsRow\s*\{[\s\S]*?\}/)?.[0] ?? '';
+    const settingsRow = styles.match(/\.settingsRow\s*\{[\s\S]*?\}/g)?.at(-1) ?? '';
+    const settingsRowValue = styles.match(/\.settingsRow > span\s*\{[\s\S]*?\}/)?.[0] ?? '';
+    const settingsRowTitle = styles.match(/\.settingsRow strong\s*\{[\s\S]*?\}/)?.[0] ?? '';
+
+    assert.match(connectionRow, /border-radius:\s*8px;/, 'Settings connection cards should use QoderWork rounded-lg geometry');
+    assert.match(connectionRow, /box-shadow:\s*0 1px 3px rgba\(0, 0, 0, 0\.03\);/, 'Settings connection cards should use QoderWork near-flat card shadow');
+    assert.match(authContract, /border-radius:\s*8px;/, 'Nested auth contract cards should stay on the same 8px radius');
+    assert.match(authContract, /box-shadow:\s*0 1px 3px rgba\(0, 0, 0, 0\.03\);/, 'Nested auth contract cards should keep the same near-flat shadow');
+    assert.match(providerSurfaces, /border-radius:\s*8px;/, 'Provider/settings rows should use the same 8px secondary-surface radius');
+    assert.match(providerSurfaces, /box-shadow:\s*0 1px 3px rgba\(0, 0, 0, 0\.03\);/, 'Provider/settings rows should avoid heavier legacy panel shadows');
+    assert.match(connectionBadge, /border-radius:\s*4px;/, 'Settings status badges should use compact squared QoderWork-style corners, not pills');
+    assert.match(settingsBadge, /border-radius:\s*4px;/, 'Generic Settings badges should use compact squared QoderWork-style corners, not pills');
+    assert.doesNotMatch(connectionBadge, /border-radius:\s*999px;/, 'Settings connection badges must not regress to pill-shaped chrome');
+    assert.doesNotMatch(settingsBadge, /border-radius:\s*999px;/, 'Generic Settings badges must not regress to pill-shaped chrome');
+    assert.match(settingsRow, /display:\s*grid;/, 'Settings rows should use a stable label/value grid instead of flex auto sizing');
+    assert.match(settingsRow, /grid-template-columns:\s*minmax\(150px,\s*0\.36fr\)\s+minmax\(0,\s*1fr\);/, 'Settings rows need a protected label column and shrinkable value column');
+    assert.match(settingsRowValue, /overflow-wrap:\s*anywhere;/, 'Long Settings values such as workspace paths should wrap in the value column');
+    assert.match(settingsRowValue, /text-align:\s*right;/, 'Short Settings values should keep the existing right-aligned summary rhythm');
+    assert.match(settingsRowTitle, /white-space:\s*nowrap;/, 'Settings row labels must not collapse to one Chinese character per line');
+  });
+
   it('keeps migrated Settings text fields and action buttons on shared UI primitives', async () => {
     const settings = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
     const passwordInput = await readRepo('apps/desktop/src/renderer/settings/password-input.tsx');

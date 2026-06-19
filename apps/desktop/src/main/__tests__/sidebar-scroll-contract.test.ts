@@ -93,6 +93,22 @@ describe('sidebar session list CSS scroll contract (PR-SIDEBAR-IA-0 Phase 1)', (
       '.maka-session-panel grid-template-rows must include a minmax(0, 1fr) row',
     );
   });
+
+  it('keeps the sidebar shell flat without a shadow-like gray resize gutter', async () => {
+    const css = await readFile(STYLES_PATH, 'utf8');
+    const listPanel = extractRuleBody(css, '.maka-panel-list.maka-floating-panel');
+    const sessionPanel = extractRuleBody(css, '.maka-session-panel');
+    const resizeHandle = extractRuleBody(css, '.maka-resize-handle');
+    assert.ok(listPanel, '.maka-panel-list.maka-floating-panel rule must exist');
+    assert.ok(sessionPanel, '.maka-session-panel rule must exist');
+    assert.ok(resizeHandle, '.maka-resize-handle rule must exist');
+
+    assert.match(listPanel, /background:\s*var\(--background\);/, 'sidebar panel must not use a darker wash that reads as a left-menu shadow');
+    assert.match(sessionPanel, /background:\s*var\(--background\);/, 'session panel content must stay on the same flat background as the shell');
+    assert.match(resizeHandle, /background:\s*transparent;/, 'resize hitbox must not paint an 8px gray gutter between sidebar and main');
+    assert.doesNotMatch(listPanel + sessionPanel + resizeHandle, /box-shadow:/, 'sidebar shell and resize gutter must not add drop shadows');
+    assert.doesNotMatch(listPanel + sessionPanel, /calc\(l - 0\.015\)/, 'sidebar shell must not reintroduce the darker wash');
+  });
 });
 
 /**

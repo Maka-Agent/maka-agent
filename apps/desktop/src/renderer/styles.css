@@ -194,7 +194,7 @@ button:active {
   cursor: col-resize;
   user-select: none;
   touch-action: none;
-  background: var(--background);
+  background: transparent;
 }
 
 .maka-shell-2col[data-sidebar-state="collapsed"] .maka-resize-handle {
@@ -7279,11 +7279,11 @@ button:active {
 .settingsBadge {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  border-radius: 999px;
+  min-height: 22px;
+  border-radius: 4px;
   background: var(--foreground-5);
   color: var(--foreground-60);
-  padding: 0 9px;
+  padding: 0 8px;
   font-size: 12px;
 }
 
@@ -7306,9 +7306,10 @@ button:active {
   display: grid;
   gap: 6px;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--foreground-2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 .settingsConnectionRow[data-status="verified"] {
@@ -7371,7 +7372,7 @@ button:active {
   gap: 8px;
   margin-top: 4px;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: oklch(from var(--foreground) l c h / 0.04);
 }
 .settingsOauthPastePanel textarea {
@@ -7407,12 +7408,12 @@ button:active {
   display: inline-flex;
   align-items: center;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: 4px;
   background: oklch(from var(--accent) l c h / 0.14);
   color: var(--accent);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
 }
 
 .settingsConnectionRowHead {
@@ -7443,11 +7444,12 @@ button:active {
 .settingsConnectionBadge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 10px;
-  border-radius: 999px;
+  min-height: 20px;
+  padding: 2px 8px;
+  border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
   background: var(--foreground-5);
   color: var(--foreground-60);
   white-space: nowrap;
@@ -7488,6 +7490,7 @@ button:active {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--foreground-3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 .settingsAuthContractText {
@@ -7512,8 +7515,8 @@ button:active {
 .settingsAuthActionPill {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  border-radius: 999px;
+  min-height: 20px;
+  border-radius: 4px;
   white-space: nowrap;
   font-size: 11px;
   font-weight: 650;
@@ -7599,10 +7602,22 @@ button:active {
 .providerEmpty,
 .providerCard,
 .settingsRow {
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--foreground-2);
   padding: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.settingsRow {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.36fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.settingsRow > div {
+  min-width: 0;
 }
 
 .providerCard[data-default="true"] {
@@ -8423,12 +8438,15 @@ button:active {
   color: var(--foreground);
   font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .settingsRow > span {
-  flex: 0 0 auto;
+  min-width: 0;
   color: var(--foreground-60);
   font-size: 12px;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 @media (max-width: 980px) {
