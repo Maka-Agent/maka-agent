@@ -76,6 +76,27 @@ describe('prompt acceptance policy', () => {
     assert.notEqual(baseline.heldIn.noiseBand, baseline.heldOut.noiseBand);
   });
 
+  test('rejects incomplete baseline calibration runs', () => {
+    assert.throws(
+      () => calibratePromptAcceptanceBaseline({
+        heldInTaskIds: ['in-a', 'in-b'],
+        heldOutTaskIds: ['out-a', 'out-b'],
+        baselineRuns: [
+          {
+            heldInEvents: [
+              completed('in-a', true),
+              plumbingFailed('in-b'),
+            ],
+            heldOutEvents: [
+              completed('out-a', true),
+            ],
+          },
+        ],
+      }),
+      /baseline held-in run 1 is incomplete/,
+    );
+  });
+
   test('keeps candidates that improve held-in beyond noise without falling below the held-out original floor', () => {
     const heldInTaskIds = ['in-a', 'in-b', 'in-c', 'in-d'];
     const heldOutTaskIds = ['out-a', 'out-b'];

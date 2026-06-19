@@ -133,12 +133,22 @@ export interface PromptAcceptanceState {
 export function calibratePromptAcceptanceBaseline(
   input: CalibratePromptAcceptanceBaselineInput,
 ): PromptAcceptanceBaseline {
+  const heldInSummaries = input.baselineRuns.map((run) => summarizePromptAcceptancePartition(
+    run.heldInEvents,
+    input.heldInTaskIds,
+  ));
+  const heldOutSummaries = input.baselineRuns.map((run) => summarizePromptAcceptancePartition(
+    run.heldOutEvents,
+    input.heldOutTaskIds,
+  ));
+  assertCompleteBaselineSummaries(heldInSummaries, 'held-in');
+  assertCompleteBaselineSummaries(heldOutSummaries, 'held-out');
   const heldIn = calibratePartitionBaseline(
-    input.baselineRuns.map((run) => summarizePromptAcceptancePartition(run.heldInEvents, input.heldInTaskIds)),
+    heldInSummaries,
     input.zScore,
   );
   const heldOut = calibratePartitionBaseline(
-    input.baselineRuns.map((run) => summarizePromptAcceptancePartition(run.heldOutEvents, input.heldOutTaskIds)),
+    heldOutSummaries,
     input.zScore,
   );
   return {
@@ -151,6 +161,22 @@ export function calibratePromptAcceptanceBaseline(
       originalPassEligibleRate: heldOut.meanPassEligibleRate,
     },
   };
+}
+
+function assertCompleteBaselineSummaries(
+  summaries: readonly PromptAcceptancePartitionSummary[],
+  partitionName: string,
+): void {
+  summaries.forEach((summary, index) => {
+    if (
+      summary.observed !== summary.taskCount
+      || summary.missingTaskIds.length > 0
+      || summary.infraFailedTaskIds.length > 0
+      || summary.plumbingFailedTaskIds.length > 0
+    ) {
+      throw new Error(`baseline ${partitionName} run ${index + 1} is incomplete`);
+    }
+  });
 }
 
 export function promptAcceptanceNoiseBand(input: PromptAcceptanceNoiseBandInput): number {
