@@ -1,11 +1,15 @@
 import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, relative } from 'node:path';
+import { promisify } from 'node:util';
 import {
   appendFixedPromptWalEvent,
   hashSystemPrompt,
   type PromptCandidateCommittedEvent,
 } from './fixed-prompt-controller.js';
+
+const execFileAsync = promisify(execFile);
 
 export interface TrajectoryDigest {
   taskId: string;
@@ -55,6 +59,11 @@ export interface CreateScriptedMetaAgentInput {
 export interface PromptCandidateGit {
   changedFiles(): Promise<readonly string[]>;
   commit(message: string): Promise<string>;
+}
+
+export interface CreateCliPromptCandidateGitInput {
+  cwd: string;
+  systemPromptPath: string;
 }
 
 export interface RunPromptCandidateRoundInput {
@@ -203,6 +212,25 @@ export function assertOnlySystemPromptChanged(
   if (unexpected.length > 0) {
     throw new Error(`only system_prompt.md may change; unexpected files: ${unexpected.join(', ')}`);
   }
+}
+
+export function createCliPromptCandidateGit(input: CreateCliPromptCandidateGitInput): PromptCandidateGit {
+  const systemPromptGitPath = relative(input.cwd, input.systemPromptPath).split('\\').join('/');
+  return {
+    async changedFiles(): Promise<readonly string[]> {
+      const { stdout } = await execFileAsync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: input.cwd });
+      return stdout
+        .split('\n')
+        .map((line) => line.slice(3).trim())
+        .filter((line) => line.length > 0);
+    },
+    async commit(message: string): Promise<string> {
+      await execFileAsync('git', ['add', '--', systemPromptGitPath], { cwd: input.cwd });
+      await execFileAsync('git', ['commit', '-m', message], { cwd: input.cwd });
+      const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: input.cwd });
+      return stdout.trim();
+    },
+  };
 }
 
 function normalizeChangedPath(path: string): string {

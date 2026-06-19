@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { describe, test } from 'node:test';
 import { hashSystemPrompt } from '../fixed-prompt-controller.js';
 import {
+  createCliPromptCandidateGit,
   createScriptedMetaAgent,
   extractTrajectoryDigest,
   renderMetaAgentPrompt,
@@ -12,6 +15,8 @@ import {
   type MetaAgentPromptInput,
   type MetaAgentPromptResult,
 } from '../prompt-candidate-loop.js';
+
+const execFileAsync = promisify(execFile);
 
 describe('prompt candidate loop', () => {
   test('passes only program, results TSV, and held-in digests to the meta-agent', async () => {
@@ -183,6 +188,40 @@ describe('prompt candidate loop', () => {
     assert.deepEqual(await metaAgent(input), {
       systemPrompt: 'candidate prompt\n',
       summary: 'ask for exact output line',
+    });
+  });
+
+  test('CLI git adapter commits only system_prompt.md with the round message', async () => {
+    await withDir(async (dir) => {
+      await execFileAsync('git', ['init'], { cwd: dir });
+      await execFileAsync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      await execFileAsync('git', ['config', 'user.name', 'Test User'], { cwd: dir });
+      const programPath = join(dir, 'program.md');
+      const systemPromptPath = join(dir, 'system_prompt.md');
+      const resultsTsvPath = join(dir, 'results.tsv');
+      await writeFile(programPath, 'Improve the prompt conservatively.\n', 'utf8');
+      await writeFile(systemPromptPath, 'original prompt\n', 'utf8');
+      await writeFile(resultsTsvPath, 'task_id\tpassed\ntask-a\tfalse\n', 'utf8');
+      await execFileAsync('git', ['add', '.'], { cwd: dir });
+      await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: dir });
+
+      const result = await runPromptCandidateRound({
+        runId: 'run-1',
+        roundId: 'round-1',
+        programPath,
+        systemPromptPath,
+        resultsTsvPath,
+        resultsJsonlPath: join(dir, 'results.jsonl'),
+        heldInDigests: [],
+        metaAgent: async () => ({ systemPrompt: 'candidate prompt\n', summary: 'changed prompt' }),
+        git: createCliPromptCandidateGit({ cwd: dir, systemPromptPath }),
+        now: () => 100,
+        newId: idFactory(),
+      });
+
+      const subject = await execFileAsync('git', ['log', '-1', '--format=%s'], { cwd: dir });
+      assert.equal(subject.stdout.trim(), 'candidate prompt round-1');
+      assert.equal(result.commitSha.length, 40);
     });
   });
 });

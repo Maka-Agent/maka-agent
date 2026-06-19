@@ -55,6 +55,7 @@ export type {
   MetaAgentPromptResult,
   ExtractTrajectoryDigestInput,
   CreateScriptedMetaAgentInput,
+  CreateCliPromptCandidateGitInput,
   MetaAgentCompletion,
   MetaAgentCompletionInput,
   PromptCandidateGit,
@@ -65,6 +66,7 @@ export type {
 } from './prompt-candidate-loop.js';
 export {
   assertOnlySystemPromptChanged,
+  createCliPromptCandidateGit,
   createScriptedMetaAgent,
   extractTrajectoryDigest,
   parseMetaAgentResult,
