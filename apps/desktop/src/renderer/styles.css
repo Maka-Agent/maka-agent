@@ -2705,15 +2705,15 @@ button:active {
 
 .maka-plan-system-alert {
   display: flex;
-  min-height: 56px;
+  min-height: 36px;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 12px;
   border-color: oklch(0.90 0.04 240);
-  border-radius: 8px;
+  border-radius: 6px;
   background: oklch(0.965 0.035 235);
   color: oklch(0.50 0.13 245);
-  padding: 12px 18px;
+  padding: 6px 10px;
 }
 
 .maka-plan-system-alert [class*="lucide"] {
@@ -2725,13 +2725,13 @@ button:active {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 
 .maka-plan-system-alert-main div {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .maka-plan-system-alert-main [data-slot="alert-description"] {
@@ -2745,7 +2745,7 @@ button:active {
 .maka-plan-system-alert-switch {
   flex: 0 0 auto;
   color: oklch(0.38 0.075 245);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -2763,18 +2763,18 @@ button:active {
 
 .maka-plan-tabs {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .maka-plan-tabs-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
 }
 
 .maka-plan-tabs-list {
-  gap: 24px;
+  gap: 16px;
   border-radius: 0;
   background: transparent;
   padding: 0;
@@ -2782,15 +2782,15 @@ button:active {
 
 .maka-plan-tab {
   position: relative;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
-  height: 36px;
+  height: 28px;
   padding: 0;
   border-radius: 0;
   background: transparent;
   color: var(--foreground-45);
-  font-size: 14px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .maka-plan-tab[data-state="active"] {
@@ -2812,7 +2812,7 @@ button:active {
 
 .maka-plan-tab span {
   color: var(--foreground-40);
-  font-size: 11px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 
