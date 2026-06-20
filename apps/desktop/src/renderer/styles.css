@@ -366,36 +366,31 @@ button:active {
   -webkit-app-region: no-drag;
   position: absolute;
   z-index: 4;
-  /* WAWQAQ msg `c6bee634` (2026-06-20): right-side top icons were
-     sitting at top:16, which put their centerline at y≈31 while the
-     sidebar drag-strip buttons (8px padding + 30px tall) center at
-     y≈23 and the macOS traffic lights at y≈20. Pulling top down to
-     8 lands all three rows on the same horizontal line. */
-  top: 8px;
-  right: 32px;
+  top: 11px;
+  right: 24px;
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   color: var(--foreground-60);
 }
 
 .maka-workspace-feedback-action,
 .maka-workspace-icon-action {
-  height: 30px;
-  border-radius: 8px;
+  height: 24px;
+  border-radius: 6px;
   color: var(--foreground-65);
 }
 
 .maka-workspace-feedback-action {
-  gap: 6px;
-  padding-inline: 8px;
-  font-size: 13px;
+  gap: 4px;
+  padding-inline: 6px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--foreground-55);
 }
 
 .maka-workspace-icon-action {
-  width: 30px;
+  width: 24px;
 }
 
 .maka-workspace-feedback-action:hover,
@@ -4175,50 +4170,6 @@ button:active {
   min-height: 100%;
 }
 
-/* Soft scrim at the top of the chat scroll area so headings + tabs read
-   as a distinct strata above scrolling content. The bottom edge stays
-   uncovered so the composer keeps a clear connection to the last message. */
-.maka-chat-shell::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 24px;
-  pointer-events: none;
-  background: linear-gradient(180deg, var(--background) 0%, transparent 100%);
-  z-index: 1;
-}
-
-/* PR-CHAT-MAIN-REDESIGN-0: a very subtle grain overlay over the
-   chat surface. Replaces pure flat color with a touch of organic
-   texture (the "high-end design" trick to defeat the sterile
-   AI-app feel). Opacity is intentionally low — visible at 200%
-   zoom in DevTools, ambient at 100%. SVG-as-data-URL so we don't
-   ship a binary asset. */
-.maka-chat-shell::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.025;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.8 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  background-repeat: repeat;
-  mix-blend-mode: overlay;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  /* Grain on a static surface isn't motion, but users who opt out
-     of motion often also prefer flat surfaces for legibility —
-     respect that by removing the texture entirely. */
-  .maka-chat-shell::after {
-    display: none;
-  }
-}
-
-/* Wraps the scroll surface so the jump-to-bottom button can be absolutely
-   positioned over the chat without escaping the column. */
 .maka-chat-shell {
   position: relative;
   min-height: 0;
@@ -4230,11 +4181,11 @@ button:active {
 
 .maka-chat-jump-bottom {
   position: absolute;
-  bottom: 12px;
+  bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
   border: 1px solid var(--border-strong);

@@ -475,13 +475,10 @@ describe('localized main shell contract', () => {
     assert.ok(workspaceTopActions, '.maka-workspace-top-actions rule must exist');
     assert.ok(workspaceFeedbackAction, '.maka-workspace-feedback-action rule must exist');
     assert.match(workspaceTopActions, /position:\s*absolute/);
-    // WAWQAQ msg `c6bee634` (2026-06-20): top moved 16 → 8 so the
-    // right-side icons share a horizontal centerline with the
-    // sidebar drag-strip buttons and the macOS traffic lights.
-    assert.match(workspaceTopActions, /top:\s*8px/);
-    assert.match(workspaceTopActions, /right:\s*32px/);
-    assert.match(workspaceTopActions, /gap:\s*12px/);
-    assert.match(workspaceFeedbackAction, /font-size:\s*13px/);
+    assert.match(workspaceTopActions, /top:\s*11px/);
+    assert.match(workspaceTopActions, /right:\s*24px/);
+    assert.match(workspaceTopActions, /gap:\s*6px/);
+    assert.match(workspaceFeedbackAction, /font-size:\s*11px/);
     assert.match(workspaceFeedbackAction, /font-weight:\s*500/);
     assert.match(workspaceFeedbackAction, /color:\s*var\(--foreground-55\)/);
     assert.match(styles, /\.mainColumn\[data-home-surface="true"\]\s*\{[\s\S]*?grid-template-rows:\s*minmax\(0,\s*1fr\) auto[\s\S]*?align-content:\s*stretch/);
