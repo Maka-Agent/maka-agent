@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import type { FixedPromptWalEvent } from '../fixed-prompt-controller.js';
+import type { FixedPromptWalEvent, PromptCandidateRewardHackScan } from '../fixed-prompt-controller.js';
 import {
   promptStructuralSmokeReport,
   renderPromptStructuralSmokeMarkdown,
@@ -10,7 +10,7 @@ describe('prompt structural smoke report', () => {
   test('passes after ten unattended discard decisions under budget', () => {
     const events: FixedPromptWalEvent[] = [];
     for (let index = 1; index <= 10; index += 1) {
-      events.push(decisionEvent(`round-${index}`, 'discard', 'held_in_within_noise'));
+      events.push(decisionEvent(`round-${index}`, 'discard', 'held_in_within_noise', 'run-1', { decision: 'clean' }));
       events.push(completedEvent(`round-${index}`, `task-${index}`, 0.1));
     }
 
@@ -37,10 +37,13 @@ describe('prompt structural smoke report', () => {
   test('fails when structural smoke evidence is incomplete or unsafe', () => {
     const events: FixedPromptWalEvent[] = [];
     for (let index = 1; index <= 8; index += 1) {
-      events.push(decisionEvent(`round-${index}`, 'discard', 'held_in_within_noise'));
+      events.push(decisionEvent(`round-${index}`, 'discard', 'held_in_within_noise', 'run-1', { decision: 'clean' }));
       events.push(completedEvent(`round-${index}`, `task-${index}`, 4));
     }
-    events.push(decisionEvent('round-9', 'discard', 'reward_hack_quarantined'));
+    events.push(decisionEvent('round-9', 'discard', 'reward_hack_quarantined', 'run-1', {
+      decision: 'quarantine',
+      reason: 'verifier_pattern',
+    }));
     events.push(completedEvent('round-9', 'task-9', 4));
     events.push(plumbingFailedEvent('round-9', 'task-9'));
 
@@ -64,19 +67,127 @@ describe('prompt structural smoke report', () => {
     assert.match(markdown, /## failures/);
     assert.match(markdown, /- cost_ceiling_exceeded/);
   });
+
+  test('fails when decision rounds have no task evidence', () => {
+    const events: FixedPromptWalEvent[] = [];
+    for (let index = 1; index <= 10; index += 1) {
+      events.push(decisionEvent(`round-${index}`, 'discard', 'held_in_within_noise', 'run-1', { decision: 'clean' }));
+    }
+
+    const report = promptStructuralSmokeReport({
+      events,
+      minimumRounds: 10,
+      costCeilingUsd: 30,
+    });
+
+    assert.equal(report.status, 'fail');
+    assert.deepEqual(report.roundsWithoutTaskEvidence, [
+      'round-1',
+      'round-2',
+      'round-3',
+      'round-4',
+      'round-5',
+      'round-6',
+      'round-7',
+      'round-8',
+      'round-9',
+      'round-10',
+    ]);
+    assert.deepEqual(report.failures, ['task_evidence_missing']);
+  });
+
+  test('fails when decision rounds have only infra failures', () => {
+    const events: FixedPromptWalEvent[] = [];
+    for (let index = 1; index <= 10; index += 1) {
+      const roundId = `round-${index}`;
+      events.push(decisionEvent(roundId, 'discard', 'coverage_regressed', 'run-1', { decision: 'clean' }));
+      events.push(infraFailedEvent(roundId, `task-${index}`));
+    }
+
+    const report = promptStructuralSmokeReport({
+      events,
+      minimumRounds: 10,
+      costCeilingUsd: 30,
+    });
+
+    assert.equal(report.status, 'fail');
+    assert.deepEqual(report.roundsWithoutTaskEvidence, [
+      'round-1',
+      'round-2',
+      'round-3',
+      'round-4',
+      'round-5',
+      'round-6',
+      'round-7',
+      'round-8',
+      'round-9',
+      'round-10',
+    ]);
+    assert.deepEqual(report.failures, ['task_evidence_missing']);
+  });
+
+  test('fails when task evidence belongs to a different run', () => {
+    const events: FixedPromptWalEvent[] = [];
+    for (let index = 1; index <= 10; index += 1) {
+      const roundId = `round-${index}`;
+      events.push(completedEvent(roundId, `task-${index}`, 0.1, 'run-old'));
+      events.push(decisionEvent(roundId, 'discard', 'held_in_within_noise', 'run-current', { decision: 'clean' }));
+    }
+
+    const report = promptStructuralSmokeReport({
+      events,
+      minimumRounds: 10,
+      costCeilingUsd: 30,
+    });
+
+    assert.equal(report.status, 'fail');
+    assert.deepEqual(report.roundsWithoutTaskEvidence, [
+      'round-1',
+      'round-2',
+      'round-3',
+      'round-4',
+      'round-5',
+      'round-6',
+      'round-7',
+      'round-8',
+      'round-9',
+      'round-10',
+    ]);
+    assert.deepEqual(report.failures, ['task_evidence_missing']);
+  });
+
+  test('fails when decision rounds have no reward-hack scan evidence', () => {
+    const events: FixedPromptWalEvent[] = [];
+    for (let index = 1; index <= 10; index += 1) {
+      const roundId = `round-${index}`;
+      events.push(decisionEvent(roundId, 'discard', 'held_in_within_noise'));
+      events.push(completedEvent(roundId, `task-${index}`, 0.1));
+    }
+
+    const report = promptStructuralSmokeReport({
+      events,
+      minimumRounds: 10,
+      costCeilingUsd: 30,
+    });
+
+    assert.equal(report.status, 'fail');
+    assert.deepEqual(report.failures, ['reward_hack_scan_missing']);
+  });
 });
 
 function decisionEvent(
   roundId: string,
   decision: 'keep' | 'discard',
   reason: string,
+  runId = 'run-1',
+  rewardHackScan?: PromptCandidateRewardHackScan,
 ): FixedPromptWalEvent {
   return {
     schemaVersion: 1,
     type: 'prompt_candidate_decided',
     id: `decision-${roundId}`,
     ts: 1,
-    runId: 'run-1',
+    runId,
     roundId,
     decision,
     reason,
@@ -89,17 +200,23 @@ function decisionEvent(
     originalHeldOutPassEligibleRate: 0.5,
     heldInPassRateNoiseBand: 0.05,
     heldOutPassRateNoiseBand: 0.05,
+    ...(rewardHackScan ? { rewardHackScan } : {}),
     metrics: {},
   };
 }
 
-function completedEvent(roundId: string, taskId: string, costUsd: number): FixedPromptWalEvent {
+function completedEvent(
+  roundId: string,
+  taskId: string,
+  costUsd: number,
+  runId = 'run-1',
+): FixedPromptWalEvent {
   return {
     schemaVersion: 1,
     type: 'task_completed',
     id: `task-${roundId}-${taskId}`,
     ts: 1,
-    runId: 'run-1',
+    runId,
     roundId,
     taskId,
     status: 'completed',
@@ -134,5 +251,23 @@ function plumbingFailedEvent(roundId: string, taskId: string): FixedPromptWalEve
     durationMs: 10,
     runtimeEventsPath: `/logs/${roundId}/${taskId}.jsonl`,
     harbor: { reward: 0 },
+  };
+}
+
+function infraFailedEvent(roundId: string, taskId: string): FixedPromptWalEvent {
+  return {
+    schemaVersion: 1,
+    type: 'task_infra_failed',
+    id: `infra-${roundId}-${taskId}`,
+    ts: 1,
+    runId: 'run-1',
+    roundId,
+    taskId,
+    status: 'infra_failed',
+    passed: false,
+    scored: false,
+    eligible: false,
+    errorClass: 'infra_error',
+    error: 'container crashed',
   };
 }

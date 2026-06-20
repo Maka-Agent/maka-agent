@@ -278,6 +278,44 @@ describe('fixed prompt controller', () => {
     });
   });
 
+  test('preserves infra stop after WAL resume', async () => {
+    await withDir(async (dir) => {
+      const systemPromptPath = join(dir, 'system_prompt.md');
+      const resultsJsonlPath = join(dir, 'results.jsonl');
+      await writeFile(systemPromptPath, 'fixed prompt\n', 'utf8');
+      await appendFile(resultsJsonlPath, `${JSON.stringify(taskInfraFailedEvent({ taskId: 'task-a' }))}\n`, 'utf8');
+      await appendFile(resultsJsonlPath, `${JSON.stringify(taskInfraFailedEvent({ taskId: 'task-b' }))}\n`, 'utf8');
+
+      const calls: string[] = [];
+      const result = await runFixedPromptController({
+        runId: 'run-1',
+        roundId: 'round-1',
+        config,
+        systemPromptPath,
+        resultsJsonlPath,
+        resultsTsvPath: join(dir, 'results.tsv'),
+        tasks: [
+          { id: 'task-a', path: '/bench/task-a' },
+          { id: 'task-b', path: '/bench/task-b' },
+          { id: 'task-c', path: '/bench/task-c' },
+          { id: 'task-d', path: '/bench/task-d' },
+          { id: 'task-e', path: '/bench/task-e' },
+        ],
+        maxInfraFailureRate: 0.2,
+        harborRunner: async ({ task }) => {
+          calls.push(task.id);
+          return harborOutput({ taskId: task.id });
+        },
+        now: () => 100,
+        newId: idFactory(),
+      });
+
+      assert.deepEqual(calls, []);
+      assert.equal(result.stopReason, 'infra_failure_rate_exceeded');
+      assert.deepEqual(result.taskIds, ['task-a', 'task-b']);
+    });
+  });
+
   test('stops when cost exceeds the configured ceiling', async () => {
     await withDir(async (dir) => {
       const systemPromptPath = join(dir, 'system_prompt.md');

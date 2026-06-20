@@ -250,6 +250,48 @@ describe('prompt candidate loop', () => {
     });
   });
 
+  test('rejects symlinked held-out artifacts visible from the agent cwd', async () => {
+    await withDir(async (dir) => {
+      const agentDir = join(dir, 'agent-cwd');
+      const controllerDir = join(dir, 'controller');
+      await mkdir(agentDir, { recursive: true });
+      await mkdir(controllerDir, { recursive: true });
+      const programPath = join(agentDir, 'program.md');
+      const systemPromptPath = join(agentDir, 'system_prompt.md');
+      const resultsTsvPath = join(agentDir, 'results.tsv');
+      const heldOutEventsPath = join(controllerDir, 'held-out-runtime-events.jsonl');
+      const visibleHeldOutLinkPath = join(agentDir, 'held-out-link.jsonl');
+      await writeFile(programPath, 'Improve the prompt conservatively.\n', 'utf8');
+      await writeFile(systemPromptPath, 'original prompt\n', 'utf8');
+      await writeFile(resultsTsvPath, 'task_id\tpassed\ntask-a\tfalse\n', 'utf8');
+      await writeFile(heldOutEventsPath, '', 'utf8');
+      await symlink(heldOutEventsPath, visibleHeldOutLinkPath);
+
+      let metaAgentCalled = false;
+      await assert.rejects(
+        runPromptCandidateRound({
+          runId: 'run-1',
+          roundId: 'round-1',
+          agentCwdPath: agentDir,
+          programPath,
+          systemPromptPath,
+          resultsTsvPath,
+          resultsJsonlPath: join(controllerDir, 'results.jsonl'),
+          heldInTaskIds: ['task-a'],
+          heldInDigests: [{ taskId: 'task-a', summary: 'failed held-in task' }],
+          heldOutArtifactPaths: [visibleHeldOutLinkPath],
+          metaAgent: async () => {
+            metaAgentCalled = true;
+            return { systemPrompt: 'candidate prompt\n', summary: 'changed prompt' };
+          },
+          git: gitNoop(agentDir),
+        }),
+        /controller-only artifacts must stay outside agent cwd: held-out-link\.jsonl/,
+      );
+      assert.equal(metaAgentCalled, false);
+    });
+  });
+
   test('fails closed when the prompt edit changes files outside system_prompt.md', async () => {
     await withDir(async (dir) => {
       const programPath = join(dir, 'program.md');
@@ -546,6 +588,50 @@ describe('prompt candidate loop', () => {
       const runtimeEventsPath = join(dir, 'runtime-events.jsonl');
       await writeFile(runtimeEventsPath, [
         JSON.stringify(runtimeEvent('call-1', 'Bash', { command: 'echo EXPECTED_SECRET > /tmp/out' })),
+        '',
+      ].join('\n'), 'utf8');
+
+      const result = await scanRuntimeEventsForRewardHack({
+        runtimeEventsPath,
+        verifierPatterns: ['EXPECTED_SECRET'],
+      });
+
+      assert.deepEqual(result, {
+        decision: 'quarantine',
+        reason: 'verifier_pattern',
+        matchedPatterns: ['EXPECTED_SECRET'],
+      });
+    });
+  });
+
+  test('quarantines model-visible tool results containing verifier expected output', async () => {
+    await withDir(async (dir) => {
+      const runtimeEventsPath = join(dir, 'runtime-events.jsonl');
+      await writeFile(runtimeEventsPath, [
+        JSON.stringify(functionResponseRuntimeEvent('call-1', 'Bash', {
+          stdout: 'EXPECTED_SECRET\n',
+        })),
+        '',
+      ].join('\n'), 'utf8');
+
+      const result = await scanRuntimeEventsForRewardHack({
+        runtimeEventsPath,
+        verifierPatterns: ['EXPECTED_SECRET'],
+      });
+
+      assert.deepEqual(result, {
+        decision: 'quarantine',
+        reason: 'verifier_pattern',
+        matchedPatterns: ['EXPECTED_SECRET'],
+      });
+    });
+  });
+
+  test('quarantines model-visible text containing verifier expected output', async () => {
+    await withDir(async (dir) => {
+      const runtimeEventsPath = join(dir, 'runtime-events.jsonl');
+      await writeFile(runtimeEventsPath, [
+        JSON.stringify(textRuntimeEvent('The expected answer is EXPECTED_SECRET.')),
         '',
       ].join('\n'), 'utf8');
 
@@ -944,6 +1030,36 @@ function runtimeEvent(id: string, name: string, args: unknown) {
     role: 'model',
     author: 'agent',
     content: { kind: 'function_call', id, name, args },
+  };
+}
+
+function functionResponseRuntimeEvent(id: string, name: string, result: unknown) {
+  return {
+    id: `response-${id}`,
+    invocationId: 'inv-1',
+    runId: 'run-1',
+    sessionId: 'session-1',
+    turnId: 'turn-1',
+    ts: 1,
+    partial: false,
+    role: 'tool',
+    author: 'tool',
+    content: { kind: 'function_response', id, name, result },
+  };
+}
+
+function textRuntimeEvent(text: string) {
+  return {
+    id: 'text-1',
+    invocationId: 'inv-1',
+    runId: 'run-1',
+    sessionId: 'session-1',
+    turnId: 'turn-1',
+    ts: 1,
+    partial: false,
+    role: 'model',
+    author: 'agent',
+    content: { kind: 'text', text },
   };
 }
 

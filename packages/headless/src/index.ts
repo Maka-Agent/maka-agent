@@ -39,6 +39,7 @@ export type {
   HarborTaskRunner,
   PromptCandidateCommittedEvent,
   PromptCandidateDecisionEvent,
+  PromptCandidateRewardHackScan,
   ReadHarborTaskRunOutputInput,
   RunFixedPromptControllerInput,
 } from './fixed-prompt-controller.js';
@@ -97,6 +98,7 @@ export type {
   StablePromptTaskSelectionResult,
 } from './prompt-acceptance-policy.js';
 export {
+  PROMPT_REWARD_HACK_QUARANTINE_REASON,
   appendPromptAcceptanceDecision,
   calibratePromptAcceptanceBaseline,
   decidePromptAcceptance,

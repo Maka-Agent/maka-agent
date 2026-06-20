@@ -109,6 +109,10 @@ export interface PromptCandidateCommittedEvent {
   promptHash: string;
 }
 
+export type PromptCandidateRewardHackScan =
+  | { decision: 'clean' }
+  | { decision: 'quarantine'; reason: string; matchedPatterns?: readonly string[] };
+
 export interface PromptCandidateDecisionEvent {
   schemaVersion: typeof FIXED_PROMPT_WAL_SCHEMA_VERSION;
   type: 'prompt_candidate_decided';
@@ -127,6 +131,7 @@ export interface PromptCandidateDecisionEvent {
   originalHeldOutPassEligibleRate: number | null;
   heldInPassRateNoiseBand: number;
   heldOutPassRateNoiseBand: number;
+  rewardHackScan?: PromptCandidateRewardHackScan;
   metrics: unknown;
 }
 
@@ -181,8 +186,9 @@ export async function runFixedPromptController(
   const config = { ...input.config, systemPrompt };
   const events = await readFixedPromptWal(input.resultsJsonlPath);
   const completed = terminalTaskEvents(events, input.runId, input.roundId, expectedPromptHash);
+  const stopEvidence = roundTaskEvents(events, input.runId, input.roundId, expectedPromptHash);
   let stopReason = controllerStopReason({
-    events: [...completed.values()],
+    events: [...stopEvidence.values()],
     taskCount: input.tasks.length,
     maxInfraFailureRate: input.maxInfraFailureRate,
     costCeilingUsd: input.costCeilingUsd,
@@ -210,17 +216,19 @@ export async function runFixedPromptController(
       await appendFixedPromptWalEvent(input.resultsJsonlPath, event);
       events.push(event);
       completed.set(event.taskId, event);
+      stopEvidence.set(event.taskId, event);
     }
     stopReason = controllerStopReason({
-      events: [...completed.values()],
+      events: [...stopEvidence.values()],
       taskCount: input.tasks.length,
       maxInfraFailureRate: input.maxInfraFailureRate,
       costCeilingUsd: input.costCeilingUsd,
     });
   }
 
+  const resultByTask = stopReason ? stopEvidence : completed;
   const resultEvents = input.tasks
-    .map((task) => completed.get(task.id))
+    .map((task) => resultByTask.get(task.id))
     .filter((event): event is FixedPromptTaskWalEvent => event !== undefined);
   await writeFixedPromptResultsTsv(input.resultsTsvPath, resultEvents);
 
@@ -504,6 +512,22 @@ function terminalTaskEvents(
     ) {
       byTask.set(event.taskId, event);
     }
+  }
+  return byTask;
+}
+
+function roundTaskEvents(
+  events: readonly FixedPromptWalEvent[],
+  runId: string,
+  roundId: string,
+  expectedPromptHash: string,
+): Map<string, FixedPromptTaskWalEvent> {
+  const byTask = new Map<string, FixedPromptTaskWalEvent>();
+  for (const event of events) {
+    if (!isTaskEvent(event)) continue;
+    if (event.runId !== runId || event.roundId !== roundId) continue;
+    if (!eventMatchesPrompt(event, expectedPromptHash)) continue;
+    byTask.set(event.taskId, event);
   }
   return byTask;
 }

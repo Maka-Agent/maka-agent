@@ -1,9 +1,12 @@
 import type { FixedPromptTaskWalEvent, FixedPromptWalEvent } from './fixed-prompt-controller.js';
+import { PROMPT_REWARD_HACK_QUARANTINE_REASON } from './prompt-acceptance-policy.js';
 
 export type PromptStructuralSmokeFailure =
   | 'minimum_rounds_not_met'
+  | 'task_evidence_missing'
   | 'cost_ceiling_exceeded'
   | 'plumbing_failures_present'
+  | 'reward_hack_scan_missing'
   | 'reward_hack_quarantine_present';
 
 export interface PromptStructuralSmokeReportInput {
@@ -27,6 +30,7 @@ export interface PromptStructuralSmokeReport {
     plumbingFailed: number;
   };
   quarantineCount: number;
+  roundsWithoutTaskEvidence: string[];
   totalCostUsd: number;
   costCeilingUsd?: number;
   failures: PromptStructuralSmokeFailure[];
@@ -38,19 +42,29 @@ export function promptStructuralSmokeReport(
   const minimumRounds = input.minimumRounds ?? 10;
   const decisionEvents = input.events.filter((event) => event.type === 'prompt_candidate_decided');
   const taskEvents = input.events.filter(isTaskWalEvent);
+  const completedTaskEvents = taskEvents.filter((event) => event.type === 'task_completed');
   const observedRounds = new Set(decisionEvents.map((event) => event.roundId)).size;
+  const taskEvidenceRounds = new Set(completedTaskEvents.map(roundEvidenceKey));
+  const decisionRounds = new Map(decisionEvents.map((event) => [roundEvidenceKey(event), event.roundId]));
+  const roundsWithoutTaskEvidence = [...decisionRounds]
+    .filter(([key]) => !taskEvidenceRounds.has(key))
+    .map(([, roundId]) => roundId)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const quarantineCount = decisionEvents.filter((event) => isQuarantineReason(event.reason)).length;
+  const missingRewardHackScanCount = decisionEvents.filter((event) => event.rewardHackScan === undefined).length;
   const totalCostUsd = roundCost(sum(taskEvents.map((event) => (
     event.type !== 'task_infra_failed' ? event.tokenSummary.costUsd : 0
   ))));
   const failures: PromptStructuralSmokeFailure[] = [];
   if (observedRounds < minimumRounds) failures.push('minimum_rounds_not_met');
+  if (roundsWithoutTaskEvidence.length > 0) failures.push('task_evidence_missing');
   if (input.costCeilingUsd !== undefined && totalCostUsd > input.costCeilingUsd) {
     failures.push('cost_ceiling_exceeded');
   }
   if (taskEvents.some((event) => event.type === 'task_plumbing_failed')) {
     failures.push('plumbing_failures_present');
   }
+  if (missingRewardHackScanCount > 0) failures.push('reward_hack_scan_missing');
   if (quarantineCount > 0) failures.push('reward_hack_quarantine_present');
 
   return {
@@ -63,11 +77,12 @@ export function promptStructuralSmokeReport(
       discard: decisionEvents.filter((event) => event.decision === 'discard').length,
     },
     taskEvents: {
-      completed: taskEvents.filter((event) => event.type === 'task_completed').length,
+      completed: completedTaskEvents.length,
       infraFailed: taskEvents.filter((event) => event.type === 'task_infra_failed').length,
       plumbingFailed: taskEvents.filter((event) => event.type === 'task_plumbing_failed').length,
     },
     quarantineCount,
+    roundsWithoutTaskEvidence,
     totalCostUsd,
     ...(input.costCeilingUsd !== undefined ? { costCeilingUsd: input.costCeilingUsd } : {}),
     failures,
@@ -82,6 +97,7 @@ export function renderPromptStructuralSmokeMarkdown(report: PromptStructuralSmok
     `- rounds: ${report.observedRounds} / ${report.minimumRounds}`,
     `- decisions: keep=${report.decisions.keep}, discard=${report.decisions.discard}`,
     `- task_events: ${taskEventsSummary(report)}`,
+    `- rounds_without_task_evidence: ${report.roundsWithoutTaskEvidence.length}`,
     `- reward_hack_quarantine: ${report.quarantineCount}`,
     `- cost_usd: ${report.totalCostUsd}${costCeilingSuffix(report)}`,
     '',
@@ -98,8 +114,12 @@ function isTaskWalEvent(event: FixedPromptWalEvent): event is FixedPromptTaskWal
     || event.type === 'task_plumbing_failed';
 }
 
+function roundEvidenceKey(event: { runId: string; roundId: string }): string {
+  return `${event.runId}\0${event.roundId}`;
+}
+
 function isQuarantineReason(reason: string): boolean {
-  return reason.includes('quarantine') || reason.includes('reward_hack');
+  return reason === PROMPT_REWARD_HACK_QUARANTINE_REASON;
 }
 
 function taskEventsSummary(report: PromptStructuralSmokeReport): string {

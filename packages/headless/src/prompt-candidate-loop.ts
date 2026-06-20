@@ -207,16 +207,21 @@ async function assertControllerOnlyArtifactsOutsideAgentCwd(
   agentCwdPath: string,
   artifactPaths: readonly string[],
 ): Promise<void> {
+  const agentCwdAbsolutePath = resolve(agentCwdPath);
   const agentCwdRealPath = await realpath(agentCwdPath);
-  const visibleArtifacts: string[] = [];
+  const visibleArtifacts = new Set<string>();
   for (const artifactPath of artifactPaths) {
+    const artifactAbsolutePath = resolve(artifactPath);
+    if (artifactAbsolutePath === agentCwdAbsolutePath || isPathInside(agentCwdAbsolutePath, artifactAbsolutePath)) {
+      visibleArtifacts.add(normalizeGitPath(relative(agentCwdAbsolutePath, artifactAbsolutePath) || basename(artifactPath)));
+    }
     const artifactRealPath = await realOrParentResolvedPath(artifactPath);
     if (artifactRealPath === agentCwdRealPath || isPathInside(agentCwdRealPath, artifactRealPath)) {
-      visibleArtifacts.push(normalizeGitPath(relative(agentCwdRealPath, artifactRealPath) || basename(artifactPath)));
+      visibleArtifacts.add(normalizeGitPath(relative(agentCwdRealPath, artifactRealPath) || basename(artifactPath)));
     }
   }
-  if (visibleArtifacts.length > 0) {
-    throw new Error(`controller-only artifacts must stay outside agent cwd: ${visibleArtifacts.join(', ')}`);
+  if (visibleArtifacts.size > 0) {
+    throw new Error(`controller-only artifacts must stay outside agent cwd: ${[...visibleArtifacts].join(', ')}`);
   }
 }
 
@@ -258,7 +263,7 @@ export async function scanRuntimeEventsForRewardHack(
   const patterns = input.verifierPatterns.filter((pattern) => pattern.length > 0);
   const matchedPatterns = new Set<string>();
   for (const event of events) {
-    for (const value of functionCallArgStrings(event)) {
+    for (const value of modelVisibleStrings(event)) {
       for (const pattern of patterns) {
         if (value.includes(pattern)) matchedPatterns.add(pattern);
       }
@@ -504,11 +509,13 @@ function functionCallDigest(event: unknown): TrajectoryToolCallDigest | undefine
   };
 }
 
-function functionCallArgStrings(event: unknown): readonly string[] {
+function modelVisibleStrings(event: unknown): readonly string[] {
   if (!isRecord(event) || !isRecord(event.content)) return [];
   const content = event.content;
-  if (content.kind !== 'function_call') return [];
-  return stringValues(content.args);
+  if (content.kind === 'text' && typeof content.text === 'string') return [content.text];
+  if (content.kind === 'function_call') return stringValues(content.args);
+  if (content.kind === 'function_response') return stringValues(content.result);
+  return [];
 }
 
 function stringValues(value: unknown): string[] {
