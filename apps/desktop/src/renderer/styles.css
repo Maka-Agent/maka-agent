@@ -7110,17 +7110,17 @@ button:active {
 .settingsPaletteGroup {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .settingsPaletteGroup + .settingsPaletteGroup {
-  margin-top: 14px;
+  margin-top: 8px;
 }
 .settingsPaletteGroupHeading {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--foreground-55);
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
 }
 
 /* PR-BOT-SETTINGS-PASSWORD-EYE-0 (WAWQAQ msg `51c7b4ff` screenshots):
@@ -7134,15 +7134,11 @@ button:active {
 }
 .settingsPasswordField input {
   width: 100%;
-  padding-right: 70px;
+  padding-right: 56px;
 }
-/* PR-BOT-SETTINGS-PASSWORD-COPY-0: cluster the copy + eye buttons at
-   the trailing edge of the input. padding-right above leaves room for
-   up to two buttons; the copy button is conditional on non-empty
-   value so the slot collapses when nothing to copy. */
 .settingsPasswordActions {
   position: absolute;
-  right: 6px;
+  right: 4px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;
@@ -7152,14 +7148,14 @@ button:active {
 .settingsPasswordToggle {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   color: var(--foreground-50);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background 150ms ease-out, color 150ms ease-out;
 }
 .settingsPasswordToggle:hover {
   background: var(--hover);
@@ -10090,7 +10086,7 @@ button:active {
 .maka-artifact-list {
   list-style: none;
   margin: 0;
-  padding: 6px 6px 0;
+  padding: 4px 4px 0;
   overflow-y: auto;
   border-bottom: 1px solid var(--border);
   max-height: 40%;
@@ -10103,18 +10099,18 @@ button:active {
 .maka-artifact-row {
   width: 100%;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
+  gap: 6px;
+  padding: 4px 6px;
   margin: 0;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   color: var(--foreground);
   cursor: pointer;
   text-align: left;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .maka-artifact-row:hover {
