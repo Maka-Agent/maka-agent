@@ -241,6 +241,283 @@ describe('fixed prompt controller', () => {
     });
   });
 
+  test('stops when infra failures exceed the configured rate', async () => {
+    await withDir(async (dir) => {
+      const systemPromptPath = join(dir, 'system_prompt.md');
+      const resultsJsonlPath = join(dir, 'results.jsonl');
+      await writeFile(systemPromptPath, 'fixed prompt\n', 'utf8');
+
+      const calls: string[] = [];
+      const result = await runFixedPromptController({
+        runId: 'run-1',
+        roundId: 'round-1',
+        config,
+        systemPromptPath,
+        resultsJsonlPath,
+        resultsTsvPath: join(dir, 'results.tsv'),
+        tasks: [
+          { id: 'task-a', path: '/bench/task-a' },
+          { id: 'task-b', path: '/bench/task-b' },
+          { id: 'task-c', path: '/bench/task-c' },
+          { id: 'task-d', path: '/bench/task-d' },
+          { id: 'task-e', path: '/bench/task-e' },
+        ],
+        maxInfraFailureRate: 0.2,
+        harborRunner: async ({ task }) => {
+          calls.push(task.id);
+          throw new Error(`container crashed for ${task.id}`);
+        },
+        now: () => 100,
+        newId: idFactory(),
+      });
+
+      assert.deepEqual(calls, ['task-a', 'task-b']);
+      assert.equal(result.stopReason, 'infra_failure_rate_exceeded');
+      assert.deepEqual(result.taskIds, ['task-a', 'task-b']);
+      assert.equal((await readFile(resultsJsonlPath, 'utf8')).trimEnd().split('\n').length, 2);
+    });
+  });
+
+  test('checks infra failure rate between tasks even when concurrency is configured', async () => {
+    await withDir(async (dir) => {
+      const systemPromptPath = join(dir, 'system_prompt.md');
+      const resultsJsonlPath = join(dir, 'results.jsonl');
+      await writeFile(systemPromptPath, 'fixed prompt\n', 'utf8');
+
+      let inFlight = 0;
+      let maxInFlight = 0;
+      const calls: string[] = [];
+      const result = await runFixedPromptController({
+        runId: 'run-1',
+        roundId: 'round-1',
+        config,
+        systemPromptPath,
+        resultsJsonlPath,
+        resultsTsvPath: join(dir, 'results.tsv'),
+        tasks: [
+          { id: 'task-a', path: '/bench/task-a' },
+          { id: 'task-b', path: '/bench/task-b' },
+          { id: 'task-c', path: '/bench/task-c' },
+          { id: 'task-d', path: '/bench/task-d' },
+          { id: 'task-e', path: '/bench/task-e' },
+        ],
+        maxConcurrency: 3,
+        maxInfraFailureRate: 0.2,
+        harborRunner: async ({ task }) => {
+          calls.push(task.id);
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          await delay(1);
+          inFlight -= 1;
+          throw new Error(`container crashed for ${task.id}`);
+        },
+        now: () => 100,
+        newId: idFactory(),
+      });
+
+      assert.equal(maxInFlight, 1);
+      assert.deepEqual(calls, ['task-a', 'task-b']);
+      assert.equal(result.stopReason, 'infra_failure_rate_exceeded');
+      assert.deepEqual(result.taskIds, ['task-a', 'task-b']);
+    });
+  });
+
+  test('preserves infra stop after WAL resume', async () => {
+    await withDir(async (dir) => {
+      const systemPromptPath = join(dir, 'system_prompt.md');
+      const resultsJsonlPath = join(dir, 'results.jsonl');
+      await writeFile(systemPromptPath, 'fixed prompt\n', 'utf8');
+      await appendFile(resultsJsonlPath, `${JSON.stringify(taskInfraFailedEvent({ taskId: 'task-a' }))}\n`, 'utf8');
+      await appendFile(resultsJsonlPath, `${JSON.stringify(taskInfraFailedEvent({ taskId: 'task-b' }))}\n`, 'utf8');
+
+      const calls: string[] = [];
+      const result = await runFixedPromptController({
+        runId: 'run-1',
+        roundId: 'round-1',
+        config,
+        systemPromptPath,
+        resultsJsonlPath,
+        resultsTsvPath: join(dir, 'results.tsv'),
+        tasks: [
+          { id: 'task-a', path: '/bench/task-a' },
+          { id: 'task-b', path: '/bench/task-b' },
+          { id: 'task-c', path: '/bench/task-c' },
+          { id: 'task-d', path: '/bench/task-d' },
+          { id: 'task-e', path: '/bench/task-e' },
+        ],
+        maxInfraFailureRate: 0.2,
+        harborRunner: async ({ task }) => {
+          calls.push(task.id);
+          return harborOutput({ taskId: task.id });
+        },
+        now: () => 100,
+        newId: idFactory(),
+      });
+
+      assert.deepEqual(calls, []);
+      assert.equal(result.stopReason, 'infra_failure_rate_exceeded');
+      assert.deepEqual(result.taskIds, ['task-a', 'task-b']);
+    });
+  });
+
+  test('stops when cost exceeds the configured ceiling', async () => {
+    await withDir(async (dir) => {
+      const systemPromptPath = join(dir, 'system_prompt.md');
+      const resultsJsonlPath = join(dir, 'results.jsonl');
+      await writeFile(systemPromptPath, 'fixed prompt\n', 'utf8');
+
+      const calls: string[] = [];
+      const result = await runFixedPromptController({
+        runId: 'run-1',
+        roundId: 'round-1',
+        config,
+        systemPromptPath,
+        resultsJsonlPath,
+        resultsTsvPath: join(dir, 'results.tsv'),
+        tasks: [
+          { id: 'task-a', path: '/bench/task-a' },
+          { id: 'task-b', path: '/bench/task-b' },
+          { id: 'task-c', path: '/bench/task-c' },
+        ],
+        costCeilingUsd: 0.03,
+        harborRunner: async ({ task }) => {
+          calls.push(task.id);
+          return harborOutput({
+            taskId: task.id,
+            tokenSummary: { input: 1, output: 2, reasoning: 0, total: 3, costUsd: 0.02 },
+          });
+        },
+        now: () => 100,
+        newId: idFactory(),
+      });
+
+      assert.deepEqual(calls, ['task-a', 'task-b']);
+      assert.equal(result.stopReason, 'cost_ceiling_exceeded');
+      assert.equal(result.totalCostUsd, 0.04);
+      assert.deepEqual(result.taskIds, ['task-a', 'task-b']);
+    });
+  });
+
+  test('checks the cost ceiling between tasks even when concurrency is configured', async () => {
+    await withDir(async (dir) => {
+      const systemPromptPath = join(dir, 'system_prompt.md');
+      const resultsJsonlPath = join(dir, 'results.jsonl');
+      await writeFile(systemPromptPath, 'fixed prompt\n', 'utf8');
+
+      let inFlight = 0;
+      let maxInFlight = 0;
+      const calls: string[] = [];
+      const result = await runFixedPromptController({
+        runId: 'run-1',
+        roundId: 'round-1',
+        config,
+        systemPromptPath,
+        resultsJsonlPath,
+        resultsTsvPath: join(dir, 'results.tsv'),
+        tasks: [
+          { id: 'task-a', path: '/bench/task-a' },
+          { id: 'task-b', path: '/bench/task-b' },
+          { id: 'task-c', path: '/bench/task-c' },
+        ],
+        maxConcurrency: 3,
+        costCeilingUsd: 0.03,
+        harborRunner: async ({ task }) => {
+          calls.push(task.id);
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          await delay(1);
+          inFlight -= 1;
+          return harborOutput({
+            taskId: task.id,
+            tokenSummary: { input: 1, output: 2, reasoning: 0, total: 3, costUsd: 0.02 },
+          });
+        },
+        now: () => 100,
+        newId: idFactory(),
+      });
+
+      assert.equal(maxInFlight, 1);
+      assert.deepEqual(calls, ['task-a', 'task-b']);
+      assert.equal(result.stopReason, 'cost_ceiling_exceeded');
+      assert.equal(result.totalCostUsd, 0.04);
+      assert.deepEqual(result.taskIds, ['task-a', 'task-b']);
+    });
+  });
+
+  test('preserves cost stop after WAL resume at the configured ceiling', async () => {
+    await withDir(async (dir) => {
+      const systemPromptPath = join(dir, 'system_prompt.md');
+      const resultsJsonlPath = join(dir, 'results.jsonl');
+      await writeFile(systemPromptPath, 'fixed prompt\n', 'utf8');
+      await appendFile(resultsJsonlPath, `${JSON.stringify(taskCompletedEvent({ taskId: 'task-a' }))}\n`, 'utf8');
+
+      const calls: string[] = [];
+      const result = await runFixedPromptController({
+        runId: 'run-1',
+        roundId: 'round-1',
+        config,
+        systemPromptPath,
+        resultsJsonlPath,
+        resultsTsvPath: join(dir, 'results.tsv'),
+        tasks: [
+          { id: 'task-a', path: '/bench/task-a' },
+          { id: 'task-b', path: '/bench/task-b' },
+        ],
+        costCeilingUsd: 0.01,
+        harborRunner: async ({ task }) => {
+          calls.push(task.id);
+          return harborOutput({ taskId: task.id });
+        },
+        now: () => 100,
+        newId: idFactory(),
+      });
+
+      assert.deepEqual(calls, []);
+      assert.equal(result.stopReason, 'cost_ceiling_exceeded');
+      assert.equal(result.totalCostUsd, 0.01);
+      assert.deepEqual(result.taskIds, ['task-a']);
+    });
+  });
+
+  test('runs concurrent tasks while recording deterministic task order', async () => {
+    await withDir(async (dir) => {
+      const systemPromptPath = join(dir, 'system_prompt.md');
+      const resultsJsonlPath = join(dir, 'results.jsonl');
+      await writeFile(systemPromptPath, 'fixed prompt\n', 'utf8');
+
+      let inFlight = 0;
+      let maxInFlight = 0;
+      const result = await runFixedPromptController({
+        runId: 'run-1',
+        roundId: 'round-1',
+        config,
+        systemPromptPath,
+        resultsJsonlPath,
+        resultsTsvPath: join(dir, 'results.tsv'),
+        tasks: [
+          { id: 'task-a', path: '/bench/task-a' },
+          { id: 'task-b', path: '/bench/task-b' },
+          { id: 'task-c', path: '/bench/task-c' },
+        ],
+        maxConcurrency: 2,
+        harborRunner: async ({ task }) => {
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          await delay(task.id === 'task-a' ? 20 : 0);
+          inFlight -= 1;
+          return harborOutput({ taskId: task.id });
+        },
+        now: () => 100,
+        newId: idFactory(),
+      });
+
+      assert.equal(maxInFlight, 2);
+      assert.deepEqual(result.taskIds, ['task-a', 'task-b', 'task-c']);
+      const events = (await readFile(resultsJsonlPath, 'utf8')).trimEnd().split('\n').map((line) => JSON.parse(line));
+      assert.deepEqual(events.map((event) => event.taskId), ['task-a', 'task-b', 'task-c']);
+    });
+  });
+
   test('reads Harbor reward and Maka cell output artifacts', async () => {
     await withDir(async (dir) => {
       const harborResultPath = join(dir, 'result.json');
@@ -440,6 +717,10 @@ function harborOutput(input: {
 function idFactory(): () => string {
   let i = 0;
   return () => `id-${++i}`;
+}
+
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function withDir(fn: (dir: string) => Promise<void>): Promise<void> {

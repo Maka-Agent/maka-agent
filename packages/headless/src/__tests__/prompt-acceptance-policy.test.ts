@@ -9,6 +9,8 @@ import {
   decidePromptAcceptance,
   promptAcceptanceNoiseBand,
   promptAcceptanceStateFromWal,
+  PROMPT_REWARD_HACK_QUARANTINE_REASON,
+  selectStablePromptTasks,
   summarizePromptAcceptancePartition,
 } from '../prompt-acceptance-policy.js';
 import type {
@@ -154,6 +156,58 @@ describe('prompt acceptance policy', () => {
     );
   });
 
+  test('selects stable fast tasks from baseline runs', () => {
+    const result = selectStablePromptTasks({
+      taskIds: ['stable-fast', 'flaky', 'infra', 'slow'],
+      baselineRuns: [
+        [
+          completed('stable-fast', false, { durationMs: 100 }),
+          completed('flaky', true, { durationMs: 100 }),
+          completed('infra', true, { durationMs: 100 }),
+          completed('slow', false, { durationMs: 1_000 }),
+        ],
+        [
+          completed('stable-fast', false, { durationMs: 120 }),
+          completed('flaky', false, { durationMs: 100 }),
+          infraFailed('infra'),
+          completed('slow', false, { durationMs: 1_200 }),
+        ],
+        [
+          completed('stable-fast', false, { durationMs: 110 }),
+          completed('flaky', true, { durationMs: 100 }),
+          completed('infra', true, { durationMs: 100 }),
+          completed('slow', false, { durationMs: 1_100 }),
+        ],
+      ],
+      maxPassRateSpread: 0,
+      maxDurationMs: 500,
+    });
+
+    assert.deepEqual(result, {
+      selectedTaskIds: ['stable-fast'],
+      rejectedTaskIds: [
+        { taskId: 'flaky', reason: 'unstable_outcome' },
+        { taskId: 'infra', reason: 'incomplete' },
+        { taskId: 'slow', reason: 'too_slow' },
+      ],
+    });
+  });
+
+  test('rejects stable task selection without baseline evidence', () => {
+    const result = selectStablePromptTasks({
+      taskIds: ['task-a', 'task-b'],
+      baselineRuns: [],
+    });
+
+    assert.deepEqual(result, {
+      selectedTaskIds: [],
+      rejectedTaskIds: [
+        { taskId: 'task-a', reason: 'incomplete' },
+        { taskId: 'task-b', reason: 'incomplete' },
+      ],
+    });
+  });
+
   test('keeps candidates that improve held-in beyond noise without falling below the held-out original floor', () => {
     const heldInTaskIds = ['in-a', 'in-b', 'in-c', 'in-d'];
     const heldOutTaskIds = ['out-a', 'out-b'];
@@ -170,6 +224,7 @@ describe('prompt acceptance policy', () => {
       originalHeldOutPassEligibleRate: 1,
       heldInPassRateNoiseBand: 0.05,
       heldOutPassRateNoiseBand: 0.05,
+      rewardHackScan: { decision: 'clean' },
       originalEvents: [
         completed('out-a', true),
         completed('out-b', true),
@@ -432,6 +487,65 @@ describe('prompt acceptance policy', () => {
     assert.deepEqual(decision.metrics.candidate.heldIn.plumbingFailedTaskIds, ['in-b']);
   });
 
+  test('discards reward-hack quarantined candidates before metric keep', async () => {
+    await withDir(async (dir) => {
+      const rewardHackScan = {
+        decision: 'quarantine' as const,
+        reason: 'verifier_pattern',
+        matchedPatterns: ['EXPECTED_SECRET'],
+      };
+      const decision = decidePromptAcceptance({
+        ...baseDecisionInput(),
+        rewardHackScan,
+      });
+
+      assert.equal(decision.decision, 'discard');
+      assert.equal(decision.reason, PROMPT_REWARD_HACK_QUARANTINE_REASON);
+      assert.equal(decision.lastKeptCommitSha, 'kept-1');
+      assert.deepEqual(decision.rewardHackScan, rewardHackScan);
+
+      await appendPromptAcceptanceDecision({
+        resultsJsonlPath: join(dir, 'results.jsonl'),
+        id: 'decision-1',
+        ts: 100,
+        result: decision,
+      });
+      const [event] = await readFixedPromptWal(join(dir, 'results.jsonl'));
+      assert.equal(event?.type, 'prompt_candidate_decided');
+      assert.equal(event?.reason, PROMPT_REWARD_HACK_QUARANTINE_REASON);
+      assert.deepEqual(event?.rewardHackScan, rewardHackScan);
+    });
+  });
+
+  test('discards candidates when reward-hack scan evidence is missing', async () => {
+    await withDir(async (dir) => {
+      const input = baseDecisionInput();
+      delete (input as { rewardHackScan?: unknown }).rewardHackScan;
+
+      const decision = decidePromptAcceptance(input);
+
+      assert.equal(decision.decision, 'discard');
+      assert.equal(decision.reason, PROMPT_REWARD_HACK_QUARANTINE_REASON);
+      assert.deepEqual(decision.rewardHackScan, {
+        decision: 'quarantine',
+        reason: 'scan_missing',
+      });
+
+      await appendPromptAcceptanceDecision({
+        resultsJsonlPath: join(dir, 'results.jsonl'),
+        id: 'decision-1',
+        ts: 100,
+        result: decision,
+      });
+      const [event] = await readFixedPromptWal(join(dir, 'results.jsonl'));
+      assert.equal(event?.type, 'prompt_candidate_decided');
+      assert.deepEqual(event?.rewardHackScan, {
+        decision: 'quarantine',
+        reason: 'scan_missing',
+      });
+    });
+  });
+
   test('discards candidates that fall below the held-out original floor', () => {
     const decision = decidePromptAcceptance({
       ...baseDecisionInput(),
@@ -539,6 +653,7 @@ function baseDecisionInput() {
     originalHeldOutPassEligibleRate: 1,
     heldInPassRateNoiseBand: 0.05,
     heldOutPassRateNoiseBand: 0.05,
+    rewardHackScan: { decision: 'clean' as const },
     originalEvents: [completed('out-a', true)],
     lastKeptEvents: [completed('in-a', true), completed('in-b', false)],
     candidateEvents: [completed('in-a', true), completed('in-b', true), completed('out-a', true)],

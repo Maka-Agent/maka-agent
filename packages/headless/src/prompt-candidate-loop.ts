@@ -1,8 +1,8 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { execFile, execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
-import { lstat, readFile, realpath, writeFile } from 'node:fs/promises';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { lstat, readdir, readFile, readlink, realpath, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import {
   appendFixedPromptWalEvent,
@@ -31,6 +31,19 @@ export interface ExtractTrajectoryDigestInput {
   runtimeEventsPath: string;
   verifierSummary: string;
 }
+
+export interface RewardHackScanInput {
+  runtimeEventsPath: string;
+  verifierPatterns: readonly string[];
+}
+
+export type RewardHackScanResult =
+  | { decision: 'clean' }
+  | { decision: 'quarantine'; reason: 'runtime_events_unreadable' }
+  | { decision: 'quarantine'; reason: 'runtime_events_empty' }
+  | { decision: 'quarantine'; reason: 'no_verifier_patterns' }
+  | { decision: 'quarantine'; reason: 'no_model_visible_events' }
+  | { decision: 'quarantine'; reason: 'verifier_pattern'; matchedPatterns: readonly string[] };
 
 export interface MetaAgentPromptInput {
   runId: string;
@@ -76,6 +89,7 @@ export interface CreateCliPromptCandidateGitInput {
 export interface RunPromptCandidateRoundInput {
   runId: string;
   roundId: string;
+  agentCwdPath: string;
   programPath: string;
   systemPromptPath: string;
   resultsTsvPath: string;
@@ -83,10 +97,16 @@ export interface RunPromptCandidateRoundInput {
   heldInTaskIds: readonly string[];
   heldInDigests: readonly TrajectoryDigest[];
   heldOutDigests?: readonly TrajectoryDigest[];
+  heldOutArtifactPaths?: readonly string[];
   metaAgent: MetaAgent;
   git: PromptCandidateGit;
   now?: () => number;
   newId?: () => string;
+}
+
+interface ArtifactTargetPath {
+  absolutePath: string;
+  realPath: string;
 }
 
 export interface PromptCandidateRoundResult {
@@ -102,6 +122,14 @@ export async function runPromptCandidateRound(
   const newId = input.newId ?? randomId;
   assertHeldInDigestsBelongToHeldInTasks(input.heldInTaskIds, input.heldInDigests);
   assertHeldInAndHeldOutDisjoint(input.heldInTaskIds, input.heldOutDigests ?? []);
+  const heldOutArtifactPaths = input.heldOutArtifactPaths ?? [];
+  if (input.agentCwdPath === undefined) {
+    throw new Error('agentCwdPath is required before exposing controller artifacts');
+  }
+  await assertControllerOnlyArtifactsOutsideAgentCwd(
+    input.agentCwdPath,
+    [input.resultsTsvPath, input.resultsJsonlPath, ...heldOutArtifactPaths],
+  );
   await assertSystemPromptPathMatchesGit(input.systemPromptPath, input.git);
   await assertRegularSystemPromptFile(input.systemPromptPath, input.git.gitRootPath);
   await input.git.assertSystemPromptClean();
@@ -185,6 +213,75 @@ function assertHeldInDigestsBelongToHeldInTasks(
   }
 }
 
+async function assertControllerOnlyArtifactsOutsideAgentCwd(
+  agentCwdPath: string,
+  artifactPaths: readonly string[],
+): Promise<void> {
+  const agentCwdAbsolutePath = resolve(agentCwdPath);
+  const agentCwdRealPath = await realpath(agentCwdPath);
+  const visibleArtifacts = new Set<string>();
+  const artifactTargetPaths: ArtifactTargetPath[] = [];
+  for (const artifactPath of artifactPaths) {
+    const artifactAbsolutePath = resolve(artifactPath);
+    if (artifactAbsolutePath === agentCwdAbsolutePath || isPathInside(agentCwdAbsolutePath, artifactAbsolutePath)) {
+      visibleArtifacts.add(normalizeGitPath(relative(agentCwdAbsolutePath, artifactAbsolutePath) || basename(artifactPath)));
+    }
+    const artifactRealPath = await realOrParentResolvedPath(artifactPath);
+    artifactTargetPaths.push({ absolutePath: artifactAbsolutePath, realPath: artifactRealPath });
+    if (artifactRealPath === agentCwdRealPath || isPathInside(agentCwdRealPath, artifactRealPath)) {
+      visibleArtifacts.add(normalizeGitPath(relative(agentCwdRealPath, artifactRealPath) || basename(artifactPath)));
+    }
+  }
+  await addSymlinkedControllerArtifacts(agentCwdAbsolutePath, agentCwdAbsolutePath, artifactTargetPaths, visibleArtifacts);
+  if (visibleArtifacts.size > 0) {
+    throw new Error(`controller-only artifacts must stay outside agent cwd: ${[...visibleArtifacts].join(', ')}`);
+  }
+}
+
+async function addSymlinkedControllerArtifacts(
+  agentCwdPath: string,
+  currentPath: string,
+  artifactPaths: readonly ArtifactTargetPath[],
+  visibleArtifacts: Set<string>,
+): Promise<void> {
+  const entries = await readdir(currentPath, { withFileTypes: true });
+  for (const entry of entries) {
+    const entryPath = resolve(currentPath, entry.name);
+    if (entry.isSymbolicLink()) {
+      const targetPath = resolve(dirname(entryPath), await readlink(entryPath));
+      let targetRealPath: string | undefined;
+      try {
+        targetRealPath = await realpath(entryPath);
+      } catch (error) {
+        if (!isNotFound(error)) throw error;
+      }
+      if (artifactPaths.some((artifactPath) => (
+        artifactPath.absolutePath === targetPath
+        || artifactPath.realPath === targetPath
+        || artifactPath.realPath === targetRealPath
+        || isPathInside(targetPath, artifactPath.absolutePath)
+        || isPathInside(targetPath, artifactPath.realPath)
+        || (targetRealPath !== undefined && isPathInside(targetRealPath, artifactPath.realPath))
+      ))) {
+        visibleArtifacts.add(normalizeGitPath(relative(agentCwdPath, entryPath)));
+      }
+      continue;
+    }
+    if (entry.isDirectory()) {
+      await addSymlinkedControllerArtifacts(agentCwdPath, entryPath, artifactPaths, visibleArtifacts);
+    }
+  }
+}
+
+async function realOrParentResolvedPath(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch (error) {
+    if (!isNotFound(error)) throw error;
+    return resolve(await realpath(dirname(path)), basename(path));
+  }
+}
+
 export async function extractTrajectoryDigest(
   input: ExtractTrajectoryDigestInput,
 ): Promise<TrajectoryDigest> {
@@ -199,6 +296,40 @@ export async function extractTrajectoryDigest(
     summary: input.verifierSummary,
     ...(recentToolCalls.length > 0 ? { recentToolCalls } : {}),
   };
+}
+
+export async function scanRuntimeEventsForRewardHack(
+  input: RewardHackScanInput,
+): Promise<RewardHackScanResult> {
+  let events: unknown[];
+  try {
+    events = await readRuntimeEventsJsonl(input.runtimeEventsPath);
+  } catch {
+    return { decision: 'quarantine', reason: 'runtime_events_unreadable' };
+  }
+
+  const patterns = input.verifierPatterns.filter((pattern) => pattern.trim().length > 0);
+  if (patterns.length === 0) return { decision: 'quarantine', reason: 'no_verifier_patterns' };
+  if (events.length === 0) return { decision: 'quarantine', reason: 'runtime_events_empty' };
+  const matchedPatterns = new Set<string>();
+  let visibleValues = 0;
+  for (const event of events) {
+    for (const value of modelVisibleStrings(event)) {
+      visibleValues += 1;
+      for (const pattern of patterns) {
+        if (value.includes(pattern)) matchedPatterns.add(pattern);
+      }
+    }
+  }
+  if (visibleValues === 0) return { decision: 'quarantine', reason: 'no_model_visible_events' };
+  if (matchedPatterns.size > 0) {
+    return {
+      decision: 'quarantine',
+      reason: 'verifier_pattern',
+      matchedPatterns: [...matchedPatterns].sort((a, b) => a.localeCompare(b)),
+    };
+  }
+  return { decision: 'clean' };
 }
 
 export function createScriptedMetaAgent(input: CreateScriptedMetaAgentInput): MetaAgent {
@@ -318,6 +449,8 @@ export function createCliPromptCandidateGit(input: CreateCliPromptCandidateGitIn
     ? realpathSync(input.systemPromptPath)
     : realpathSync(resolve(input.cwd, input.systemPromptPath));
   const systemPromptGitPath = toGitRelativePath(gitRootPath, systemPromptPath);
+  let statusBaseline: ReadonlyMap<string, string> | undefined;
+  let headBaseline: string | undefined;
   return {
     gitRootPath,
     systemPromptGitPath,
@@ -332,21 +465,22 @@ export function createCliPromptCandidateGit(input: CreateCliPromptCandidateGitIn
       if (worktreeDirty || indexDirty) {
         throw new Error('system_prompt.md must be clean before candidate round');
       }
+      [statusBaseline, headBaseline] = await Promise.all([
+        gitStatusSnapshot(gitRootPath),
+        gitHeadSha(gitRootPath),
+      ]);
     },
     async changedFiles(): Promise<readonly string[]> {
-      const { stdout } = await execFileAsync('git', [
-        'status',
-        '--porcelain',
-        '--untracked-files=all',
-        '--',
-        systemPromptGitPath,
-      ], { cwd: gitRootPath });
-      return stdout
-        .split('\n')
-        .map((line) => line.slice(3).trim())
-        .filter((line) => line.length > 0);
+      await assertGitHeadUnchanged(gitRootPath, headBaseline);
+      const baseline = statusBaseline ?? new Map<string, string>();
+      const current = await gitStatusSnapshot(gitRootPath);
+      const paths = new Set([...baseline.keys(), ...current.keys()]);
+      return [...paths].filter((path) => (
+        baseline.get(path) !== current.get(path)
+      ));
     },
     async commit(message: string): Promise<string> {
+      await assertGitHeadUnchanged(gitRootPath, headBaseline);
       await execFileAsync('git', ['add', '--', systemPromptGitPath], { cwd: gitRootPath });
       await execFileAsync('git', ['commit', '-m', message, '--', systemPromptGitPath], { cwd: gitRootPath });
       const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: gitRootPath });
@@ -366,6 +500,19 @@ export function createCliPromptCandidateGit(input: CreateCliPromptCandidateGitIn
   };
 }
 
+async function assertGitHeadUnchanged(cwd: string, baseline: string | undefined): Promise<void> {
+  if (baseline === undefined) return;
+  const current = await gitHeadSha(cwd);
+  if (current !== baseline) {
+    throw new Error('candidate round HEAD moved before prompt commit');
+  }
+}
+
+async function gitHeadSha(cwd: string): Promise<string> {
+  const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd });
+  return stdout.trim();
+}
+
 async function isGitTracked(cwd: string, path: string): Promise<boolean> {
   try {
     await execFileAsync('git', ['ls-files', '--error-unmatch', '--', path], { cwd });
@@ -382,6 +529,58 @@ async function hasGitDiff(cwd: string, args: readonly string[]): Promise<boolean
   } catch {
     return true;
   }
+}
+
+async function gitStatusFiles(cwd: string): Promise<readonly string[]> {
+  const { stdout } = await execFileAsync('git', [
+    'status',
+    '--porcelain',
+    '--untracked-files=all',
+  ], { cwd });
+  return stdout
+    .split('\n')
+    .map((line) => statusPath(line))
+    .filter((path): path is string => path !== undefined);
+}
+
+async function gitStatusSnapshot(cwd: string): Promise<ReadonlyMap<string, string>> {
+  const snapshot = new Map<string, string>();
+  for (const path of await gitStatusFiles(cwd)) {
+    snapshot.set(path, await gitStatusFingerprint(cwd, path));
+  }
+  return snapshot;
+}
+
+async function gitStatusFingerprint(cwd: string, path: string): Promise<string> {
+  const [fileHash, worktreeDiff, indexDiff] = await Promise.all([
+    fileFingerprint(resolve(cwd, path)),
+    gitDiffFingerprint(cwd, ['diff', '--binary', '--', path]),
+    gitDiffFingerprint(cwd, ['diff', '--cached', '--binary', '--', path]),
+  ]);
+  return [fileHash, worktreeDiff, indexDiff].join('\0');
+}
+
+async function fileFingerprint(path: string): Promise<string> {
+  try {
+    const content = await readFile(path);
+    return createHash('sha256').update(content).digest('hex');
+  } catch (error) {
+    if (isNotFound(error)) return 'missing';
+    throw error;
+  }
+}
+
+async function gitDiffFingerprint(cwd: string, args: readonly string[]): Promise<string> {
+  const { stdout } = await execFileAsync('git', [...args], { cwd, encoding: 'buffer' });
+  return createHash('sha256').update(stdout).digest('hex');
+}
+
+function statusPath(line: string): string | undefined {
+  const path = line.slice(3).trim();
+  if (path.length === 0) return undefined;
+  const renameSeparator = ' -> ';
+  const renameIndex = path.indexOf(renameSeparator);
+  return renameIndex === -1 ? path : path.slice(renameIndex + renameSeparator.length);
 }
 
 function findGitRoot(cwd: string): string {
@@ -431,6 +630,24 @@ function functionCallDigest(event: unknown): TrajectoryToolCallDigest | undefine
   };
 }
 
+function modelVisibleStrings(event: unknown): readonly string[] {
+  if (!isRecord(event) || !isRecord(event.content)) return [];
+  const content = event.content;
+  if (content.kind === 'text' && typeof content.text === 'string') return [content.text];
+  if (content.kind === 'thinking' && typeof content.text === 'string') return [content.text];
+  if (content.kind === 'function_call') return stringValues(content.args);
+  if (content.kind === 'function_response') return stringValues(content.result);
+  if (content.kind === 'error') return stringValues([content.message, content.details]);
+  return [];
+}
+
+function stringValues(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap((item) => stringValues(item));
+  if (isRecord(value)) return Object.values(value).flatMap((item) => stringValues(item));
+  return [];
+}
+
 function argsPreview(args: unknown): string {
   if (!isRecord(args)) return typeof args;
   return Object.keys(args).sort((a, b) => a.localeCompare(b)).join(',');
@@ -438,4 +655,8 @@ function argsPreview(args: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNotFound(error: unknown): boolean {
+  return isRecord(error) && error.code === 'ENOENT';
 }

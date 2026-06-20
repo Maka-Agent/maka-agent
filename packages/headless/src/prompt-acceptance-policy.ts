@@ -1,19 +1,24 @@
 import {
   appendFixedPromptWalEvent,
   FIXED_PROMPT_WAL_SCHEMA_VERSION,
+  type FixedPromptTaskCompletedEvent,
   type FixedPromptWalEvent,
   type FixedPromptTaskWalEvent,
   type PromptCandidateDecisionEvent,
+  type PromptCandidateRewardHackScan,
 } from './fixed-prompt-controller.js';
 
 export type PromptAcceptanceDecision = 'keep' | 'discard';
+
+export const PROMPT_REWARD_HACK_QUARANTINE_REASON = 'reward_hack_quarantined';
 
 export type PromptAcceptanceReason =
   | 'held_in_improved'
   | 'held_in_within_noise'
   | 'held_in_regressed'
   | 'coverage_regressed'
-  | 'held_out_regressed';
+  | 'held_out_regressed'
+  | typeof PROMPT_REWARD_HACK_QUARANTINE_REASON;
 
 export interface PromptAcceptancePartitionSummary {
   taskCount: number;
@@ -94,6 +99,7 @@ export interface DecidePromptAcceptanceInput {
   originalEvents: readonly FixedPromptTaskWalEvent[];
   lastKeptEvents: readonly FixedPromptTaskWalEvent[];
   candidateEvents: readonly FixedPromptTaskWalEvent[];
+  rewardHackScan?: PromptCandidateRewardHackScan;
 }
 
 export interface PromptAcceptanceResult {
@@ -110,6 +116,7 @@ export interface PromptAcceptanceResult {
   originalHeldOutPassEligibleRate: number | null;
   heldInPassRateNoiseBand: number;
   heldOutPassRateNoiseBand: number;
+  rewardHackScan: PromptCandidateRewardHackScan;
   metrics: PromptAcceptanceMetrics;
 }
 
@@ -127,6 +134,26 @@ export interface PromptAcceptanceState {
     roundId: string;
     decision: PromptAcceptanceDecision;
     candidateCommitSha: string;
+  }>;
+}
+
+export type StablePromptTaskRejectionReason =
+  | 'incomplete'
+  | 'unstable_outcome'
+  | 'too_slow';
+
+export interface SelectStablePromptTasksInput {
+  taskIds: readonly string[];
+  baselineRuns: readonly (readonly FixedPromptTaskWalEvent[])[];
+  maxPassRateSpread?: number;
+  maxDurationMs?: number;
+}
+
+export interface StablePromptTaskSelectionResult {
+  selectedTaskIds: string[];
+  rejectedTaskIds: Array<{
+    taskId: string;
+    reason: StablePromptTaskRejectionReason;
   }>;
 }
 
@@ -191,7 +218,49 @@ export function promptAcceptanceNoiseBand(input: PromptAcceptanceNoiseBandInput)
   return Math.max(differenceWidth, observedSpread);
 }
 
+export function selectStablePromptTasks(
+  input: SelectStablePromptTasksInput,
+): StablePromptTaskSelectionResult {
+  const maxPassRateSpread = input.maxPassRateSpread ?? 0;
+  const selectedTaskIds: string[] = [];
+  const rejectedTaskIds: StablePromptTaskSelectionResult['rejectedTaskIds'] = [];
+  if (input.baselineRuns.length === 0) {
+    return {
+      selectedTaskIds,
+      rejectedTaskIds: input.taskIds.map((taskId) => ({ taskId, reason: 'incomplete' })),
+    };
+  }
+  const baselineRunsByTask = input.baselineRuns.map((run) => new Map(run.map((event) => [event.taskId, event])));
+  for (const taskId of input.taskIds) {
+    const events = baselineRunsByTask.map((run) => run.get(taskId));
+    const completedEvents = events.filter(isStableBaselineEvent);
+    if (completedEvents.length !== events.length) {
+      rejectedTaskIds.push({ taskId, reason: 'incomplete' });
+      continue;
+    }
+    const maxDurationMs = input.maxDurationMs;
+    if (maxDurationMs !== undefined && completedEvents.some((event) => event.durationMs > maxDurationMs)) {
+      rejectedTaskIds.push({ taskId, reason: 'too_slow' });
+      continue;
+    }
+    const passIndicators = completedEvents.map((event) => event.passed ? 1 : 0);
+    if (Math.max(...passIndicators) - Math.min(...passIndicators) > maxPassRateSpread) {
+      rejectedTaskIds.push({ taskId, reason: 'unstable_outcome' });
+      continue;
+    }
+    selectedTaskIds.push(taskId);
+  }
+  return { selectedTaskIds, rejectedTaskIds };
+}
+
+function isStableBaselineEvent(
+  event: FixedPromptTaskWalEvent | undefined,
+): event is FixedPromptTaskCompletedEvent {
+  return event?.type === 'task_completed' && event.eligible && event.scored;
+}
+
 export function decidePromptAcceptance(input: DecidePromptAcceptanceInput): PromptAcceptanceResult {
+  const rewardHackScan = normalizeRewardHackScan(input.rewardHackScan);
   const metrics: PromptAcceptanceMetrics = {
     original: {
       heldOut: summarizePromptAcceptancePartition(input.originalEvents, input.heldOutTaskIds),
@@ -209,6 +278,7 @@ export function decidePromptAcceptance(input: DecidePromptAcceptanceInput): Prom
     originalHeldOutPassEligibleRate: input.originalHeldOutPassEligibleRate,
     heldInPassRateNoiseBand: input.heldInPassRateNoiseBand,
     heldOutPassRateNoiseBand: input.heldOutPassRateNoiseBand,
+    rewardHackScan,
   });
   const decision: PromptAcceptanceDecision = reason === 'held_in_improved' ? 'keep' : 'discard';
   const heldInReferencePassEligibleRate = nextHeldInReferencePassEligibleRate({
@@ -231,6 +301,7 @@ export function decidePromptAcceptance(input: DecidePromptAcceptanceInput): Prom
     originalHeldOutPassEligibleRate: input.originalHeldOutPassEligibleRate,
     heldInPassRateNoiseBand: input.heldInPassRateNoiseBand,
     heldOutPassRateNoiseBand: input.heldOutPassRateNoiseBand,
+    rewardHackScan,
     metrics,
   };
 }
@@ -355,6 +426,7 @@ function promptCandidateDecisionEvent(
     originalHeldOutPassEligibleRate: input.result.originalHeldOutPassEligibleRate,
     heldInPassRateNoiseBand: input.result.heldInPassRateNoiseBand,
     heldOutPassRateNoiseBand: input.result.heldOutPassRateNoiseBand,
+    rewardHackScan: input.result.rewardHackScan,
     metrics: input.result.metrics,
   };
 }
@@ -366,6 +438,7 @@ function acceptanceReason(
     originalHeldOutPassEligibleRate: number | null;
     heldInPassRateNoiseBand: number;
     heldOutPassRateNoiseBand: number;
+    rewardHackScan: PromptCandidateRewardHackScan;
   },
 ): PromptAcceptanceReason {
   const heldInCandidate = metrics.candidate.heldIn;
@@ -373,6 +446,9 @@ function acceptanceReason(
   const heldOutCandidate = metrics.candidate.heldOut;
   const heldOutReference = metrics.original.heldOut;
 
+  if (input.rewardHackScan.decision === 'quarantine') {
+    return PROMPT_REWARD_HACK_QUARANTINE_REASON;
+  }
   if (
     hasBlockingTaskFailure(heldInReference)
     || hasBlockingTaskFailure(heldOutReference)
@@ -412,6 +488,10 @@ function acceptanceReason(
     return 'held_in_regressed';
   }
   return 'held_in_within_noise';
+}
+
+function normalizeRewardHackScan(scan: PromptCandidateRewardHackScan | undefined): PromptCandidateRewardHackScan {
+  return scan ?? { decision: 'quarantine', reason: 'scan_missing' };
 }
 
 function nextHeldInReferencePassEligibleRate(input: {

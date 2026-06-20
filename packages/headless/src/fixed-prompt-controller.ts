@@ -109,6 +109,10 @@ export interface PromptCandidateCommittedEvent {
   promptHash: string;
 }
 
+export type PromptCandidateRewardHackScan =
+  | { decision: 'clean' }
+  | { decision: 'quarantine'; reason: string; matchedPatterns?: readonly string[] };
+
 export interface PromptCandidateDecisionEvent {
   schemaVersion: typeof FIXED_PROMPT_WAL_SCHEMA_VERSION;
   type: 'prompt_candidate_decided';
@@ -127,6 +131,7 @@ export interface PromptCandidateDecisionEvent {
   originalHeldOutPassEligibleRate: number | null;
   heldInPassRateNoiseBand: number;
   heldOutPassRateNoiseBand: number;
+  rewardHackScan?: PromptCandidateRewardHackScan;
   metrics: unknown;
 }
 
@@ -150,10 +155,17 @@ export interface RunFixedPromptControllerInput {
   resultsJsonlPath: string;
   resultsTsvPath: string;
   tasks: readonly FixedPromptTask[];
+  maxInfraFailureRate?: number;
+  costCeilingUsd?: number;
+  maxConcurrency?: number;
   harborRunner: HarborTaskRunner;
   now?: () => number;
   newId?: () => string;
 }
+
+export type FixedPromptControllerStopReason =
+  | 'infra_failure_rate_exceeded'
+  | 'cost_ceiling_exceeded';
 
 export interface FixedPromptControllerResult {
   taskIds: string[];
@@ -161,6 +173,7 @@ export interface FixedPromptControllerResult {
   totalTokens: number;
   totalCostUsd: number;
   resultsTsvPath: string;
+  stopReason?: FixedPromptControllerStopReason;
 }
 
 export async function runFixedPromptController(
@@ -173,11 +186,24 @@ export async function runFixedPromptController(
   const config = { ...input.config, systemPrompt };
   const events = await readFixedPromptWal(input.resultsJsonlPath);
   const completed = terminalTaskEvents(events, input.runId, input.roundId, expectedPromptHash);
+  const stopEvidence = roundTaskEvents(events, input.runId, input.roundId, expectedPromptHash);
+  let stopReason = controllerStopReason({
+    events: [...stopEvidence.values()],
+    taskCount: input.tasks.length,
+    maxInfraFailureRate: input.maxInfraFailureRate,
+    costCeilingUsd: input.costCeilingUsd,
+  });
+  const maxConcurrency = hasStopGuard(input) ? 1 : normalizeMaxConcurrency(input.maxConcurrency);
 
-  for (const task of input.tasks) {
-    if (completed.has(task.id)) continue;
-
-    const event = await runTaskAndBuildEvent({
+  for (let index = 0; index < input.tasks.length;) {
+    if (stopReason) break;
+    const batch: FixedPromptTask[] = [];
+    while (batch.length < maxConcurrency && index < input.tasks.length) {
+      const task = input.tasks[index++]!;
+      if (!completed.has(task.id)) batch.push(task);
+    }
+    if (batch.length === 0) continue;
+    const batchEvents = await Promise.all(batch.map((task) => runTaskAndBuildEvent({
       input,
       task,
       config,
@@ -185,14 +211,24 @@ export async function runFixedPromptController(
       expectedPromptHash,
       id: newId(),
       ts: now(),
+    })));
+    for (const event of batchEvents) {
+      await appendFixedPromptWalEvent(input.resultsJsonlPath, event);
+      events.push(event);
+      completed.set(event.taskId, event);
+      stopEvidence.set(event.taskId, event);
+    }
+    stopReason = controllerStopReason({
+      events: [...stopEvidence.values()],
+      taskCount: input.tasks.length,
+      maxInfraFailureRate: input.maxInfraFailureRate,
+      costCeilingUsd: input.costCeilingUsd,
     });
-    await appendFixedPromptWalEvent(input.resultsJsonlPath, event);
-    events.push(event);
-    completed.set(task.id, event);
   }
 
+  const resultByTask = stopReason ? stopEvidence : completed;
   const resultEvents = input.tasks
-    .map((task) => completed.get(task.id))
+    .map((task) => resultByTask.get(task.id))
     .filter((event): event is FixedPromptTaskWalEvent => event !== undefined);
   await writeFixedPromptResultsTsv(input.resultsTsvPath, resultEvents);
 
@@ -202,6 +238,7 @@ export async function runFixedPromptController(
     totalTokens: sum(resultEvents.map((event) => event.type !== 'task_infra_failed' ? event.tokenSummary.total : 0)),
     totalCostUsd: sum(resultEvents.map((event) => event.type !== 'task_infra_failed' ? event.tokenSummary.costUsd : 0)),
     resultsTsvPath: input.resultsTsvPath,
+    ...(stopReason ? { stopReason } : {}),
   };
 }
 
@@ -479,6 +516,22 @@ function terminalTaskEvents(
   return byTask;
 }
 
+function roundTaskEvents(
+  events: readonly FixedPromptWalEvent[],
+  runId: string,
+  roundId: string,
+  expectedPromptHash: string,
+): Map<string, FixedPromptTaskWalEvent> {
+  const byTask = new Map<string, FixedPromptTaskWalEvent>();
+  for (const event of events) {
+    if (!isTaskEvent(event)) continue;
+    if (event.runId !== runId || event.roundId !== roundId) continue;
+    if (!eventMatchesPrompt(event, expectedPromptHash)) continue;
+    byTask.set(event.taskId, event);
+  }
+  return byTask;
+}
+
 function eventMatchesPrompt(event: FixedPromptTaskWalEvent, expectedPromptHash: string): boolean {
   if (event.type === 'task_infra_failed') return true;
   if (event.promptHash === expectedPromptHash) return true;
@@ -498,6 +551,45 @@ function tsvCell(value: string): string {
 
 function sum(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0);
+}
+
+function controllerStopReason(input: {
+  events: readonly FixedPromptTaskWalEvent[];
+  taskCount: number;
+  maxInfraFailureRate?: number;
+  costCeilingUsd?: number;
+}): FixedPromptControllerStopReason | undefined {
+  if (
+    input.maxInfraFailureRate !== undefined
+    && infraFailureRate(input.events, input.taskCount) > input.maxInfraFailureRate
+  ) {
+    return 'infra_failure_rate_exceeded';
+  }
+  if (input.costCeilingUsd !== undefined && taskEventsCostUsd(input.events) >= input.costCeilingUsd) {
+    return 'cost_ceiling_exceeded';
+  }
+  return undefined;
+}
+
+function hasStopGuard(input: RunFixedPromptControllerInput): boolean {
+  return input.maxInfraFailureRate !== undefined || input.costCeilingUsd !== undefined;
+}
+
+function infraFailureRate(events: readonly FixedPromptTaskWalEvent[], taskCount: number): number {
+  if (taskCount <= 0) return 0;
+  return events.filter((event) => event.type === 'task_infra_failed').length / taskCount;
+}
+
+function taskEventsCostUsd(events: readonly FixedPromptTaskWalEvent[]): number {
+  return sum(events.map((event) => event.type !== 'task_infra_failed' ? event.tokenSummary.costUsd : 0));
+}
+
+function normalizeMaxConcurrency(value: number | undefined): number {
+  if (value === undefined) return 1;
+  if (!Number.isFinite(value) || value < 1) {
+    throw new Error('maxConcurrency must be at least 1');
+  }
+  return Math.floor(value);
 }
 
 async function truncateTornWalTail(path: string): Promise<void> {

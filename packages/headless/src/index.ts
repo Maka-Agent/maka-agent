@@ -26,6 +26,7 @@ export {
   runHarborCellFromEnv,
 } from './harbor-cell.js';
 export type {
+  FixedPromptControllerStopReason,
   FixedPromptControllerResult,
   FixedPromptTask,
   FixedPromptTaskCompletedEvent,
@@ -38,6 +39,7 @@ export type {
   HarborTaskRunner,
   PromptCandidateCommittedEvent,
   PromptCandidateDecisionEvent,
+  PromptCandidateRewardHackScan,
   ReadHarborTaskRunOutputInput,
   RunFixedPromptControllerInput,
 } from './fixed-prompt-controller.js';
@@ -61,6 +63,8 @@ export type {
   MetaAgentCompletionInput,
   PromptCandidateGit,
   PromptCandidateRoundResult,
+  RewardHackScanInput,
+  RewardHackScanResult,
   RunPromptCandidateRoundInput,
   TrajectoryDigest,
   TrajectoryToolCallDigest,
@@ -73,6 +77,7 @@ export {
   parseMetaAgentResult,
   renderMetaAgentPrompt,
   runPromptCandidateRound,
+  scanRuntimeEventsForRewardHack,
 } from './prompt-candidate-loop.js';
 export type {
   AppendPromptAcceptanceDecisionInput,
@@ -88,15 +93,29 @@ export type {
   PromptAcceptanceReason,
   PromptAcceptanceResult,
   PromptAcceptanceState,
+  SelectStablePromptTasksInput,
+  StablePromptTaskRejectionReason,
+  StablePromptTaskSelectionResult,
 } from './prompt-acceptance-policy.js';
 export {
+  PROMPT_REWARD_HACK_QUARANTINE_REASON,
   appendPromptAcceptanceDecision,
   calibratePromptAcceptanceBaseline,
   decidePromptAcceptance,
   promptAcceptanceNoiseBand,
   promptAcceptanceStateFromWal,
+  selectStablePromptTasks,
   summarizePromptAcceptancePartition,
 } from './prompt-acceptance-policy.js';
+export type {
+  PromptStructuralSmokeFailure,
+  PromptStructuralSmokeReport,
+  PromptStructuralSmokeReportInput,
+} from './prompt-structural-smoke.js';
+export {
+  promptStructuralSmokeReport,
+  renderPromptStructuralSmokeMarkdown,
+} from './prompt-structural-smoke.js';
 export type {
   BenchmarkAdapter,
   BenchmarkAdapterRegistry,
