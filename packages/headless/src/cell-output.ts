@@ -135,7 +135,7 @@ export function summarizeCellTokens(events: readonly RuntimeEvent[]): HarborCell
       sawDerivedCacheMiss = true;
     }
     summary.reasoning += usage.reasoning ?? 0;
-    summary.total += usage.total ?? 0;
+    summary.total += usage.total ?? (usage.input ?? 0) + (usage.output ?? 0) + (usage.reasoning ?? 0);
     summary.costUsd += usage.costUsd ?? 0;
   }
   if (sawExplicitCacheMiss) {

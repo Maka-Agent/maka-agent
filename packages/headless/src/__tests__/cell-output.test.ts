@@ -117,6 +117,36 @@ describe('Harbor cell output contract', () => {
 
     assert.equal(output.promptHash, 'sha256:prompt-a');
   });
+
+  test('derives total tokens when runtime events omit an explicit total', () => {
+    const output = buildHarborCellOutput({
+      invocation: {
+        invocationId: 'inv-1',
+        runId: 'run-1',
+        sessionId: 'session-1',
+        turnId: 'turn-1',
+        status: 'completed',
+        events: [
+          runtimeEvent({
+            id: 'usage-1',
+            actions: { tokenUsage: { input: 10, output: 5, reasoning: 2 } },
+          }),
+          runtimeEvent({
+            id: 'usage-2',
+            actions: { tokenUsage: { input: 3, output: 7 } },
+          }),
+        ],
+        startedAt: 100,
+        finishedAt: 250,
+      },
+      runtimeEventsPath: '/logs/agent/runtime-events.jsonl',
+    });
+
+    assert.equal(output.tokenSummary.input, 13);
+    assert.equal(output.tokenSummary.output, 12);
+    assert.equal(output.tokenSummary.reasoning, 2);
+    assert.equal(output.tokenSummary.total, 27);
+  });
 });
 
 function runtimeEvent(extra: Partial<RuntimeEvent>): RuntimeEvent {
