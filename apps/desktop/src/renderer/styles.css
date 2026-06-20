@@ -2472,34 +2472,34 @@ button:active {
   transform: translate(-50%, -50%);
   display: grid;
   justify-items: center;
-  gap: 10px;
+  gap: 6px;
   text-align: center;
   color: var(--foreground-60);
 }
 
 .maka-empty-state-icon {
-  width: 44px;
-  height: 44px;
+  width: 32px;
+  height: 32px;
   color: var(--foreground-40);
   padding: 0;
 }
 
 .maka-empty-state-media .maka-empty-state-icon {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
 }
 
 .maka-empty-state-title {
   color: var(--foreground);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .maka-empty-state-body {
   max-width: 30ch;
   color: var(--foreground-50);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 11px;
+  line-height: 1.4;
   text-wrap: pretty;
 }
 
@@ -2513,14 +2513,14 @@ button:active {
 }
 
 .maka-empty-state-actions {
-  margin-top: 6px;
+  margin-top: 4px;
   display: grid;
-  gap: 6px;
+  gap: 4px;
   justify-items: center;
 }
 
 .maka-empty-state-cta {
-  min-width: 104px;
+  min-width: 88px;
 }
 
 .maka-plan-panel {
@@ -2540,28 +2540,28 @@ button:active {
   width: min(100%, 1080px);
   margin: 0 auto;
   display: grid;
-  gap: 16px;
-  padding: clamp(34px, 5vh, 58px) 0 32px;
+  gap: 10px;
+  padding: clamp(16px, 3vh, 32px) 0 16px;
 }
 
 .maka-plan-hero {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
+  gap: 12px;
 }
 
 .maka-plan-heading {
   display: grid;
-  gap: 8px;
+  gap: 4px;
   max-width: 560px;
 }
 
 .maka-plan-eyebrow {
   margin: 0;
   color: var(--foreground-40);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 600;
   letter-spacing: 0;
 }
 
