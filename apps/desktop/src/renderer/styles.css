@@ -2912,20 +2912,19 @@ button:active {
 
 .maka-plan-card-menu-trigger {
   display: inline-flex;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   align-items: center;
   justify-content: center;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  border: 0;
+  border-radius: 4px;
   background: transparent;
   color: var(--foreground-60);
   cursor: pointer;
 }
 
 .maka-plan-card-menu-trigger:hover {
-  border-color: var(--border);
-  background: var(--background);
+  background: oklch(from var(--foreground) l c h / 0.06);
   color: var(--foreground);
 }
 
@@ -2935,7 +2934,7 @@ button:active {
 }
 
 .maka-plan-card-menu {
-  min-width: 152px;
+  min-width: 132px;
 }
 
 .maka-plan-dialog {
@@ -3138,21 +3137,21 @@ button:active {
 
 .maka-plan-card-status {
   color: var(--foreground-35);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
 }
 
 .maka-plan-card-run {
   color: var(--foreground-50);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 .maka-plan-card-footer {
   order: 2;
   justify-content: flex-end;
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: 4px;
   white-space: nowrap;
 }
 
