@@ -7,6 +7,7 @@ import type {
   ToolOutputStream,
   ToolResultContent,
   ToolResultMessage,
+  TokenUsageMessage,
 } from '@maka/core';
 import type { BackendSendInput, PermissionDecision } from '@maka/core/backend-types';
 import { redactSecrets } from '@maka/core/redaction';
@@ -44,6 +45,17 @@ export type PiAgentFrame =
   | { type: 'tool_start'; toolUseId: string; toolName: string; args?: unknown; displayName?: string; intent?: string }
   | { type: 'tool_output_delta'; toolUseId: string; stream?: ToolOutputStream; chunk: string }
   | { type: 'tool_result'; toolUseId: string; isError?: boolean; content?: ToolResultContent | unknown }
+  | {
+      type: 'token_usage';
+      input: number;
+      output: number;
+      cacheHitInput?: number;
+      cacheMissInput?: number;
+      cacheWriteInput?: number;
+      reasoning?: number;
+      total?: number;
+      costUsd?: number;
+    }
   | {
       type: 'permission_request';
       toolUseId: string;
@@ -181,6 +193,12 @@ export class PiAgentBackend implements AgentBackend {
               isError: Boolean(frame.isError),
               content,
             };
+            break;
+          }
+          case 'token_usage': {
+            const event = this.tokenUsageEvent(turnId, frame);
+            await this.input.appendMessage(event);
+            yield event;
             break;
           }
           case 'permission_request': {
@@ -415,6 +433,25 @@ export class PiAgentBackend implements AgentBackend {
     };
   }
 
+  private tokenUsageEvent(turnId: string, frame: Extract<PiAgentFrame, { type: 'token_usage' }>): TokenUsageMessage {
+    const cacheHitInput = frame.cacheHitInput ?? 0;
+    const cacheWriteInput = frame.cacheWriteInput ?? 0;
+    return {
+      type: 'token_usage',
+      id: this.newId(),
+      turnId,
+      ts: this.now(),
+      input: frame.input,
+      output: frame.output,
+      ...(cacheHitInput > 0 ? { cacheHitInput, cacheRead: cacheHitInput } : {}),
+      ...(frame.cacheMissInput !== undefined ? { cacheMissInput: frame.cacheMissInput, cacheMissInputSource: 'explicit' } : {}),
+      ...(cacheWriteInput > 0 ? { cacheWriteInput, cacheCreation: cacheWriteInput } : {}),
+      ...(frame.reasoning !== undefined ? { reasoning: frame.reasoning } : {}),
+      ...(frame.total !== undefined ? { total: frame.total } : {}),
+      ...(frame.costUsd !== undefined ? { costUsd: frame.costUsd } : {}),
+    };
+  }
+
   private abortEvent(turnId: string): SessionEvent {
     return { type: 'abort', id: this.newId(), turnId, ts: this.now(), reason: 'user_stop' };
   }
@@ -451,6 +488,22 @@ export function normalizePiAgentFrame(frame: unknown): PiAgentFrame | null {
   if (type === 'tool_result' && typeof value.toolUseId === 'string') {
     return { type, toolUseId: value.toolUseId, isError: value.isError === true, content: value.content };
   }
+  if (type === 'token_usage') {
+    const input = finiteNumber(value.input);
+    const output = finiteNumber(value.output);
+    if (input === undefined || output === undefined) return null;
+    return {
+      type,
+      input,
+      output,
+      ...numberField('cacheHitInput', value.cacheHitInput),
+      ...numberField('cacheMissInput', value.cacheMissInput),
+      ...numberField('cacheWriteInput', value.cacheWriteInput),
+      ...numberField('reasoning', value.reasoning),
+      ...numberField('total', value.total),
+      ...numberField('costUsd', value.costUsd),
+    };
+  }
   if (type === 'permission_request' && typeof value.toolUseId === 'string' && typeof value.toolName === 'string') {
     return {
       type,
@@ -476,6 +529,15 @@ export function normalizePiAgentFrame(frame: unknown): PiAgentFrame | null {
     return { type, stopReason };
   }
   return null;
+}
+
+function numberField<K extends string>(key: K, value: unknown): { [P in K]?: number } {
+  const number = finiteNumber(value);
+  return number === undefined ? {} : { [key]: number } as { [P in K]?: number };
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function normalizeToolResultContent(content: unknown): ToolResultContent {

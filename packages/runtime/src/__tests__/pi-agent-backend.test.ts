@@ -46,6 +46,45 @@ describe('PiAgentBackend skeleton', () => {
     assert.equal(messages.some((message) => message.type === 'tool_result' && message.toolUseId === 'tool-1'), true);
   });
 
+  test('normalizes token usage frames to Maka events and storage records', async () => {
+    const messages: StoredMessage[] = [];
+    const backend = new PiAgentBackend({
+      sessionId: 'session-1',
+      header: header({ permissionMode: 'execute' }),
+      appendMessage: async (message) => { messages.push(message); },
+      permissionEngine: new PermissionEngine({ newId: nextId('perm'), now: nextNow(2_500) }),
+      transport: frames([
+        {
+          type: 'token_usage',
+          input: 10,
+          output: 4,
+          cacheHitInput: 2,
+          cacheWriteInput: 3,
+          total: 17,
+          costUsd: 0.0012,
+        },
+        { type: 'complete' },
+      ]),
+      newId: nextId('id'),
+      now: nextNow(2_600),
+    });
+
+    const events = await drain(backend.send({ turnId: 'turn-1', text: 'inspect', context: [] }));
+    const usage = events.find((event): event is Extract<SessionEvent, { type: 'token_usage' }> =>
+      event.type === 'token_usage'
+    );
+
+    assert.equal(usage?.input, 10);
+    assert.equal(usage?.output, 4);
+    assert.equal(usage?.cacheHitInput, 2);
+    assert.equal(usage?.cacheRead, 2);
+    assert.equal(usage?.cacheWriteInput, 3);
+    assert.equal(usage?.cacheCreation, 3);
+    assert.equal(usage?.total, 17);
+    assert.equal(usage?.costUsd, 0.0012);
+    assert.equal(messages.some((message) => message.type === 'token_usage' && message.costUsd === 0.0012), true);
+  });
+
   test('parks ACP permission requests until respondToPermission resolves them', async () => {
     const messages: StoredMessage[] = [];
     const backend = new PiAgentBackend({
