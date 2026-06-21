@@ -4909,6 +4909,7 @@ button:active {
   border-radius: 6px;
   background: var(--background);
   font-size: 10px;
+  animation: maka-tool-card-enter 350ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .maka-load-tool-preview p {
@@ -4943,6 +4944,24 @@ button:active {
   border-radius: 8px;
   background: var(--background);
   white-space: normal;
+  animation: maka-tool-card-enter 350ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Tool-card mount entrance — opacity 0 + scale .97 -> 1, ported from
+   the upstream reference design's compact code-output entrance so each
+   tool result feels like it "lands" instead of popping in. Honored by
+   prefers-reduced-motion via the rule below. */
+@keyframes maka-tool-card-enter {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .maka-tool-diff,
+  .maka-tool-terminal,
+  .maka-load-tool-preview {
+    animation: none;
+  }
 }
 
 .maka-tool-diff-paths {
@@ -5013,6 +5032,7 @@ button:active {
   border-radius: 8px;
   background: var(--background);
   white-space: normal;
+  animation: maka-tool-card-enter 350ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .maka-tool-terminal-head {
