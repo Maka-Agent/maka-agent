@@ -128,10 +128,27 @@ async function main() {
   }
 
   const rewardHackVerifierPatternsByTaskId = await buildRewardHackVerifierPatterns([...heldInTasks, ...heldOutTasks]);
-  const missingPatterns = [...heldInTasks, ...heldOutTasks].filter((t) => (rewardHackVerifierPatternsByTaskId[t.id] ?? []).length === 0);
-  if (missingPatterns.length > 0) {
-    console.warn(`WARNING: ${missingPatterns.length} task(s) have no canary verifier pattern; those rounds will quarantine.`);
+  // A held-in task with no canary verifier pattern cannot be scanned for
+  // reward-hacking, so the controller quarantines every round it completes in —
+  // which would fail the structural smoke. An unverifiable task does not belong
+  // in the partition the meta-agent optimizes, so drop it from held-in. Held-out
+  // is not reward-hack-scanned, so it keeps such tasks. If the caller pinned
+  // held-in ids explicitly, fail loud rather than silently change their set.
+  const hasPattern = (t) => (rewardHackVerifierPatternsByTaskId[t.id] ?? []).length > 0;
+  const heldInNoPattern = heldInTasks.filter((t) => !hasPattern(t));
+  if (heldInNoPattern.length > 0) {
+    const ids = heldInNoPattern.map((t) => t.id).join(', ');
+    if (heldInIds) {
+      throw new Error(`held-in task(s) have no canary verifier pattern (would quarantine every round): ${ids}`);
+    }
+    heldInTasks = heldInTasks.filter(hasPattern);
+    console.warn(`Dropped ${heldInNoPattern.length} held-in task(s) with no canary verifier pattern: ${ids}`);
   }
+  const heldOutNoPattern = heldOutTasks.filter((t) => !hasPattern(t));
+  if (heldOutNoPattern.length > 0) {
+    console.warn(`Note: ${heldOutNoPattern.length} held-out task(s) have no canary pattern (held-out is not reward-hack-scanned): ${heldOutNoPattern.map((t) => t.id).join(', ')}`);
+  }
+  console.log(`Reward-hack patterns: ${heldInTasks.length} held-in all covered, ${heldOutTasks.length} held-out`);
 
   // Prompt repo: program.md + system_prompt.md committed; agent-cwd/ is the empty
   // isolation root; controller artifacts live OUTSIDE it.
