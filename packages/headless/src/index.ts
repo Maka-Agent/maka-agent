@@ -66,6 +66,18 @@ export {
   writeFixedPromptResultsTsv,
 } from './fixed-prompt-controller.js';
 export type {
+  HarborProcessRunner,
+  HarborRunRequest,
+  HarborRunResult,
+  HarborTaskPricing,
+  HarborTaskRunnerOptions,
+} from './harbor-task-runner.js';
+export {
+  buildHarborJobConfig,
+  createHarborTaskRunner,
+  HarborInfraError,
+} from './harbor-task-runner.js';
+export type {
   MetaAgent,
   MetaAgentPromptInput,
   MetaAgentPromptResult,
