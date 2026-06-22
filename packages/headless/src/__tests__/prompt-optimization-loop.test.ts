@@ -94,6 +94,24 @@ describe('runPromptOptimizationLoop', () => {
     });
   });
 
+  test('refuses to run when the held-out TSV would be visible inside the agent cwd', async () => {
+    await withHarness(async (harness) => {
+      await assert.rejects(
+        runLoop(harness, {
+          heldInTasks: makeTasks('hin', 2),
+          heldOutTasks: makeTasks('hout', 1),
+          rewardFor: () => 1,
+          rounds: 1,
+          baselineRuns: 1,
+          // Place the held-out TSV inside the agent cwd; the driver must auto-isolate
+          // it and the candidate round must reject before exposing held-out results.
+          heldOutResultsTsvPath: join(harness.agentCwdPath, 'held-out.tsv'),
+        }),
+        /controller-only artifacts must stay outside agent cwd/,
+      );
+    });
+  });
+
   test('stops the loop once the cumulative cost ceiling is reached', async () => {
     await withHarness(async (harness) => {
       const heldInTasks = makeTasks('hin', 20);
@@ -139,6 +157,7 @@ interface RunLoopOptions {
   rounds: number;
   baselineRuns: number;
   costCeilingUsd?: number;
+  heldOutResultsTsvPath?: string;
 }
 
 async function runLoop(harness: Harness, options: RunLoopOptions) {
@@ -156,7 +175,7 @@ async function runLoop(harness: Harness, options: RunLoopOptions) {
     systemPromptPath: harness.systemPromptPath,
     resultsJsonlPath: harness.resultsJsonlPath,
     heldInResultsTsvPath: harness.heldInResultsTsvPath,
-    heldOutResultsTsvPath: harness.heldOutResultsTsvPath,
+    heldOutResultsTsvPath: options.heldOutResultsTsvPath ?? harness.heldOutResultsTsvPath,
     heldInTasks: options.heldInTasks,
     heldOutTasks: options.heldOutTasks,
     config: CONFIG,

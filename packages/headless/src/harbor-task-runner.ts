@@ -57,6 +57,9 @@ export interface HarborTaskRunnerOptions {
   /** Harbor environment type (default "docker"). */
   environment?: string;
   timeoutMultiplier?: number;
+  /** Wall-clock ceiling for a single `harbor run`; a hung Docker/Harbor would
+   * otherwise stall the unattended loop forever. Defaults to 45 minutes. */
+  harborTimeoutMs?: number;
   /** Injectable Harbor process runner (default: execFile the harbor binary). */
   runHarbor?: HarborProcessRunner;
   now?: () => number;
@@ -69,7 +72,11 @@ export interface HarborRunRequest {
   jobsDir: string;
   args: readonly string[];
   cwd: string;
+  /** Wall-clock ceiling in ms; the default runner kills harbor past this. */
+  timeoutMs?: number;
 }
+
+const DEFAULT_HARBOR_TIMEOUT_MS = 45 * 60_000;
 
 export interface HarborRunResult {
   exitCode: number;
@@ -113,7 +120,15 @@ export function createHarborTaskRunner(options: HarborTaskRunnerOptions): Harbor
     const args = ['run', '--config', configPath, '--yes'];
     let result: HarborRunResult;
     try {
-      result = await runHarbor({ harborBin, configPath, jobName, jobsDir, args, cwd: options.makaRepoPath });
+      result = await runHarbor({
+        harborBin,
+        configPath,
+        jobName,
+        jobsDir,
+        args,
+        cwd: options.makaRepoPath,
+        timeoutMs: options.harborTimeoutMs ?? DEFAULT_HARBOR_TIMEOUT_MS,
+      });
     } catch (error) {
       throw new HarborInfraError(`harbor run failed to launch for task ${input.task.id}`, errorText(error));
     }
@@ -146,13 +161,14 @@ export function buildHarborJobConfig(
   options: HarborTaskRunnerOptions & { jobsDir: string; jobName: string },
 ): Record<string, unknown> {
   const provider = options.provider ?? 'deepseek';
+  const model = modelIdForProvider(options.model, provider);
   const mounts: Array<Record<string, unknown>> = [
     { type: 'bind', source: options.makaRepoPath, target: CONTAINER_MAKA_REPO, read_only: true },
   ];
 
   const agentEnv: Record<string, string> = {
     MAKA_BACKEND: 'ai-sdk',
-    MAKA_MODEL: options.model,
+    MAKA_MODEL: model,
     MAKA_PROVIDER: provider,
     // Verbatim — the controller hashes exactly these bytes and verifies the round-trip.
     MAKA_SYSTEM_PROMPT: input.systemPrompt,
@@ -200,7 +216,7 @@ export function buildHarborJobConfig(
       {
         name: 'maka',
         import_path: 'maka_agent:MakaAgent',
-        model_name: options.model,
+        model_name: model,
         kwargs: { backend: 'ai-sdk' },
         env: agentEnv,
       },
@@ -271,6 +287,7 @@ const defaultHarborProcessRunner: HarborProcessRunner = async (request) => {
     const { stdout, stderr } = await execFileAsync(request.harborBin, [...request.args], {
       cwd: request.cwd,
       maxBuffer: 64 * 1024 * 1024,
+      ...(request.timeoutMs !== undefined ? { timeout: request.timeoutMs, killSignal: 'SIGKILL' as const } : {}),
     });
     return { exitCode: 0, stdout, stderr };
   } catch (error) {
@@ -284,6 +301,17 @@ const defaultHarborProcessRunner: HarborProcessRunner = async (request) => {
     };
   }
 };
+
+/** Strip a model's own provider prefix so the native provider receives a bare id
+ * ("deepseek/deepseek-v4-flash" + provider "deepseek" -> "deepseek-v4-flash"). A
+ * gateway provider keeps the slash because the prefix does not match the provider
+ * ("openai-compatible" routing "anthropic/claude-sonnet-4-5"). The cell's
+ * parseModelSpec preserves whatever it receives when a provider is set, so the
+ * stripping must happen here. */
+function modelIdForProvider(model: string, provider: string): string {
+  const prefix = `${provider}/`;
+  return model.startsWith(prefix) ? model.slice(prefix.length) : model;
+}
 
 function sanitize(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]/g, '_');

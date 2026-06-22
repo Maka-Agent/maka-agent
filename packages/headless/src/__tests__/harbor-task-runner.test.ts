@@ -137,7 +137,10 @@ describe('createHarborTaskRunner', () => {
       assert.equal(config.n_attempts, 1);
       assert.equal(config.n_concurrent_trials, 1);
       assert.equal(env.MAKA_BACKEND, 'ai-sdk');
-      assert.equal(env.MAKA_MODEL, 'deepseek/deepseek-v4-flash');
+      // The provider-matching prefix is stripped so the native DeepSeek API gets a
+      // bare model id (slashful would 400). model_name carries the same value.
+      assert.equal(env.MAKA_MODEL, 'deepseek-v4-flash');
+      assert.equal(agent.model_name, 'deepseek-v4-flash');
       // Byte-for-byte, including the trailing newline the controller hashes.
       assert.equal(env.MAKA_SYSTEM_PROMPT, 'PROMPT WITH\nNEWLINES\n');
       assert.equal(env.DEEPSEEK_API_KEY_FILE, '/run/secrets/deepseek-key');
@@ -219,5 +222,55 @@ describe('buildHarborJobConfig', () => {
     const env = (config.agents as Array<{ env: Record<string, string> }>)[0]!.env;
     assert.equal(env.MAKA_TRIAL_INPUT_USD_PER_1M, undefined);
     assert.equal(env.MAKA_BACKEND, 'ai-sdk');
+  });
+
+  test('keeps a gateway-routed slashful model id when the prefix is not the provider', () => {
+    const config = buildHarborJobConfig(runInput(), {
+      makaRepoPath: '/repo',
+      jobsDir: '/jobs/x',
+      jobName: 'trial',
+      model: 'anthropic/claude-sonnet-4-5',
+      provider: 'openai-compatible',
+    });
+    const agent = (config.agents as Array<{ env: Record<string, string>; model_name: string }>)[0]!;
+    assert.equal(agent.env.MAKA_MODEL, 'anthropic/claude-sonnet-4-5');
+    assert.equal(agent.model_name, 'anthropic/claude-sonnet-4-5');
+  });
+});
+
+describe('createHarborTaskRunner timeout', () => {
+  test('forwards a default wall-clock timeout to the harbor process', async () => {
+    await withRun(async ({ jobsDir, repo }) => {
+      let seenTimeout: number | undefined;
+      const runner = createHarborTaskRunner({
+        makaRepoPath: repo,
+        jobsDir,
+        model: 'deepseek/deepseek-v4-flash',
+        runHarbor: async (request) => {
+          seenTimeout = request.timeoutMs;
+          return fakeRunner({ reward: '1\n' })(request);
+        },
+      });
+      await runner(runInput());
+      assert.equal(seenTimeout, 45 * 60_000);
+    });
+  });
+
+  test('forwards an explicit harborTimeoutMs override', async () => {
+    await withRun(async ({ jobsDir, repo }) => {
+      let seenTimeout: number | undefined;
+      const runner = createHarborTaskRunner({
+        makaRepoPath: repo,
+        jobsDir,
+        model: 'deepseek/deepseek-v4-flash',
+        harborTimeoutMs: 1234,
+        runHarbor: async (request) => {
+          seenTimeout = request.timeoutMs;
+          return fakeRunner({ reward: '1\n' })(request);
+        },
+      });
+      await runner(runInput());
+      assert.equal(seenTimeout, 1234);
+    });
   });
 });

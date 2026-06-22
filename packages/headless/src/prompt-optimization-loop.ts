@@ -231,6 +231,13 @@ export async function runPromptOptimizationLoop(
   const decisions: PromptAcceptanceResult[] = [];
   let stopReason: PromptOptimizationLoopStopReason = 'rounds_complete';
   for (let round = 0; round < input.rounds; round += 1) {
+    // Check the budget before starting a round so an over-budget baseline (or a
+    // prior round) cannot kick off another expensive candidate + sweeps.
+    const guard = stopGuard();
+    if (guard) {
+      stopReason = guard;
+      break;
+    }
     const roundId = `round-${round}`;
     const candidate = await runPromptCandidateRound({
       runId: input.runId,
@@ -242,7 +249,9 @@ export async function runPromptOptimizationLoop(
       resultsJsonlPath: input.resultsJsonlPath,
       heldInTaskIds,
       heldInDigests: nextHeldInDigests,
-      ...(input.heldOutArtifactPaths ? { heldOutArtifactPaths: input.heldOutArtifactPaths } : {}),
+      // The held-out TSV is controller-only; always hide it so a careless caller
+      // cannot leak held-out results into the meta-agent's view.
+      heldOutArtifactPaths: [input.heldOutResultsTsvPath, ...(input.heldOutArtifactPaths ?? [])],
       metaAgent: input.metaAgent,
       git: input.git,
       now,
@@ -271,6 +280,12 @@ export async function runPromptOptimizationLoop(
       candidateEvents: [...heldIn.events, ...heldOut.events],
       rewardHackScan: await scanHeldIn(heldIn.events),
     });
+    if (result.decision === 'discard') {
+      // Revert the candidate commit BEFORE persisting the decision; HEAD has not
+      // moved since the commit, so this is safe, and a crash can never leave the
+      // WAL saying "discard" while HEAD still holds the discarded prompt.
+      await input.git.rollbackCommit(candidate.commitSha);
+    }
     await appendPromptAcceptanceDecision({
       resultsJsonlPath: input.resultsJsonlPath,
       id: newId(),
@@ -283,21 +298,11 @@ export async function runPromptOptimizationLoop(
       lastKeptCommitSha = result.lastKeptCommitSha;
       heldInReference = result.heldInReferencePassEligibleRate;
       lastKeptHeldInEvents = heldIn.events;
-    } else {
-      // Roll the candidate commit back so the next round branches from the last
-      // kept prompt; HEAD has not moved since the commit, so this is safe.
-      await input.git.rollbackCommit(candidate.commitSha);
     }
 
     // The most recent attempt seeds the next round's meta-agent feedback, even
     // when discarded — "this change did not help" is useful signal.
     nextHeldInDigests = await digestsFor(heldIn.events);
-
-    const guard = stopGuard();
-    if (guard) {
-      stopReason = guard;
-      break;
-    }
   }
 
   // 3. Structural smoke report over the full WAL.

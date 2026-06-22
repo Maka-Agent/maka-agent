@@ -70,12 +70,12 @@ export function partitionPromptTasks(
 /** Scan a Harbor task cache (`<root>/<hash>/<task-name>/task.toml`) into a
  * deterministic, id-sorted task list. */
 export async function discoverCachedHarborTasks(tasksRoot: string): Promise<FixedPromptTask[]> {
-  const tasks: FixedPromptTask[] = [];
+  const byId = new Map<string, FixedPromptTask>();
   let hashDirs;
   try {
     hashDirs = await readdir(tasksRoot, { withFileTypes: true });
   } catch {
-    return tasks;
+    return [];
   }
   for (const hashDir of hashDirs) {
     if (!hashDir.isDirectory()) continue;
@@ -94,18 +94,29 @@ export async function discoverCachedHarborTasks(tasksRoot: string): Promise<Fixe
       } catch {
         continue;
       }
-      tasks.push({ id: taskDir.name, path: taskPath });
+      // The controller keys events by task id, so two cached versions of the same
+      // task name would silently collide and pollute scoring. Fail loud instead.
+      const existing = byId.get(taskDir.name);
+      if (existing) {
+        throw new Error(`duplicate cached task id "${taskDir.name}": ${existing.path} and ${taskPath}`);
+      }
+      byId.set(taskDir.name, { id: taskDir.name, path: taskPath });
     }
   }
-  tasks.sort((a, b) => a.id.localeCompare(b.id));
-  return tasks;
+  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 const CANARY_PATTERN = /terminal-bench-canary GUID ([0-9a-fA-F-]{8,})/g;
 
 /** The Terminal-Bench canary GUID lives only in a task's test files, so seeing it
  * in model-visible output means the agent read the verifier — exactly the
- * reward-hack signal. Extract each task's canary(s) as its verifier patterns. */
+ * reward-hack signal. Extract each task's canary(s) as its verifier patterns.
+ *
+ * This is a substring backstop, not an airtight guarantee: an agent that reads and
+ * parses the verifier without ever echoing the canary would evade it. The primary
+ * defense is that Harbor does not mount a task's tests/ into the agent environment
+ * during the run — the canary scan catches the case where verifier material leaks
+ * in anyway. */
 export async function extractRewardHackVerifierPatterns(taskPath: string): Promise<string[]> {
   const testsDir = join(taskPath, 'tests');
   const patterns = new Set<string>();

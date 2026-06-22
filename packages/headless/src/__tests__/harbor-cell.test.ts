@@ -854,6 +854,19 @@ describe('createHarborCellLocalToolExecutor', () => {
     assert.equal(result.exitCode, 0);
     assert.equal(result.stdout, 'ok');
   });
+
+  test('scrubs provider API-key env so task commands cannot read the secret', async () => {
+    const executor = createHarborCellLocalToolExecutor({
+      DEEPSEEK_API_KEY_FILE: '/run/secrets/deepseek-key',
+      DEEPSEEK_API_KEY: 'sk-should-not-leak',
+    });
+    const result = await executor.exec({
+      command: 'printf "[%s][%s]" "${DEEPSEEK_API_KEY_FILE:-}" "${DEEPSEEK_API_KEY:-}"',
+      cwd: process.cwd(),
+    });
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.stdout, '[][]');
+  });
 });
 
 function fakeToolExecutor(): IsolatedToolExecutor {

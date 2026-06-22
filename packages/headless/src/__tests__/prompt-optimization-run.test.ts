@@ -114,6 +114,14 @@ describe('discoverCachedHarborTasks', () => {
       assert.deepEqual(await discoverCachedHarborTasks(join(dir, 'missing')), []);
     });
   });
+
+  test('throws on a duplicate task id across cache hashes instead of polluting scoring', async () => {
+    await withDir(async (dir) => {
+      await makeCachedTask(dir, 'hashA', 'dup-task');
+      await makeCachedTask(dir, 'hashB', 'dup-task');
+      await assert.rejects(discoverCachedHarborTasks(dir), /duplicate cached task id "dup-task"/);
+    });
+  });
 });
 
 async function makeTask(dir: string, name: string, files: Record<string, string>): Promise<string> {
