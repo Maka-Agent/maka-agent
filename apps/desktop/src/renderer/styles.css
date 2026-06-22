@@ -13392,6 +13392,59 @@ button:active {
   border-bottom: 1px solid var(--foreground-10);
 }
 
+/* PR-DAILY-REVIEW-FULL-0: info banner explaining the feature, plus a
+   manual-trigger row. Banner uses the page-card recipe with a softer
+   tint so it reads as supporting context, not a primary surface. */
+.maka-daily-review-info {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--card-border-color);
+  border-radius: var(--card-radius);
+  background: oklch(from var(--foreground) l c h / 0.03);
+  box-shadow: var(--card-highlight);
+}
+
+.maka-daily-review-info-body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--foreground-80);
+}
+
+.maka-daily-review-info-body strong {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.maka-daily-review-info-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--foreground-55);
+}
+
+.maka-daily-review-info-hint strong {
+  font-weight: 600;
+  color: var(--foreground-80);
+}
+
+.maka-daily-review-quick-runs {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0 6px;
+  border-bottom: 1px solid var(--foreground-10);
+}
+
+.maka-daily-review-quick-run {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.maka-daily-review-quick-run[data-pending="true"] {
+  opacity: 0.7;
+}
+
 .maka-daily-review-day {
   text-align: center;
   font-weight: 600;

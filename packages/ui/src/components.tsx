@@ -96,7 +96,14 @@ import {
   normalizeSearchUrl,
   nextRelativeRefreshDelay,
 } from '@maka/core';
-import type { DailyReviewSummary, DailyReviewTopEntry } from '@maka/core';
+import type {
+  DailyReviewArchive,
+  DailyReviewArchiveSummary,
+  DailyReviewConfig,
+  DailyReviewMode,
+  DailyReviewSummary,
+  DailyReviewTopEntry,
+} from '@maka/core';
 import {
   materializeChat,
   materializeTools,
@@ -1195,6 +1202,17 @@ function SkillsModuleMain(props: {
  */
 export interface DailyReviewBridge {
   fetchDay(offsetDays: number, daySpan?: number): Promise<DailyReviewSummary>;
+  /**
+   * PR-DAILY-REVIEW-FULL-0 — optional pipeline methods. Renderer checks
+   * for presence before exposing the matching UI. When undefined, the
+   * panel still works as the MVP telemetry view.
+   */
+  runOnce?(opts: { mode: DailyReviewMode }): Promise<{ archiveId: string }>;
+  listArchives?(): Promise<DailyReviewArchiveSummary[]>;
+  getArchive?(archiveId: string): Promise<DailyReviewArchive>;
+  deleteArchive?(archiveId: string): Promise<void>;
+  fetchConfig?(): Promise<DailyReviewConfig>;
+  updateConfig?(patch: Partial<DailyReviewConfig>): Promise<DailyReviewConfig>;
 }
 
 /**
@@ -1315,6 +1333,20 @@ function DailyReviewPanel(props: {
 
   const dailyReviewActionBusy = pendingDailyReviewAction !== null;
   const hasDailyReviewActions = Boolean(props.onCopyMarkdown || props.onAppendMarkdown || props.onSaveMarkdown);
+  const canManualRun = Boolean(props.bridge.runOnce);
+
+  async function triggerManualRun(mode: DailyReviewMode) {
+    const runOnce = props.bridge.runOnce;
+    if (!runOnce) return;
+    await runDailyReviewAction(`run:${mode}`, async () => {
+      try {
+        await runOnce({ mode });
+        setReloadToken((n) => n + 1);
+      } catch (err) {
+        setError(dailyReviewPanelErrorMessage(err));
+      }
+    });
+  }
 
   return (
     <div className="maka-daily-review-panel" data-loading={loading ? 'true' : undefined}>
@@ -1342,6 +1374,45 @@ function DailyReviewPanel(props: {
           ›
         </UiButton>
       </header>
+      <section className="maka-daily-review-info" aria-label="每日回顾说明">
+        <p className="maka-daily-review-info-body">
+          每日回顾会自动汇总本机的对话历史，生成
+          <strong>对话摘要</strong>和
+          <strong>遗漏提醒</strong>；开启
+          <strong>深度分析</strong>后还会做更长周期的项目趋势与技术调研。
+        </p>
+        <p className="maka-daily-review-info-hint">
+          在设置中开启<strong>定时执行</strong>，或在此页面手动触发一次。
+        </p>
+      </section>
+      {canManualRun && (
+        <div className="maka-daily-review-quick-runs" aria-label="手动触发回顾">
+          <UiButton
+            type="button"
+            variant="default"
+            size="sm"
+            className="maka-daily-review-quick-run"
+            onClick={() => void triggerManualRun('daily')}
+            disabled={dailyReviewActionBusy}
+            data-pending={pendingDailyReviewAction === 'run:daily' ? 'true' : undefined}
+            aria-busy={pendingDailyReviewAction === 'run:daily' ? 'true' : undefined}
+          >
+            {pendingDailyReviewAction === 'run:daily' ? '生成中…' : '生成每日回顾'}
+          </UiButton>
+          <UiButton
+            type="button"
+            variant="outline"
+            size="sm"
+            className="maka-daily-review-quick-run"
+            onClick={() => void triggerManualRun('deep')}
+            disabled={dailyReviewActionBusy}
+            data-pending={pendingDailyReviewAction === 'run:deep' ? 'true' : undefined}
+            aria-busy={pendingDailyReviewAction === 'run:deep' ? 'true' : undefined}
+          >
+            {pendingDailyReviewAction === 'run:deep' ? '生成中…' : '生成深度分析'}
+          </UiButton>
+        </div>
+      )}
       <nav className="maka-daily-review-range" aria-label="时间范围切换">
         <div className="maka-daily-review-range-tabs">
           {([1, 7, 30] as const).map((option) => (
