@@ -30,6 +30,8 @@ import type {
   CapabilitySnapshot,
   CapabilitySnapshotCollection,
   ConnectionTestResult,
+  DailyReviewConfig,
+  DailyReviewMode,
   HealthSignal,
   HealthSignalLayer,
   HealthSignalSource,
@@ -1352,13 +1354,104 @@ function SettingsSkeleton() {
  * page summarizes what it does, the privacy boundary, and offers a
  * one-click jump to the sidebar.
  */
+const DAILY_REVIEW_SECTION_LABELS: ReadonlyArray<{
+  key: 'summary' | 'gaps' | 'usage' | 'code';
+  title: string;
+  detail: string;
+}> = [
+  { key: 'summary', title: '对话摘要', detail: '昨天聊了什么，关键结论是什么。' },
+  { key: 'gaps', title: '遗漏提醒', detail: '开始但未完成的讨论、可能忽略的要点。' },
+  { key: 'usage', title: '使用洞察', detail: '模型选择、Token 消耗、工具使用效率。' },
+  { key: 'code', title: '代码建议', detail: '基于对话中的代码讨论，给出优化建议。' },
+];
+
 function DailyReviewSettingsPage(props: { onOpenDailyReview?: () => void }) {
+  const toast = useToast();
+  const dailyReviewIpc = window.maka.dailyReview;
+  const hasConfigIpc = Boolean(dailyReviewIpc.getConfig && dailyReviewIpc.setConfig);
+  const hasRunOnceIpc = Boolean(dailyReviewIpc.runOnce);
+
+  const [config, setConfig] = useState<DailyReviewConfig | null>(null);
+  const [loading, setLoading] = useState<boolean>(hasConfigIpc);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [runningMode, setRunningMode] = useState<DailyReviewMode | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasConfigIpc || !dailyReviewIpc.getConfig) {
+      setConfig(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    dailyReviewIpc
+      .getConfig()
+      .then((next) => {
+        if (!cancelled && mountedRef.current) {
+          setConfig(next);
+          setLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled && mountedRef.current) {
+          setLoadError(settingsActionErrorMessage(err));
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasConfigIpc, dailyReviewIpc]);
+
+  async function patchConfig(key: string, patch: Partial<DailyReviewConfig>) {
+    if (!dailyReviewIpc.setConfig || !config) return;
+    setSavingKey(key);
+    try {
+      const next = await dailyReviewIpc.setConfig(patch);
+      if (mountedRef.current) setConfig(next);
+    } catch (err) {
+      toast.error('保存每日回顾设置失败', settingsActionErrorMessage(err));
+    } finally {
+      if (mountedRef.current) setSavingKey(null);
+    }
+  }
+
+  async function triggerRun(mode: DailyReviewMode) {
+    if (!dailyReviewIpc.runOnce) return;
+    setRunningMode(mode);
+    try {
+      await dailyReviewIpc.runOnce({ mode });
+      toast.success(mode === 'daily' ? '已生成每日回顾' : '已生成深度分析', '可在「每日回顾」面板查看。');
+    } catch (err) {
+      toast.error('生成回顾失败', settingsActionErrorMessage(err));
+    } finally {
+      if (mountedRef.current) setRunningMode(null);
+    }
+  }
+
+  const effectiveConfig = config;
+  const formDisabled = !hasConfigIpc || loading || Boolean(loadError) || !effectiveConfig;
+
   return (
     <section className="settingsFeatureStatusPage" aria-label="每日回顾">
       <header className="settingsFeatureStatusBanner" role="status">
         <span className="settingsFeatureStatusBannerDot" aria-hidden="true" />
-        <strong>本地汇总 · 已上线</strong>
-        <span>读取本机 Maka 自己产生的会话与使用统计，不联网、不读其他 App 数据。</span>
+        <strong>每日回顾</strong>
+        <span>
+          {hasConfigIpc
+            ? '每天自动分析本机对话，生成摘要、遗漏提醒和建议。模型按需消耗。'
+            : '当前版本仅本地数字聚合，定时生成 / LLM 摘要尚未连接到后端。'}
+        </span>
       </header>
 
       <div className="settingsFeatureStatusHero">
@@ -1368,11 +1461,13 @@ function DailyReviewSettingsPage(props: { onOpenDailyReview?: () => void }) {
         <div>
           <div className="settingsFeatureStatusHeroHeading">
             <h3>每日回顾</h3>
-            <span className="settingsFeatureStatusBadge">本地汇总</span>
+            <span className="settingsFeatureStatusBadge">
+              {hasConfigIpc ? '本地 + LLM' : '本地汇总'}
+            </span>
           </div>
           <p>
-            每日回顾会按你选择的日期范围，把活跃会话、模型用量、工具调用聚合到一个面板里。
-            主内容栏里的 "每日回顾" 支持今日 / 本周 / 本月切换、左右翻页、复制 / 保存 Markdown 摘要，也可以把当前范围粘到输入框继续追问。
+            打开右侧 Content 区里的「每日回顾」可以查看活跃会话、模型用量、工具调用，以及（开启后）LLM
+            生成的对话摘要 / 遗漏提醒等回顾内容。
           </p>
           {props.onOpenDailyReview && (
             <Button
@@ -1386,26 +1481,163 @@ function DailyReviewSettingsPage(props: { onOpenDailyReview?: () => void }) {
         </div>
       </div>
 
-      <div className="settingsFeatureStatusHeroHeading">
-        <h3>当前包含</h3>
-      </div>
-      <ul className="settingsFeatureStatusList" aria-label="每日回顾当前包含">
-        <li>对话数 / 请求数 / Token / 费用 / 错误数</li>
-        <li>今日 / 本周 / 本月三个范围，以及按范围翻页</li>
-        <li>活跃对话（点击可直接打开）</li>
-        <li>使用最频繁的模型 Top 8</li>
-        <li>调用最频繁的工具 Top 8</li>
-        <li>复制 / 保存 Markdown 摘要，或粘到输入框继续追问</li>
-      </ul>
+      {loadError ? (
+        <div className="settingsAlert" role="alert" style={{ marginTop: 12 }}>
+          读取每日回顾设置失败：{loadError}
+        </div>
+      ) : null}
 
-      <div className="settingsFeatureStatusHeroHeading">
-        <h3>不会做的事</h3>
+      <div className="settingsRows">
+        <div className="settingsRow">
+          <div>
+            <strong>启用每日回顾</strong>
+            <small>每天自动分析前一天的工作内容，提供摘要与建议。</small>
+          </div>
+          <Switch
+            ariaLabel="启用每日回顾"
+            checked={effectiveConfig?.enabled ?? false}
+            disabled={formDisabled || savingKey === 'enabled'}
+            onChange={(enabled) => void patchConfig('enabled', { enabled })}
+          />
+        </div>
+
+        <div className="settingsRow">
+          <div>
+            <strong>执行时间</strong>
+            <small>默认 08:00 本地时间触发。</small>
+          </div>
+          <Input
+            type="time"
+            aria-label="每日回顾执行时间"
+            className="settingsTimeInput"
+            value={effectiveConfig?.executeTime ?? '08:00'}
+            disabled={formDisabled || savingKey === 'executeTime' || !(effectiveConfig?.enabled ?? false)}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return;
+              void patchConfig('executeTime', { executeTime: value });
+            }}
+          />
+        </div>
+
+        {DAILY_REVIEW_SECTION_LABELS.map((item) => (
+          <div key={item.key} className="settingsRow">
+            <div>
+              <strong>{item.title}</strong>
+              <small>{item.detail}</small>
+            </div>
+            <Switch
+              ariaLabel={item.title}
+              checked={effectiveConfig?.sections[item.key] ?? false}
+              disabled={formDisabled || savingKey === `section:${item.key}` || !(effectiveConfig?.enabled ?? false)}
+              onChange={(next) =>
+                void patchConfig(`section:${item.key}`, {
+                  sections: {
+                    ...(effectiveConfig?.sections ?? { summary: false, gaps: false, usage: false, code: false }),
+                    [item.key]: next,
+                  },
+                })
+              }
+            />
+          </div>
+        ))}
+
+        <div className="settingsRow">
+          <div>
+            <strong>深度分析</strong>
+            <small>消耗更多资源，对更长时间周期进行深入调研。</small>
+          </div>
+          <Switch
+            ariaLabel="深度分析"
+            checked={effectiveConfig?.deepEnabled ?? false}
+            disabled={formDisabled || savingKey === 'deepEnabled'}
+            onChange={(deepEnabled) => void patchConfig('deepEnabled', { deepEnabled })}
+          />
+        </div>
+
+        <div className="settingsRow">
+          <div>
+            <strong>分析模型</strong>
+            <small>用于生成回顾和分析的模型连接。留空使用对话默认模型。</small>
+          </div>
+          <Input
+            type="text"
+            aria-label="分析模型连接"
+            className="settingsTimeInput"
+            placeholder="留空 = 使用默认"
+            value={effectiveConfig?.modelKey ?? ''}
+            disabled={formDisabled || savingKey === 'modelKey'}
+            onChange={(event) => {
+              const value = event.target.value;
+              void patchConfig('modelKey', { modelKey: value });
+            }}
+            style={{ minWidth: 160 }}
+          />
+        </div>
+
+        <div className="settingsRow">
+          <div>
+            <strong>包含 Claude Code CLI 会话</strong>
+            <small>将已同步的 Claude Code 对话纳入分析范围。</small>
+          </div>
+          <Switch
+            ariaLabel="包含 Claude Code CLI 会话"
+            checked={effectiveConfig?.includeClaudeCode ?? false}
+            disabled={formDisabled || savingKey === 'includeClaudeCode'}
+            onChange={(includeClaudeCode) => void patchConfig('includeClaudeCode', { includeClaudeCode })}
+          />
+        </div>
+
+        <div className="settingsRow">
+          <div>
+            <strong>生成后发送外部通知</strong>
+            <small>通过已配置的机器人对话（飞书 / 企微等）推送回顾报告。</small>
+          </div>
+          <Switch
+            ariaLabel="生成后发送外部通知"
+            checked={effectiveConfig?.externalNotify.enabled ?? false}
+            disabled={formDisabled || savingKey === 'externalNotify'}
+            onChange={(enabled) =>
+              void patchConfig('externalNotify', {
+                externalNotify: {
+                  ...(effectiveConfig?.externalNotify ?? { enabled: false }),
+                  enabled,
+                },
+              })
+            }
+          />
+        </div>
       </div>
-      <ul className="settingsFeatureStatusList" aria-label="每日回顾不会执行的事">
-        <li>不调用任何 LLM 生成摘要（当前只是本地聚合数字，不向云端送内容）</li>
-        <li>不写入记忆系统，也不导出任何东西</li>
-        <li>不读取 Maka 工作区以外的文件</li>
-      </ul>
+
+      {hasRunOnceIpc && (
+        <div className="settingsFeatureStatusHero" style={{ marginTop: 12 }}>
+          <span className="settingsFeatureStatusIcon" aria-hidden="true">
+            <CalendarDays size={20} strokeWidth={1.5} />
+          </span>
+          <div>
+            <div className="settingsFeatureStatusHeroHeading">
+              <h3>想先看看效果？</h3>
+            </div>
+            <p>无需开启自动执行，基于当前工作区的对话记录立即生成一份报告。</p>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <Button
+                type="button"
+                onClick={() => void triggerRun('daily')}
+                disabled={runningMode !== null}
+              >
+                {runningMode === 'daily' ? '生成中…' : '生成每日回顾'}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void triggerRun('deep')}
+                disabled={runningMode !== null}
+              >
+                {runningMode === 'deep' ? '生成中…' : '生成深度分析'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

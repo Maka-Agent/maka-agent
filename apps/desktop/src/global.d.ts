@@ -45,6 +45,10 @@ import type {
   PlanReminder,
   PlanReminderDeliveryTarget,
   PlanReminderRecurrence,
+  DailyReviewArchive,
+  DailyReviewArchiveSummary,
+  DailyReviewConfig,
+  DailyReviewMode,
   DailyReviewSummary,
   WebSearchProvider,
   WebSearchResponse,
@@ -353,6 +357,19 @@ declare global {
         }): Promise<
           { ok: true; path: string } | { ok: false; reason: 'canceled' | 'write_failed' | 'invalid_input' }
         >;
+        /**
+         * PR-DAILY-REVIEW-FULL-0 — pipeline + archive surface. Each
+         * method may reject with a string error code when the
+         * backend is not yet wired or when prerequisites are missing
+         * (e.g. no model configured). Renderer gracefully handles
+         * rejection by showing the disabled / fallback form.
+         */
+        getConfig?(): Promise<DailyReviewConfig>;
+        setConfig?(patch: Partial<DailyReviewConfig>): Promise<DailyReviewConfig>;
+        runOnce?(opts: { mode: DailyReviewMode }): Promise<{ archiveId: string }>;
+        listArchives?(): Promise<DailyReviewArchiveSummary[]>;
+        getArchive?(archiveId: string): Promise<DailyReviewArchive>;
+        deleteArchive?(archiveId: string): Promise<void>;
       };
       appWindow: {
         subscribeOpenSettings(handler: () => void): () => void;

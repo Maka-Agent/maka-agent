@@ -43,12 +43,22 @@ describe('Settings coming-soon cleanup contract', () => {
     const settings = await readRepo('apps/desktop/src/renderer/settings/SettingsModal.tsx');
 
     assert.doesNotMatch(settings, /V0\.1|V0\.2|capture smoke|之后会加|后续版本开放|阶段开放/, 'feature status pages must not read like demo-stage roadmap copy');
-    assert.match(settings, /本地汇总/, 'Daily Review status badge should describe the shipped local aggregate mode');
-    assert.match(settings, /今日 \/ 本周 \/ 本月/, 'Daily Review settings copy must mention the shipped range switcher');
-    assert.match(settings, /复制 \/ 保存 Markdown 摘要/, 'Daily Review settings copy must mention the shipped Markdown copy/save actions');
-    assert.match(settings, /粘到输入框继续追问/, 'Daily Review settings copy must mention the shipped composer append action');
-    assert.match(settings, /<ul className="settingsFeatureStatusList" aria-label="每日回顾当前包含">/, 'Daily Review included-feature list must have an accessible name');
-    assert.match(settings, /<ul className="settingsFeatureStatusList" aria-label="每日回顾不会执行的事">/, 'Daily Review privacy-boundary list must have an accessible name');
+    // PR-DAILY-REVIEW-FULL-0: Settings → 每日回顾 became a real config form
+    // (enable toggle, execute time, section toggles, deep analysis, manual
+    // trigger). The page still keeps a status badge ("本地汇总" or "本地 + LLM"
+    // depending on whether the backend pipeline is wired), but the body is
+    // no longer a static "shipped features" list.
+    assert.match(settings, /本地汇总/, 'Daily Review status badge should still describe the shipped local aggregate mode when the pipeline is not yet wired');
+    assert.match(settings, /启用每日回顾/, 'Daily Review settings must surface the auto-run enable toggle');
+    assert.match(settings, /执行时间/, 'Daily Review settings must surface the configurable execute time');
+    assert.match(settings, /对话摘要/, 'Daily Review settings must expose the 对话摘要 section toggle');
+    assert.match(settings, /遗漏提醒/, 'Daily Review settings must expose the 遗漏提醒 section toggle');
+    assert.match(settings, /使用洞察/, 'Daily Review settings must expose the 使用洞察 section toggle');
+    assert.match(settings, /代码建议/, 'Daily Review settings must expose the 代码建议 section toggle');
+    assert.match(settings, /深度分析/, 'Daily Review settings must expose the 深度分析 mode toggle');
+    assert.match(settings, /分析模型/, 'Daily Review settings must expose the 分析模型 selector');
+    assert.match(settings, /生成每日回顾/, 'Daily Review settings must surface the manual 生成每日回顾 trigger');
+    assert.match(settings, /生成深度分析/, 'Daily Review settings must surface the manual 生成深度分析 trigger');
     assert.match(settings, /本地自检/, 'Voice status badge should describe the shipped local smoke boundary');
   });
 
