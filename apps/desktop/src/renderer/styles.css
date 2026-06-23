@@ -7291,11 +7291,25 @@ button:active {
   gap: 18px;
 }
 
+.settingsPageHeaderTitleStack {
+  display: grid;
+  gap: 4px;
+}
+
 .settingsPageHeader h2 {
   margin: 0;
   color: var(--foreground);
   font-size: 28px;
   font-weight: 700;
+}
+
+/* PR-SETTINGS-PAGE-SUBTITLE-0 (round 4/15): one-line page description
+   below the h2 — matches reference's per-tab meta line. */
+.settingsPageHeaderDescription {
+  margin: 0;
+  color: var(--foreground-55);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .settingsPageContent {

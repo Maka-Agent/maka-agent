@@ -130,6 +130,13 @@ type SettingsNavItem = {
   enabled: boolean;
   /** Group label rendered as a small uppercase divider above this item. */
   group: SettingsNavGroup;
+  /**
+   * PR-SETTINGS-PAGE-SUBTITLE-0 (round 4/15, WAWQAQ msg `f7e9d166`):
+   * one-line description rendered below the page title (h2). Reference
+   * carries this per-tab meta line; maka previously had only the bare
+   * label. Helps the user understand "where am I?" at the page top.
+   */
+  description?: string;
 };
 
 type AccountSecretProbeStatus = boolean | 'loading' | 'error';
@@ -206,23 +213,36 @@ export type { SettingsNavGroup };
 // too dense. 记忆 and 每日回顾 are separate nav items again.
 export const SETTINGS_NAV: SettingsNavItem[] = [
   // Group 1: 基础 — 通用 (kitchen sink) + 外观 (personalization + theme merged)
-  { id: 'general', label: '通用', Icon: SettingsIcon, enabled: true, group: '基础' },
-  { id: 'appearance', label: '外观', Icon: Palette, enabled: true, group: '基础' },
+  { id: 'general', label: '通用', Icon: SettingsIcon, enabled: true, group: '基础',
+    description: '隐身、启动、对话默认与网络代理等系统偏好。' },
+  { id: 'appearance', label: '外观', Icon: Palette, enabled: true, group: '基础',
+    description: '主题、配色、字体面板与个性化身份。' },
   // Group 2: AI — models, usage, memory, daily-review, voice+gateway
-  { id: 'models', label: '模型', Icon: Cpu, enabled: true, group: 'AI' },
-  { id: 'usage', label: '使用统计', Icon: BarChart3, enabled: true, group: 'AI' },
-  { id: 'memory', label: '记忆', Icon: Brain, enabled: true, group: 'AI' },
-  { id: 'daily-review', label: '每日回顾', Icon: CalendarDays, enabled: true, group: 'AI' },
-  { id: 'voice-gateway', label: '语音与网关', Icon: Volume2, enabled: true, group: 'AI' },
+  { id: 'models', label: '模型', Icon: Cpu, enabled: true, group: 'AI',
+    description: '模型连接、API key 与 OAuth 订阅管理。' },
+  { id: 'usage', label: '使用统计', Icon: BarChart3, enabled: true, group: 'AI',
+    description: 'token、模型、工具使用走势与配额追踪。' },
+  { id: 'memory', label: '记忆', Icon: Brain, enabled: true, group: 'AI',
+    description: '本地 MEMORY.md、项目指令文件与上下文注入开关。' },
+  { id: 'daily-review', label: '每日回顾', Icon: CalendarDays, enabled: true, group: 'AI',
+    description: '当天对话、模型与工具用量汇总。' },
+  { id: 'voice-gateway', label: '语音与网关', Icon: Volume2, enabled: true, group: 'AI',
+    description: '语音转写与 Maka 开放网关 SSE 接入。' },
   // Group 3: 集成 — bot、搜索 (network/proxy now lives inside 通用)
-  { id: 'bot-chat', label: '机器人对话', Icon: Bot, enabled: true, group: '集成' },
-  { id: 'search', label: '联网搜索', Icon: Search, enabled: true, group: '集成' },
+  { id: 'bot-chat', label: '机器人对话', Icon: Bot, enabled: true, group: '集成',
+    description: 'Telegram / 飞书 / 企业微信等机器人凭据与运行状态。' },
+  { id: 'search', label: '联网搜索', Icon: Search, enabled: true, group: '集成',
+    description: '联网搜索供应商（如 Tavily）凭据与隐私边界。' },
   // Group 4: 数据
-  { id: 'data', label: '数据', Icon: Database, enabled: true, group: '数据' },
+  { id: 'data', label: '数据', Icon: Database, enabled: true, group: '数据',
+    description: '本地工作区路径、备份与恢复。' },
   // Group 5: 其他
-  { id: 'permissions', label: '权限与能力', Icon: ShieldCheck, enabled: true, group: '其他' },
-  { id: 'health', label: '健康', Icon: Activity, enabled: true, group: '其他' },
-  { id: 'about', label: '关于', Icon: Info, enabled: true, group: '其他' },
+  { id: 'permissions', label: '权限与能力', Icon: ShieldCheck, enabled: true, group: '其他',
+    description: '系统权限授予状态与 Maka 能力运行时检查。' },
+  { id: 'health', label: '健康', Icon: Activity, enabled: true, group: '其他',
+    description: '运行时连接、模型探针与本地健康状态。' },
+  { id: 'about', label: '关于', Icon: Info, enabled: true, group: '其他',
+    description: '版本、运行环境与隐私承诺。' },
 ];
 
 /** Order-preserving grouping used by the nav renderer. */
@@ -992,7 +1012,12 @@ function SettingsSurface(props: {
 
       <section className="settingsMainPane agents-content-area" data-agents-view="settings">
         <header className="settingsPageHeader">
-          <h2>{activeItem.label}</h2>
+          <div className="settingsPageHeaderTitleStack">
+            <h2>{activeItem.label}</h2>
+            {activeItem.description && (
+              <p className="settingsPageHeaderDescription">{activeItem.description}</p>
+            )}
+          </div>
         </header>
 
         <OverlayScrollArea
