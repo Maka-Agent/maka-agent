@@ -66,10 +66,14 @@ describe('envRatio', () => {
 });
 
 describe('resolveMinStable', () => {
-  test('an explicit raw count wins and is validated as a non-negative integer', () => {
+  test('an explicit raw count wins and is validated as a positive integer', () => {
     assert.equal(resolveMinStable('M', 50, '1', 0.5), 1);
-    assert.equal(resolveMinStable('M', 50, '0', 0.5), 0);
+    assert.equal(resolveMinStable('M', 50, '3', 0.5), 3);
     assert.throws(() => resolveMinStable('M', 50, 'abc', 0.5), /M must be a non-negative integer/);
+  });
+
+  test('rejects an explicit 0 so the stable-task guard cannot be silently disabled', () => {
+    assert.throws(() => resolveMinStable('M', 50, '0', 0.5), /M must be a positive integer/);
   });
 
   test('without an explicit count, scales with the requested size (ceil, at least 1)', () => {
