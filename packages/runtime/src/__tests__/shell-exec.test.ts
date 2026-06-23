@@ -56,4 +56,26 @@ describe('runShellWithBoundedTail', () => {
     assert.ok(seen.some(([s, c]) => s === 'stdout' && c.includes('aaa')));
     assert.ok(seen.some(([s, c]) => s === 'stderr' && c.includes('bbb')));
   });
+
+  test('caps live emitOutput per stream with a single suppressed marker (result keeps full tail)', async () => {
+    const seen: Array<[string, string]> = [];
+    const r = await runShellWithBoundedTail(
+      "printf 'HEAD\\n'; seq 1 2000; printf 'TAIL\\n'",
+      base({
+        maxLiveEmitChars: 20, // tiny cap so the stream trips it almost immediately
+        emitOutput: (s: 'stdout' | 'stderr', c: string) => seen.push([s, c]),
+      }),
+    );
+    assert.equal(r.exitCode, 0);
+    const stdoutEmits = seen.filter(([s]) => s === 'stdout');
+    const markers = stdoutEmits.filter(([, c]) => c.includes('live output suppressed'));
+    assert.equal(markers.length, 1, 'exactly one suppressed marker, not one per chunk');
+    const liveChars = stdoutEmits
+      .filter(([, c]) => !c.includes('live output suppressed'))
+      .reduce((n, [, c]) => n + c.length, 0);
+    assert.ok(liveChars <= 20, `live emit bounded to cap, got ${liveChars}`);
+    // The suppressed LIVE feed does not lose the result: the retained tail still
+    // carries the real output (the last bytes the command produced).
+    assert.ok(r.stdout.includes('TAIL'), 'retained tail keeps the command output');
+  });
 });

@@ -21,11 +21,24 @@
 import { spawn } from 'node:child_process';
 import { BashTailBuffer } from './bash-tail-buffer.js';
 
-// Per-stream cap on the output RETAINED for the result (~1MB). The full stream
-// is still delivered live via emitOutput; this only bounds what is kept to
-// return. The tool layer (truncateToolOutput) trims this further to the model's
-// budget. Shared so both Bash paths retain identically.
+// Per-stream cap on the output RETAINED for the result (~1MB). This only bounds
+// what is kept to return. The tool layer (truncateToolOutput) trims this further
+// to the model's budget. Shared so both Bash paths retain identically.
 export const BASH_MAX_RETAINED_CHARS = 1024 * 1024;
+
+// Per-stream cap on output forwarded LIVE via emitOutput (~1MB). The command is
+// never killed for size and the full recoverable tail is still RETAINED (above),
+// but a runaway command printing tens of MB must not flood the event stream /
+// UI with per-chunk deltas (tool-output-delta has no aggregate cap). Once a
+// stream passes this, we emit one suppressed marker and stop forwarding live;
+// chunks keep flowing into the retained tail buffer.
+export const BASH_MAX_LIVE_EMIT_CHARS = 1024 * 1024;
+
+// Emitted once per stream when live forwarding is suppressed. The full output is
+// not lost — it still feeds the retained tail and the returned result.
+const LIVE_OUTPUT_SUPPRESSED_MARKER =
+  '[live output suppressed: too much output to stream live; the command keeps ' +
+  'running and its result still contains the most recent output]';
 
 // Appended to a stream when BashTailBuffer dropped an oversized line that had no
 // newline to truncate at (dropped whole for redaction safety). Without it, a
@@ -48,6 +61,8 @@ export interface BoundedShellOptions {
   timeoutMs: number;
   /** Per-stream retained-tail cap in characters. Defaults to BASH_MAX_RETAINED_CHARS. */
   maxRetainedChars?: number;
+  /** Per-stream cap on LIVE emitOutput forwarding. Defaults to BASH_MAX_LIVE_EMIT_CHARS. */
+  maxLiveEmitChars?: number;
   /** Child environment. Defaults to the parent process env (spawn's default). */
   env?: NodeJS.ProcessEnv;
   /** Aborts the child (sets `aborted`). */
@@ -79,6 +94,7 @@ export function runShellWithBoundedTail(
   options: BoundedShellOptions,
 ): Promise<BoundedShellResult> {
   const cap = options.maxRetainedChars ?? BASH_MAX_RETAINED_CHARS;
+  const liveCap = options.maxLiveEmitChars ?? BASH_MAX_LIVE_EMIT_CHARS;
   return new Promise<BoundedShellResult>((resolvePromise, reject) => {
     const child = spawn(command, {
       cwd: options.cwd,
@@ -89,6 +105,10 @@ export function runShellWithBoundedTail(
     const stdoutBuf = new BashTailBuffer(cap);
     const stderrBuf = new BashTailBuffer(cap);
     let settled = false;
+    // Per-stream live-forwarding budget (see BASH_MAX_LIVE_EMIT_CHARS). Once a
+    // stream passes liveCap we emit one marker and stop forwarding it live.
+    let liveEmitted = { stdout: 0, stderr: 0 };
+    let liveSuppressed = { stdout: false, stderr: false };
 
     const timer = setTimeout(() => finish({ timedOut: true }), options.timeoutMs);
 
@@ -113,9 +133,27 @@ export function runShellWithBoundedTail(
     child.on('close', (code, signal) => finish({ exitCode: code ?? (signal ? 128 : 1) }));
 
     function append(stream: 'stdout' | 'stderr', chunk: string): void {
+      // Always retain (the result keeps the bounded tail regardless of live cap).
       if (stream === 'stdout') stdoutBuf.push(chunk);
       else stderrBuf.push(chunk);
-      options.emitOutput?.(stream, chunk);
+      emitLive(stream, chunk);
+    }
+
+    // Forward a chunk to the live emitOutput feed, bounded per stream so a
+    // runaway command cannot flood the event queue. The retained tail above is
+    // untouched by this cap.
+    function emitLive(stream: 'stdout' | 'stderr', chunk: string): void {
+      const emit = options.emitOutput;
+      if (!emit || liveSuppressed[stream]) return;
+      if (liveEmitted[stream] + chunk.length <= liveCap) {
+        emit(stream, chunk);
+        liveEmitted[stream] += chunk.length;
+        return;
+      }
+      // First chunk to cross the cap: emit one marker, then go silent for this
+      // stream.
+      emit(stream, LIVE_OUTPUT_SUPPRESSED_MARKER);
+      liveSuppressed[stream] = true;
     }
 
     // Settle once. On timeout/abort we kill and resolve immediately (with the
