@@ -115,6 +115,33 @@ describe('TaskRunStore', () => {
     assert.equal(projection.artifacts[0]?.authority.source, 'container_capture');
   });
 
+  test('projects heavy-task mode facts', () => {
+    const projection = projectTaskRun([
+      { type: 'task_run_created', id: 'e-1', taskRunId: 'tr-heavy', ts: 1, taskId: 'task-1', configId: 'cfg-1' },
+      {
+        type: 'heavy_task_mode_recorded',
+        id: 'e-2',
+        taskRunId: 'tr-heavy',
+        ts: 2,
+        facts: {
+          schemaVersion: 1,
+          enabled: true,
+          triggerSource: 'task_metadata',
+          triggerReason: 'task declared heavy',
+          policyVersion: 'maka-heavy-task-policy.v1',
+        },
+      },
+    ], 'tr-heavy');
+
+    assert.deepEqual(projection.heavyTaskMode, {
+      schemaVersion: 1,
+      enabled: true,
+      triggerSource: 'task_metadata',
+      triggerReason: 'task declared heavy',
+      policyVersion: 'maka-heavy-task-policy.v1',
+    });
+  });
+
   test('projects isolation, permission, inbox, and needs_approval facts', () => {
     const taskRunId = 'tr-approval';
     const request = {

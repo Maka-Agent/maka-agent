@@ -273,6 +273,16 @@ export {
 } from './result-export.js';
 export { normalizeVerifier } from './verifier.js';
 export { BENCHMARK_BASE_SYSTEM_PROMPT } from './system-prompts.js';
+export {
+  appendHeavyTaskPolicyToSystemPrompt,
+  buildHeavyTaskSystemPromptPolicy,
+  configWithHeavyTaskPolicy,
+  FORBIDDEN_HEAVY_TASK_POLICY_TERMS,
+  HEAVY_TASK_POLICY_VERSION,
+  resolveHeavyTaskMode,
+  type HeavyTaskModeSelection,
+  type HeavyTaskModeTriggerSource,
+} from './heavy-task-policy.js';
 export type {
   HeadlessBackendContext,
   IsolatedCommandInput,

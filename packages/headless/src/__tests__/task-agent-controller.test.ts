@@ -267,6 +267,7 @@ describe('runTaskOnce', () => {
           [
             'task_run_created',
             'task_run_queued',
+            'heavy_task_mode_recorded',
             'isolation_policy_recorded',
             'workspace_lease_recorded',
             'tool_executor_identity_recorded',
@@ -280,12 +281,38 @@ describe('runTaskOnce', () => {
             'task_run_completed',
           ],
         );
+        assert.equal(result.projection.heavyTaskMode?.enabled, false);
         assert.equal(result.projection.isolation?.mode, 'inert_fake_backend');
         assert.equal(result.projection.workspaceLease?.taskRunId, result.taskRunId);
         assert.equal(result.projection.toolExecutors[0]?.isolationMode, 'inert_fake_backend');
       } finally {
         SessionManager.prototype.sendMessage = original;
       }
+    });
+  });
+
+  test('records task-metadata heavy-task mode selection without changing scoring authority', async () => {
+    await withDirs(async (fixtureDir, storageRoot) => {
+      await writeFile(join(fixtureDir, 'marker.txt'), 'present', 'utf8');
+      const task: Task = {
+        id: 'heavy-task',
+        instruction: 'do the thing',
+        workspaceDir: fixtureDir,
+        verification: { command: 'test -f marker.txt', protectedPaths: [] },
+        benchmark: { metadata: { heavyTaskMode: { enabled: true, reason: 'declared long task' } } },
+      };
+
+      const result = await runTaskOnce(fakeConfig, task, {
+        storageRoot,
+        registerBackends: registerFakeBackend,
+      });
+
+      assert.equal(result.projection.heavyTaskMode?.enabled, true);
+      assert.equal(result.projection.heavyTaskMode?.triggerSource, 'task_metadata');
+      assert.equal(result.projection.heavyTaskMode?.triggerReason, 'declared long task');
+      assert.equal(result.projection.latestVerifierResult?.authority, undefined);
+      assert.equal(result.projection.latestScoreResult?.taxonomy, 'passed');
+      assert.equal(result.resultRecord.passed, true);
     });
   });
 

@@ -274,6 +274,14 @@ export interface ScoreResult {
   details?: Record<string, unknown>;
 }
 
+export interface HeavyTaskModeFacts {
+  schemaVersion: 1;
+  enabled: boolean;
+  triggerSource: 'default' | 'config' | 'task_metadata';
+  triggerReason: string;
+  policyVersion: string;
+}
+
 export interface EnvNetworkSecretPolicy {
   schemaVersion: 1;
   env: 'inherit_none' | 'allowlist';
@@ -471,6 +479,11 @@ export interface IsolationPolicyRecordedEvent extends BaseTaskEvent {
   facts: TaskIsolationFacts;
 }
 
+export interface HeavyTaskModeRecordedEvent extends BaseTaskEvent {
+  type: 'heavy_task_mode_recorded';
+  facts: HeavyTaskModeFacts;
+}
+
 export interface WorkspaceLeaseRecordedEvent extends BaseTaskEvent {
   type: 'workspace_lease_recorded';
   lease: WorkspaceLeaseFacts;
@@ -594,6 +607,7 @@ export type TaskEvent =
   | VerifierResultRecordedEvent
   | TaskRunArtifactRecordedEvent
   | ScoreResultRecordedEvent
+  | HeavyTaskModeRecordedEvent
   | IsolationPolicyRecordedEvent
   | WorkspaceLeaseRecordedEvent
   | ToolExecutorIdentityRecordedEvent

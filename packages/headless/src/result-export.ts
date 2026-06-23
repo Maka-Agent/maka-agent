@@ -50,6 +50,9 @@ export interface TaskRunExport {
   verifier?: VerifierResult & { benchmark?: Record<string, unknown> };
   score?: ScoreResult;
   budget?: Record<string, unknown>;
+  policy?: {
+    heavyTask?: TaskRunProjection['heavyTaskMode'];
+  };
   isolation: {
     policy?: TaskRunProjection['isolation'];
     toolExecutors: TaskRunProjection['toolExecutors'];
@@ -124,6 +127,7 @@ export function taskRunExportFromProjection(
   const benchmark = verifierBenchmark(verifier);
   const taxonomy = score?.taxonomy ?? projection.result?.taxonomy ?? legacyResultRecord.errorClass ?? projection.status;
   const primaryWorkspacePath = primaryWorkspacePathFromArtifacts(projection.artifacts);
+  const policy = projection.heavyTaskMode?.enabled ? { heavyTask: projection.heavyTaskMode } : undefined;
 
   return {
     schemaVersion: 'maka.task_run_export.v1',
@@ -168,6 +172,7 @@ export function taskRunExportFromProjection(
       : undefined,
     score,
     budget: recordValue(scoreDetails.budget) ? scoreDetails.budget as Record<string, unknown> : undefined,
+    policy,
     isolation: {
       policy: projection.isolation,
       toolExecutors: projection.toolExecutors,
@@ -252,6 +257,7 @@ function compactResultView(exported: TaskRunExport): Record<string, unknown> {
         }
       : undefined,
     score: exported.score,
+    policy: exported.policy,
     workspace: exported.workspace,
     artifacts: exported.artifacts,
     legacyResultRecord: exported.legacyResultRecord,

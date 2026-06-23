@@ -24,6 +24,7 @@ import {
 } from '@maka/storage';
 import type { Config, ResultRecord, Task } from './contracts.js';
 import { registerFakeBackend } from './backends.js';
+import { configWithHeavyTaskPolicy, resolveHeavyTaskMode } from './heavy-task-policy.js';
 import type { HeadlessBackendContext } from './isolation.js';
 import {
   ISOLATED_HEADLESS_TOOL_NAMES,
@@ -129,6 +130,8 @@ export async function runTaskOnce(
   const runtimeEventStore = deps.runtimeEventStore ?? createRuntimeEventStore(deps.storageRoot);
   const startedAt = now();
   const verifier = normalizeVerifier(task);
+  const heavyTaskMode = resolveHeavyTaskMode(config, task);
+  const effectiveConfig = configWithHeavyTaskPolicy(config, heavyTaskMode);
 
   if (createTaskRun) {
     await appendTaskEvent(taskRunStore, taskRunId, {
@@ -150,6 +153,13 @@ export async function runTaskOnce(
       taskDefinition: taskDefinitionFromTask(task),
     });
   }
+  await appendTaskEvent(taskRunStore, taskRunId, {
+    type: 'heavy_task_mode_recorded',
+    id: newId(),
+    taskRunId,
+    ts: now(),
+    facts: heavyTaskMode,
+  });
   await appendTaskEvent(taskRunStore, taskRunId, {
     type: 'isolation_policy_recorded',
     id: newId(),
@@ -210,7 +220,7 @@ export async function runTaskOnce(
     const registerBackends: NonNullable<RunExperimentDeps['registerBackends']> =
       deps.registerBackends ?? ((registry) => registerFakeBackend(registry));
     await registerBackends(backends, {
-      config,
+      config: effectiveConfig,
       task,
       workspaceDir: workspace.dir,
       ...(backendNeedsIsolation(config.backend)
@@ -221,8 +231,8 @@ export async function runTaskOnce(
     const header = await sessionStore.create({
       cwd: workspace.dir,
       backend: config.backend,
-      llmConnectionSlug: config.llmConnectionSlug,
-      model: config.model,
+      llmConnectionSlug: effectiveConfig.llmConnectionSlug,
+      model: effectiveConfig.model,
       permissionMode: deps.permissionMode ?? 'execute',
       name: `task:${config.id}:${task.id}`,
     });

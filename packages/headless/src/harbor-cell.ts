@@ -28,6 +28,7 @@ import {
 import { registerFakeBackend } from './backends.js';
 import { buildHarborCellOutput, validateHarborCellOutput, type HarborCellOutput } from './cell-output.js';
 import type { Config, Task } from './contracts.js';
+import { configWithHeavyTaskPolicy, resolveHeavyTaskMode } from './heavy-task-policy.js';
 import type { HeadlessBackendContext, IsolatedToolExecutor, RealBackendIsolation } from './isolation.js';
 import { ISOLATED_HEADLESS_TOOL_NAMES, validateRealBackendIsolation } from './isolation.js';
 import { PiCliJsonTransport } from './pi-cli-json-transport.js';
@@ -121,9 +122,11 @@ export async function runHarborCell(input: RunHarborCellInput): Promise<RunHarbo
     instruction: input.instruction,
     workspaceDir: input.cwd,
   };
+  const heavyTaskMode = resolveHeavyTaskMode(input.config, task);
+  const config = configWithHeavyTaskPolicy(input.config, heavyTaskMode);
   const registerBackends = input.registerBackends ?? ((registry: BackendRegistry) => registerFakeBackend(registry));
   await registerBackends(backends, {
-    config: input.config,
+    config,
     task,
     workspaceDir: input.cwd,
     ...(backendNeedsIsolation(input.config.backend)
@@ -148,8 +151,8 @@ export async function runHarborCell(input: RunHarborCellInput): Promise<RunHarbo
   const session = await manager.createSession({
     cwd: input.cwd,
     backend: input.config.backend,
-    llmConnectionSlug: input.config.llmConnectionSlug,
-    model: input.config.model,
+    llmConnectionSlug: config.llmConnectionSlug,
+    model: config.model,
     permissionMode: 'execute',
     name: `harbor-cell:${input.config.id}`,
   });

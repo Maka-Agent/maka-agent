@@ -5,6 +5,7 @@ import type {
   AutonomousDecision,
   FeedbackObservation,
   TaskInboxItem,
+  HeavyTaskModeFacts,
   TaskIsolationFacts,
   TaskPermissionGrant,
   TaskPermissionRequest,
@@ -38,6 +39,7 @@ export interface TaskRunProjection extends TaskRun {
   warnings: string[];
   latestVerifierResult?: VerifierResult;
   latestScoreResult?: ScoreResult;
+  heavyTaskMode?: HeavyTaskModeFacts;
   isolation?: TaskIsolationFacts;
   workspaceLease?: WorkspaceLeaseFacts;
   parked?: TaskRunParkedState;
@@ -143,6 +145,9 @@ export function projectTaskRun(events: readonly TaskEvent[], taskRunId?: string)
         projection.scoreResults.push(event.result);
         projection.latestScoreResult = event.result;
         projection.result = resultFromScore(event.result, projection.latestVerifierResult);
+        break;
+      case 'heavy_task_mode_recorded':
+        projection.heavyTaskMode = event.facts;
         break;
       case 'isolation_policy_recorded':
         projection.isolation = event.facts;
