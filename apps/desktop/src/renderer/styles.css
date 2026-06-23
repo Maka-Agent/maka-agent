@@ -7445,6 +7445,45 @@ button:active {
   background: oklch(from var(--foreground) l c h / 0.025);
 }
 
+/* PR-SETTINGS-A11Y-POLISH-0 (round 11/15) — keyboard-only focus ring
+   on settings rows + inputs. Reference's settings cards use a 2px
+   ring on focus-visible; maka had no visible affordance. Use the
+   accent color with 2px outline + 2px offset so it doesn't blend
+   with the row's hairline divider. */
+.settingsFormRow:focus-visible,
+.settingsRow:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  background: oklch(from var(--accent) l c h / 0.04);
+}
+
+.settingsField input:focus-visible,
+.settingsField textarea:focus-visible,
+.settingsFormGrid input:focus-visible,
+.settingsFormGrid select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px oklch(from var(--accent) l c h / 0.18);
+}
+
+/* PR-SETTINGS-A11Y-POLISH-0 — respect prefers-reduced-motion. Strip
+   the nav-item background transition, the switch thumb slide, and
+   the row hover transitions for users on the OS reduced-motion
+   accommodation. The interaction still fires, just instantly. */
+@media (prefers-reduced-motion: reduce) {
+  .settingsNavItem,
+  .settingsFormRow,
+  .settingsRow,
+  .settingsField input,
+  .settingsField textarea {
+    transition: none !important;
+  }
+  .settingsFormRow [role="switch"] > span,
+  .settingsField [role="switch"] > span {
+    transition: none;
+  }
+}
+
 /* PR-SETTINGS-SWITCH-SCALE-0 (round 3/15, WAWQAQ msg `f7e9d166`):
    the BaseSwitch shared adapter renders at `h-5 w-9` (20×36px) with a
    16×16 thumb — too small inside the now-roomy settings rows.
