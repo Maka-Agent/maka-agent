@@ -31,6 +31,51 @@ describe('AgentRunStore', () => {
     });
   });
 
+  it('rejects malformed run headers instead of returning partial records', async () => {
+    await withStore(async (store, root) => {
+      await store.createRun(makeHeader());
+      const runPath = join(root, 'sessions', 'session-1', 'runs', 'run-1', 'run.json');
+      await writeFile(runPath, JSON.stringify({ runId: 'run-1', sessionId: 'session-1' }) + '\n', 'utf8');
+
+      await assert.rejects(
+        () => store.readRun('session-1', 'run-1'),
+        /Invalid AgentRun header for run run-1: malformed fields/,
+      );
+      assert.deepEqual(await store.listSessionRuns('session-1'), []);
+    });
+  });
+
+  it('rejects malformed run headers on update without overwriting bytes', async () => {
+    await withStore(async (store, root) => {
+      await store.createRun(makeHeader());
+      const runPath = join(root, 'sessions', 'session-1', 'runs', 'run-1', 'run.json');
+      const invalid = JSON.stringify({
+        runId: 'run-1',
+        sessionId: 'session-1',
+        turnId: 'turn-1',
+        status: 'running',
+        backendKind: 'fake',
+        llmConnectionSlug: 'fake',
+        modelId: 'fake-model',
+        cwd: '/tmp/cwd',
+        permissionMode: 'ask',
+        createdAt: 1,
+        updatedAt: 'soon',
+      }, null, 2) + '\n';
+      await writeFile(runPath, invalid, 'utf8');
+
+      await assert.rejects(
+        () => store.updateRun('session-1', 'run-1', {
+          status: 'completed',
+          completedAt: 10,
+          updatedAt: 10,
+        }),
+        /Invalid AgentRun header for run run-1: malformed fields/,
+      );
+      assert.equal(await readFile(runPath, 'utf8'), invalid);
+    });
+  });
+
   it('serializes same-run event appends', async () => {
     await withStore(async (store) => {
       await store.createRun(makeHeader());

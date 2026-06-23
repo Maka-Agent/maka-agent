@@ -1,7 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { appendFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import type { AgentRunEvent, AgentRunHeader, AgentRunStore, RuntimeEvent, RuntimeEventStore } from '@maka/core';
+import {
+  AGENT_RUN_STATUSES,
+  isPermissionMode,
+  type AgentRunEvent,
+  type AgentRunHeader,
+  type AgentRunStore,
+  type RuntimeEvent,
+  type RuntimeEventStore,
+} from '@maka/core';
 
 const SAFE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
@@ -118,7 +126,7 @@ class FileAgentRunStore implements AgentRunStore {
   private async readRunUnlocked(sessionId: string, runId: string): Promise<AgentRunHeader> {
     assertSafeId(sessionId, 'Invalid session id');
     assertSafeId(runId, 'Invalid run id');
-    return JSON.parse(await readFile(this.runPath(sessionId, runId), 'utf8')) as AgentRunHeader;
+    return normalizeAgentRunHeader(JSON.parse(await readFile(this.runPath(sessionId, runId), 'utf8')), sessionId, runId);
   }
 
   private runsRoot(sessionId: string): string {
@@ -275,6 +283,56 @@ function assertSafeId(value: string, message: string): void {
 
 function isSafeId(value: string): boolean {
   return SAFE_ID_PATTERN.test(value);
+}
+
+function normalizeAgentRunHeader(value: unknown, sessionId: string, runId: string): AgentRunHeader {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`Invalid AgentRun header for run ${runId}: expected an object`);
+  }
+  const record = value as Partial<AgentRunHeader>;
+  const requiredStrings = [
+    record.runId,
+    record.sessionId,
+    record.turnId,
+    record.llmConnectionSlug,
+    record.modelId,
+    record.cwd,
+  ];
+  const optionalStrings = [
+    record.parentRunId,
+    record.agentId,
+    record.agentName,
+    record.parentTurnId,
+    record.retriedFromTurnId,
+    record.regeneratedFromTurnId,
+    record.branchOfTurnId,
+    record.parentSessionId,
+    record.failureClass,
+    record.failureMessage,
+    record.traceWriteError,
+  ];
+  const valid = requiredStrings.every((item) => typeof item === 'string') &&
+    record.sessionId === sessionId &&
+    record.runId === runId &&
+    (AGENT_RUN_STATUSES as readonly string[]).includes(String(record.status)) &&
+    isBackendKind(record.backendKind) &&
+    isPermissionMode(record.permissionMode) &&
+    isFiniteNumber(record.createdAt) &&
+    isFiniteNumber(record.updatedAt) &&
+    (record.completedAt === undefined || isFiniteNumber(record.completedAt)) &&
+    optionalStrings.every((item) => item === undefined || typeof item === 'string');
+  if (!valid) {
+    throw new Error(`Invalid AgentRun header for run ${runId}: malformed fields`);
+  }
+  return record as AgentRunHeader;
+}
+
+function isBackendKind(value: unknown): boolean {
+  return value === 'ai-sdk' || value === 'fake' || value === 'pi-agent';
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 function sanitizeJson(_key: string, value: unknown): unknown {
