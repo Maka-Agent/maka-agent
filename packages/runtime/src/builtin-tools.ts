@@ -11,7 +11,6 @@ import { exec, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { glob as nodeGlob } from 'node:fs/promises'; // Node 22+ stable glob
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
-import { computeEditedSource } from './edit-replace.js';
 
 // Single source of truth for tool shape. AiSdkBackend exports them; we just
 // re-export here for back-compat with external callers that imported from
@@ -92,16 +91,14 @@ export function buildBuiltinTools(): MakaTool[] {
       impl: async ({ path, old_string, new_string }, { cwd }) => {
         const abs = await resolveExistingInsideCwd(cwd, path, 'Edit');
         const current = await fs.readFile(abs, 'utf8');
-        const result = computeEditedSource(current, old_string, new_string, path);
-        await fs.writeFile(abs, result.content, 'utf8');
-        return {
-          ok: true,
-          path: abs,
-          replacements: 1,
-          matchedVia: result.matchedVia,
-          startLine: result.startLine,
-          endLine: result.endLine,
-        };
+        const count = current.split(old_string).length - 1;
+        if (count === 0) throw new Error(`old_string not found in ${path}`);
+        if (count > 1) {
+          throw new Error(`old_string is not unique in ${path} (${count} matches)`);
+        }
+        const next = current.replace(old_string, new_string);
+        await fs.writeFile(abs, next, 'utf8');
+        return { ok: true, path: abs, replacements: 1 };
       },
     },
     {
