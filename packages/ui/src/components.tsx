@@ -4348,11 +4348,13 @@ export function ChatView(props: {
   if (!props.activeSession) {
     return (
       <main className="maka-main detailPane agents-chat-panel agents-chat-view-root">
-        <header className="maka-chat-header">
-          <ChatTab title="新建对话" />
-          <button className="maka-chat-tab-plus" type="button" aria-label="新建对话" onClick={props.onNew}>
-            <Plus strokeWidth={1.5} aria-hidden="true" />
-          </button>
+        {/* PR-REMOVE-CHAT-TAB (WAWQAQ msg d401938d 2026-06-23): the
+            browser-style session tab + the duplicate "新建对话" plus
+            button were removed. The session name lives in the sidebar;
+            the new-task button at the top of the sidebar is the
+            canonical create-session entry point. The chat header
+            keeps the permission-mode switcher only. */}
+        <header className="maka-chat-header" data-empty="true">
           <span className="maka-chat-header-spacer" />
           <PermissionModeSwitcher mode="ask" disabled disabledReason="新建对话后再切换模式。" />
         </header>
@@ -4372,20 +4374,13 @@ export function ChatView(props: {
 
   return (
     <main className="maka-main detailPane agents-chat-panel agents-chat-view-root">
+      {/* PR-REMOVE-CHAT-TAB (WAWQAQ msg d401938d): no more browser-style
+          session tab in the chat header. Session name + model live in
+          the sidebar; the new-task button at the top of the sidebar is
+          the canonical create-session entry. The chat header is now
+          just a thin chrome strip carrying the permission-mode
+          switcher and the per-session memory/mode chips. */}
       <header className="maka-chat-header">
-        <ChatTab
-          title={props.activeSession.name}
-          subtitle={props.activeModelLabel ?? props.activeConnectionLabel}
-          subtitleHint={props.activeConnectionLabel && props.activeModelLabel
-            ? `本会话固定模型：${props.activeConnectionLabel} · ${props.activeModelLabel}。设置里的默认模型只影响新建会话。`
-            : undefined}
-          providerMark={props.activeProviderType && props.renderProviderMark
-            ? props.renderProviderMark(props.activeProviderType)
-            : undefined}
-        />
-        <button className="maka-chat-tab-plus" type="button" aria-label="新建对话" onClick={props.onNew}>
-          <Plus strokeWidth={1.5} aria-hidden="true" />
-        </button>
         <span className="maka-chat-header-spacer" />
         {props.memoryActive && (
           <button
@@ -6165,22 +6160,6 @@ function MessageMeta(props: { role: string; userLabel?: string; ts?: number }) {
   );
 }
 
-function ChatTab(props: {
-  title: string;
-  subtitle?: string;
-  subtitleHint?: string;
-  providerMark?: ReactNode;
-}) {
-  return (
-    <div className="maka-chat-tab" title={props.subtitleHint ? `${props.title} · ${props.subtitleHint}` : props.title}>
-      {props.providerMark
-        ? <span className="maka-chat-tab-provider" aria-hidden="true">{props.providerMark}</span>
-        : <MessageSquare className="maka-chat-tab-icon" strokeWidth={1.5} />}
-      <span>{props.title}</span>
-      {props.subtitle && <span className="maka-chat-tab-backend">{props.subtitle}</span>}
-    </div>
-  );
-}
 
 const COMPOSER_MAX_HEIGHT = 240;
 
