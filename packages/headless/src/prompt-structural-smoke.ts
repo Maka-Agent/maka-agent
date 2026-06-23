@@ -57,7 +57,7 @@ export function promptStructuralSmokeReport(
   if (observedRounds < minimumRounds) failures.push('minimum_rounds_not_met');
   if (observedRunCount > 1) failures.push('multiple_runs_present');
   if (roundsWithoutTaskEvidence.length > 0) failures.push('task_evidence_missing');
-  if (input.costCeilingUsd !== undefined && totalCostUsd > input.costCeilingUsd) {
+  if (input.costCeilingUsd !== undefined && totalCostUsd >= input.costCeilingUsd) {
     failures.push('cost_ceiling_exceeded');
   }
   if (taskEvents.some((event) => event.type === 'task_plumbing_failed')) {

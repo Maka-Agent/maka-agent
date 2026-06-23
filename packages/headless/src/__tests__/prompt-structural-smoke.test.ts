@@ -74,6 +74,26 @@ describe('prompt structural smoke report', () => {
     assert.match(markdown, /- cost_ceiling_exceeded/);
   });
 
+  test('fails when task cost reaches the configured ceiling exactly', () => {
+    const events: FixedPromptWalEvent[] = [];
+    for (let index = 1; index <= 10; index += 1) {
+      const roundId = `round-${index}`;
+      events.push(committedEvent(roundId));
+      events.push(completedEvent(roundId, `task-${index}`, 0.1));
+      events.push(decisionEvent(roundId, 'discard', 'held_in_within_noise', 'run-1', { decision: 'clean' }));
+    }
+
+    const report = promptStructuralSmokeReport({
+      events,
+      minimumRounds: 10,
+      costCeilingUsd: 1,
+    });
+
+    assert.equal(report.totalCostUsd, 1);
+    assert.equal(report.status, 'fail');
+    assert.deepEqual(report.failures, ['cost_ceiling_exceeded']);
+  });
+
   test('fails when decision rounds have no task evidence', () => {
     const events: FixedPromptWalEvent[] = [];
     for (let index = 1; index <= 10; index += 1) {

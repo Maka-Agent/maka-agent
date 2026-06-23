@@ -293,6 +293,33 @@ describe('runPromptOptimizationLoop', () => {
     });
   });
 
+  test('reports a cost-ceiling smoke failure when the loop stops exactly at budget', async () => {
+    await withHarness(async (harness) => {
+      const heldInTasks = makeTasks('hin', 20);
+      const heldOutTasks = makeTasks('hout', 8);
+      const rewardFor = (roundId: string, taskId: string): number => {
+        const index = taskIndex(taskId);
+        if (taskId.startsWith('hout-')) return index < 4 ? 1 : 0;
+        if (roundId.startsWith('baseline-')) return index < 10 ? 1 : 0;
+        return 1;
+      };
+
+      const result = await runLoop(harness, {
+        heldInTasks,
+        heldOutTasks,
+        rewardFor,
+        rounds: 3,
+        baselineRuns: 2,
+        costCeilingUsd: 1.68,
+      });
+
+      assert.equal(result.stopReason, 'cost_ceiling_exceeded');
+      assert.equal(result.decisions.length, 1);
+      assert.equal(result.smoke.totalCostUsd, 1.68);
+      assert.ok(result.smoke.failures.includes('cost_ceiling_exceeded'));
+    });
+  });
+
   test('drops a held-in task that never completes in baseline and calibrates on the rest', async () => {
     await withHarness(async (harness) => {
       const heldInTasks = makeTasks('hin', 3);
