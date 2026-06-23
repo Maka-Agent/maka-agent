@@ -7315,17 +7315,27 @@ button:active {
   padding: 40px 24px 64px;
 }
 
+/* PR-SETTINGS-GROUPED-CARD-0 (2026-06-23, WAWQAQ msg `1abecd66`):
+   reference packs settings rows tightly inside ONE outer card and
+   separates them with hairline dividers — NOT per-row standalone
+   cards with gaps. Switch to that pattern: the page container is the
+   card; rows are flush, with `border-bottom` between adjacent rows. */
 .settingsStructuredPage {
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: 0;
+  border: 1px solid oklch(from var(--foreground) l c h / 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  background: transparent;
 }
 
-/* When a merged section stacks two sub-pages (外观 = 主题 + 个性化),
-   the inner pages still each own their own `settingsStructuredPage`.
-   They become layout-passthroughs: just keep the grid + gap. */
+/* Merged sub-pages (外观, 通用 has proxy block at bottom): both
+   surfaces flow into the same outer card — strip nested chrome. */
 .settingsStructuredPage .settingsStructuredPage {
-  gap: 8px;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
 }
 
 /* PR-SETTINGS-SWEEP-0: section heading for merged pages. Mirrors
@@ -7367,12 +7377,10 @@ button:active {
   font-size: 13px;
 }
 
-/* PR-SETTINGS-SHELL-OWNS-LAYOUT-0 (WAWQAQ msg `eafc18a1`) +
-   PR-SETTINGS-REVIEW-0 (WAWQAQ msg `f97ed407`): rows are bordered
-   cards, but the border must be a low-alpha tint so it doesn't
-   double up with the surrounding surface chrome. `var(--border)` was
-   too hard; switch to a 6% foreground overlay so the card edge is
-   suggestive, not declarative. */
+/* PR-SETTINGS-GROUPED-CARD-0: rows live inside the outer card and
+   sit flush. Only a bottom hairline divider separates adjacent
+   rows; `:last-child` removes it so the card doesn't double its
+   bottom edge. */
 .settingsFormRow {
   min-height: 56px;
   display: flex;
@@ -7380,15 +7388,19 @@ button:active {
   justify-content: space-between;
   gap: 16px;
   padding: 16px 20px;
-  border: 1px solid oklch(from var(--foreground) l c h / 0.08);
-  border-radius: 8px;
+  border: 0;
+  border-bottom: 1px solid oklch(from var(--foreground) l c h / 0.06);
+  border-radius: 0;
   background: transparent;
-  transition: background 150ms var(--ease-out-strong), border-color 150ms var(--ease-out-strong);
+  transition: background 150ms var(--ease-out-strong);
+}
+
+.settingsFormRow:last-child {
+  border-bottom: 0;
 }
 
 .settingsFormRow:hover {
-  border-color: oklch(from var(--foreground) l c h / 0.14);
-  background: oklch(from var(--foreground) l c h / 0.02);
+  background: oklch(from var(--foreground) l c h / 0.025);
 }
 
 .settingsFormRow strong,
@@ -8739,9 +8751,15 @@ button:active {
 }
 
 .providerGrid,
+/* PR-SETTINGS-GROUPED-CARD-0 (WAWQAQ msg `1abecd66`): same grouped-
+   card pattern as `.settingsStructuredPage` — outer card + hairline
+   dividers, no per-row chrome. */
 .settingsRows {
   display: grid;
-  gap: 8px;
+  gap: 0;
+  border: 1px solid oklch(from var(--foreground) l c h / 0.08);
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 /* Per-connection card on AccountSettingsPage. Status badge tone derives
@@ -9058,25 +9076,28 @@ button:active {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
-/* PR-SETTINGS-SHELL-OWNS-LAYOUT-0 (WAWQAQ msg `eafc18a1`) +
-   PR-SETTINGS-REVIEW-0 (WAWQAQ msg `f97ed407`): bordered cards with
-   a 6% foreground tint border so they don't compete with the outer
-   pane chrome. */
+/* PR-SETTINGS-GROUPED-CARD-0: rows flush inside outer card, hairline
+   divider, last-child no border. Matches the reference grouped-list
+   pattern. */
 .settingsRow {
   display: grid;
   grid-template-columns: minmax(150px, 0.36fr) minmax(0, 1fr);
   align-items: center;
   gap: 16px;
   padding: 16px 20px;
-  border: 1px solid oklch(from var(--foreground) l c h / 0.08);
-  border-radius: 8px;
+  border: 0;
+  border-bottom: 1px solid oklch(from var(--foreground) l c h / 0.06);
+  border-radius: 0;
   background: transparent;
-  transition: background 150ms var(--ease-out-strong), border-color 150ms var(--ease-out-strong);
+  transition: background 150ms var(--ease-out-strong);
+}
+
+.settingsRow:last-child {
+  border-bottom: 0;
 }
 
 .settingsRow:hover {
-  border-color: oklch(from var(--foreground) l c h / 0.14);
-  background: oklch(from var(--foreground) l c h / 0.02);
+  background: oklch(from var(--foreground) l c h / 0.025);
 }
 
 .settingsRow > div {
