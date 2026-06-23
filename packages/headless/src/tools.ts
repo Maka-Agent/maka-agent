@@ -5,6 +5,7 @@ import {
   COMPUTE_EDITED_SOURCE_FN_SOURCE,
   truncateToolOutput,
 } from '@maka/runtime';
+import { withFileWriteLock } from '@maka/runtime/file-write-lock';
 import { posix as pathPosix } from 'node:path';
 import { z } from 'zod';
 import type { HeavyTaskEvidenceRecorder } from './heavy-task-evidence.js';
@@ -18,6 +19,16 @@ export interface BuildIsolatedHeadlessToolsOptions {
   heavyTaskSelfCheck?: HeavyTaskSelfCheckRecorder;
 }
 
+// Key Write and Edit on a JSON [cwd, path] pair (JSON.stringify so no path
+// character can pose as the separator) and serialize them with the shared
+// withFileWriteLock — see its definition for why concurrent writes are serialized
+// and which aliases a lexical key cannot merge. The path is lexically normalized
+// so spellings of one file ("a.txt", "./a.txt", "d//a.txt") share a key. Keying
+// stays lexical here by necessity: the executor boundary hides the filesystem
+// (which may be remote, with its own symlink / hard-link / case-fold semantics),
+// so the executor — not this layer — owns canonicalization.
+const fileWriteKey = (cwd: string, normalizedPath: string) =>
+  JSON.stringify([pathPosix.normalize(cwd), pathPosix.normalize(normalizedPath)]);
 /**
  * Build Maka's standard headless tool surface with shell and file operations
  * routed through the isolated executor boundary.
@@ -147,18 +158,20 @@ export function buildIsolatedWriteTool(
       const { cwd } = ctx;
       const normalizedPath = normalizeWorkspacePath(path, cwd, 'Write path');
       const input = { cwd, path: normalizedPath, content };
-      if (executor.writeFile) {
-        const result = await executor.writeFile(input);
+      return await withFileWriteLock(fileWriteKey(cwd, normalizedPath), async () => {
+        if (executor.writeFile) {
+          const result = await executor.writeFile(input);
+          await options.heavyTaskEvidence?.recordToolEvidence({ name: 'Write', input, result }, ctx);
+          return result;
+        }
+        await execFileCommand(executor, cwd, shellFileCommand(WRITE_SCRIPT, [
+          normalizedPath,
+          content,
+        ]));
+        const result = { ok: true, path: normalizedPath, bytes: Buffer.byteLength(content, 'utf8') };
         await options.heavyTaskEvidence?.recordToolEvidence({ name: 'Write', input, result }, ctx);
         return result;
-      }
-      await execFileCommand(executor, cwd, shellFileCommand(WRITE_SCRIPT, [
-        normalizedPath,
-        content,
-      ]));
-      const result = { ok: true, path: normalizedPath, bytes: Buffer.byteLength(content, 'utf8') };
-      await options.heavyTaskEvidence?.recordToolEvidence({ name: 'Write', input, result }, ctx);
-      return result;
+      });
     },
   };
 }
@@ -185,20 +198,22 @@ export function buildIsolatedEditTool(
       const { cwd } = ctx;
       const normalizedPath = normalizeWorkspacePath(path, cwd, 'Edit path');
       const input = { cwd, path: normalizedPath, oldString: old_string, newString: new_string };
-      // Edit ALWAYS runs the shared computeEditedSource — unlike Read/Write/Glob/
-      // Grep it has NO native-executor fast path, because its matching logic is
-      // non-trivial and must stay the single source of truth with the in-process
-      // builtin Edit. It runs via `node -e` (node is guaranteed in the headless/
-      // Harbor environment); the other file tools stay on the POSIX-sh scripts.
-      // old/new are base64-encoded so arbitrary content survives argv transport.
-      const editStdout = await execFileCommand(executor, cwd, nodeFileCommand(EDIT_SCRIPT, [
-        normalizedPath,
-        Buffer.from(old_string, 'utf8').toString('base64'),
-        Buffer.from(new_string, 'utf8').toString('base64'),
-      ]));
-      const result = { ok: true, path: normalizedPath, replacements: 1, ...parseEditMeta(editStdout) };
-      await options.heavyTaskEvidence?.recordToolEvidence({ name: 'Edit', input, result }, ctx);
-      return result;
+      return await withFileWriteLock(fileWriteKey(cwd, normalizedPath), async () => {
+        // Edit ALWAYS runs the shared computeEditedSource — unlike Read/Write/Glob/
+        // Grep it has NO native-executor fast path, because its matching logic is
+        // non-trivial and must stay the single source of truth with the in-process
+        // builtin Edit. It runs via `node -e` (node is guaranteed in the headless/
+        // Harbor environment); the other file tools stay on the POSIX-sh scripts.
+        // old/new are base64-encoded so arbitrary content survives argv transport.
+        const editStdout = await execFileCommand(executor, cwd, nodeFileCommand(EDIT_SCRIPT, [
+          normalizedPath,
+          Buffer.from(old_string, 'utf8').toString('base64'),
+          Buffer.from(new_string, 'utf8').toString('base64'),
+        ]));
+        const result = { ok: true, path: normalizedPath, replacements: 1, ...parseEditMeta(editStdout) };
+        await options.heavyTaskEvidence?.recordToolEvidence({ name: 'Edit', input, result }, ctx);
+        return result;
+      });
     },
   };
 }

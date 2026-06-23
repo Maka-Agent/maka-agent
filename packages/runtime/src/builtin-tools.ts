@@ -20,12 +20,23 @@ import { runShellWithBoundedTail } from './shell-exec.js';
 // builtin-tools directly.
 import type { MakaTool, MakaToolContext } from './ai-sdk-backend.js';
 export type { MakaTool, MakaToolContext };
+import { withFileWriteLock } from './file-write-lock.js';
 
 const execAsync = promisify(exec);
 // Generous wall-clock cap for the ripgrep-backed Grep tool. A search should be
 // near-instant; this only bounds a pathological hang now that the stream
 // watchdog is paused during tool execution.
 const GREP_TIMEOUT_MS = 120_000;
+
+// Key Write and Edit on the lexically resolved absolute path so both lock the
+// same file and spellings ("a", "./a", "d//a") collapse onto one key. realpath
+// canonicalizes only the cwd (which always exists); the path itself stays lexical,
+// so the key is stable across the file's creation and never splits it mid-flight.
+// (withFileWriteLock documents why concurrent writes are serialized and which
+// aliases a lexical key does not merge.)
+async function fileWriteLockKey(cwd: string, inputPath: string): Promise<string> {
+  return resolve(await fs.realpath(cwd), inputPath);
+}
 
 export function buildBuiltinTools(): MakaTool[] {
   return [
@@ -79,9 +90,15 @@ export function buildBuiltinTools(): MakaTool[] {
       parameters: z.object({ path: z.string(), content: z.string() }),
       permissionRequired: true,
       impl: async ({ path, content }, { cwd }) => {
-        const abs = await resolveWritableInsideCwd(cwd, path, 'Write');
-        await fs.writeFile(abs, content, 'utf8');
-        return { ok: true, path: abs, bytes: Buffer.byteLength(content, 'utf8') };
+        // Resolve inside the lock so the containment check and the write are one
+        // atomic critical section per file (no concurrent op can alter the target
+        // between them). The key is lexical, so it is stable whether or not the
+        // file exists yet.
+        return await withFileWriteLock(await fileWriteLockKey(cwd, path), async () => {
+          const abs = await resolveWritableInsideCwd(cwd, path, 'Write');
+          await fs.writeFile(abs, content, 'utf8');
+          return { ok: true, path: abs, bytes: Buffer.byteLength(content, 'utf8') };
+        });
       },
     },
     {
@@ -99,18 +116,24 @@ export function buildBuiltinTools(): MakaTool[] {
       }),
       permissionRequired: true,
       impl: async ({ path, old_string, new_string }, { cwd }) => {
-        const abs = await resolveExistingInsideCwd(cwd, path, 'Edit');
-        const current = await fs.readFile(abs, 'utf8');
-        const result = computeEditedSource(current, old_string, new_string, path);
-        await fs.writeFile(abs, result.content, 'utf8');
-        return {
-          ok: true,
-          path: abs,
-          replacements: 1,
-          matchedVia: result.matchedVia,
-          startLine: result.startLine,
-          endLine: result.endLine,
-        };
+        // Resolve + read + write all inside the lock so the read-modify-write is
+        // one atomic critical section per file. The key is lexical (stable across
+        // creation), so a Write that creates this file and a following Edit share
+        // the lock rather than racing.
+        return await withFileWriteLock(await fileWriteLockKey(cwd, path), async () => {
+          const abs = await resolveExistingInsideCwd(cwd, path, 'Edit');
+          const current = await fs.readFile(abs, 'utf8');
+          const result = computeEditedSource(current, old_string, new_string, path);
+          await fs.writeFile(abs, result.content, 'utf8');
+          return {
+            ok: true,
+            path: abs,
+            replacements: 1,
+            matchedVia: result.matchedVia,
+            startLine: result.startLine,
+            endLine: result.endLine,
+          };
+        });
       },
     },
     {

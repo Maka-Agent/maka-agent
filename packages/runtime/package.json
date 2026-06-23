@@ -20,6 +20,7 @@
     "./model-fetcher": "./dist/model-fetcher.js",
     "./materializer": "./dist/materializer.js",
     "./async-queue": "./dist/async-queue.js",
+    "./file-write-lock": "./dist/file-write-lock.js",
     "./session-manager": "./dist/session-manager.js",
     "./fake-backend": "./dist/fake-backend.js",
     "./network/proxy-env": "./dist/network/proxy-env.js",

@@ -216,6 +216,64 @@ describe('builtin write tools path containment', () => {
     await runTool(edit, { path: 'inside.txt', old_string: 'world', new_string: 'Maka' }, root);
     expect(await readFile(join(root, 'inside.txt'), 'utf8')).toBe('hello Maka');
   });
+
+  test('concurrent Edits to the same file serialize — no lost update', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'maka-edit-lock-'));
+    const n = 20;
+    const markers = Array.from({ length: n }, (_, i) => `marker-${String(i).padStart(2, '0')}`);
+    await writeFile(join(root, 'data.txt'), `${markers.join('\n')}\n`, 'utf8');
+    const edit = tool('Edit');
+    // Each Edit is a read-modify-write (fs.readFile -> replace -> fs.writeFile).
+    // Fired concurrently without the per-path lock, the writes clobber each other
+    // and most edits are lost; the lock serializes them so every one lands.
+    const results = await Promise.all(markers.map((m, i) =>
+      runTool(edit, { path: 'data.txt', old_string: m, new_string: `done-${String(i).padStart(2, '0')}` }, root),
+    ));
+    expect(results.every((r) => (r as { ok: boolean; replacements: number }).ok === true
+      && (r as { replacements: number }).replacements === 1)).toBe(true);
+    const expected = `${Array.from({ length: n }, (_, i) => `done-${String(i).padStart(2, '0')}`).join('\n')}\n`;
+    expect(await readFile(join(root, 'data.txt'), 'utf8')).toBe(expected);
+  });
+
+  test('concurrent Edits via different path spellings serialize on one key', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'maka-edit-spelling-'));
+    const n = 20;
+    const markers = Array.from({ length: n }, (_, i) => `marker-${String(i).padStart(2, '0')}`);
+    await writeFile(join(root, 'data.txt'), `${markers.join('\n')}\n`, 'utf8');
+    const edit = tool('Edit');
+    // Alternate the spelling of the same file. The key resolves both spellings to
+    // one absolute path, so all edits share a lock; without that collapse the two
+    // groups would run concurrently and clobber each other.
+    const results = await Promise.all(markers.map((m, i) =>
+      runTool(edit, { path: i % 2 === 0 ? 'data.txt' : './data.txt', old_string: m, new_string: `done-${String(i).padStart(2, '0')}` }, root),
+    ));
+    expect(results.every((r) => (r as { ok: boolean }).ok === true)).toBe(true);
+    const expected = `${Array.from({ length: n }, (_, i) => `done-${String(i).padStart(2, '0')}`).join('\n')}\n`;
+    expect(await readFile(join(root, 'data.txt'), 'utf8')).toBe(expected);
+  });
+
+  test('Write then Edit on one file resolves inside the lock — the fresh file is found', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'maka-write-edit-'));
+    const write = tool('Write');
+    const edit = tool('Edit');
+    // Edit now resolves its target inside the lock (containment + existence check
+    // moved in). This guards that flow: a Write creates a brand-new file, then an
+    // Edit on the same path still resolves and rewrites it.
+    await runTool(write, { path: 'fresh.txt', content: 'hello world\n' }, root);
+    await runTool(edit, { path: 'fresh.txt', old_string: 'world', new_string: 'Maka' }, root);
+    expect(await readFile(join(root, 'fresh.txt'), 'utf8')).toBe('hello Maka\n');
+  });
+
+  test('a failing Edit releases the lock for the next op on the same file', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'maka-edit-wedge-'));
+    await writeFile(join(root, 'data.txt'), 'hello world\n', 'utf8');
+    const edit = tool('Edit');
+    // An Edit whose old_string is absent rejects; the lock must not wedge, so the
+    // next Edit on the same file still runs.
+    await expectRejects(runTool(edit, { path: 'data.txt', old_string: 'absent', new_string: 'x' }, root), /./);
+    await runTool(edit, { path: 'data.txt', old_string: 'world', new_string: 'Maka' }, root);
+    expect(await readFile(join(root, 'data.txt'), 'utf8')).toBe('hello Maka\n');
+  });
 });
 
 async function waitFor(predicate: () => boolean): Promise<void> {
