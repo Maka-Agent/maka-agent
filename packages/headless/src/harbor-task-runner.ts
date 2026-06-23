@@ -121,6 +121,7 @@ export function createHarborTaskRunner(options: HarborTaskRunnerOptions): Harbor
     await rm(jobsDir, { recursive: true, force: true });
     await mkdir(jobsDir, { recursive: true });
 
+    assertNoProviderSecretsInAgentEnv(options.agentEnv);
     const hostProviderEnv = hostSideProviderEnv(options);
     const configPath = join(jobsDir, 'job-config.json');
     const config = buildHarborJobConfig(input, {
@@ -175,6 +176,7 @@ export function buildHarborJobConfig(
   input: HarborTaskRunInput,
   options: HarborTaskRunnerOptions & { jobsDir: string; jobName: string },
 ): Record<string, unknown> {
+  assertNoProviderSecretsInAgentEnv(options.agentEnv);
   const provider = options.provider ?? 'deepseek';
   const model = modelIdForProvider(options.model, provider);
   const mounts: Array<Record<string, unknown>> = [
@@ -263,6 +265,13 @@ function taskAgentEnvWithoutProviderSecrets(options: HarborTaskRunnerOptions): R
     result[key] = value;
   }
   return result;
+}
+
+function assertNoProviderSecretsInAgentEnv(agentEnv: Record<string, string> | undefined): void {
+  const forbidden = Object.keys(agentEnv ?? {}).filter((key) => /_API_KEY(_FILE)?$/.test(key));
+  if (forbidden.length > 0) {
+    throw new Error(`agentEnv must not contain provider secrets: ${forbidden.sort().join(', ')}`);
+  }
 }
 
 function normalizeRawKeyEnvName(name: string): string {

@@ -229,6 +229,8 @@ class MakaAgent(BaseInstalledAgent):
         model = self.model_name or self._get_env("MAKA_MODEL") or "deepseek/deepseek-v4-flash"
         backend = self._resolved_flags.get("backend", "") or self._get_env("MAKA_BACKEND") or "ai-sdk"
         provider = self._resolved_flags.get("provider", "") or self._get_env("MAKA_PROVIDER") or ""
+        if backend == "ai-sdk" and not self._host_side_llm_enabled():
+            raise RuntimeError("backend=ai-sdk requires MAKA_HOST_API_KEY or MAKA_HOST_API_KEY_FILE")
         env = {
             "MAKA_BACKEND": backend,
             "MAKA_MODEL": model,
@@ -263,7 +265,7 @@ class MakaAgent(BaseInstalledAgent):
             value = self._get_env(key)
             if value:
                 env[key] = value
-        if not self._host_side_llm_enabled():
+        if backend == "pi-agent":
             for key in (
                 "DEEPSEEK_API_KEY",
                 "DEEPSEEK_API_KEY_FILE",

@@ -166,10 +166,8 @@ describe('createHarborTaskRunner', () => {
     });
   });
 
-  test('host-only provider env is not copied into the task config', async () => {
+  test('rejects provider secrets in agentEnv even when host-side key file is configured', async () => {
     await withRun(async ({ jobsDir, repo, keyFile }) => {
-      const captured: { config?: Record<string, unknown> } = {};
-      let harborEnv: Record<string, string> | undefined;
       const runner = createHarborTaskRunner({
         makaRepoPath: repo,
         jobsDir,
@@ -182,21 +180,33 @@ describe('createHarborTaskRunner', () => {
           DEEPSEEK_API_KEY_FILE: '/tmp/should-not-enter-task',
           DEEPSEEK_BASE_URL: 'https://api.deepseek.com',
         },
-        runHarbor: async (request) => {
-          harborEnv = request.env;
-          return fakeRunner({ reward: '1\n', captured })(request);
+        runHarbor: async () => {
+          throw new Error('harbor must not run with provider secrets in agentEnv');
         },
       });
-      await runner(runInput());
+      await assert.rejects(
+        runner(runInput()),
+        /agentEnv must not contain provider secrets: DEEPSEEK_API_KEY, DEEPSEEK_API_KEY_FILE/,
+      );
+    });
+  });
 
-      const configJson = JSON.stringify(captured.config);
-      const env = (captured.config!.agents as Array<{ env: Record<string, string> }>)[0]!.env;
-      assert.equal(env.DEEPSEEK_API_KEY, undefined);
-      assert.equal(env.DEEPSEEK_API_KEY_FILE, undefined);
-      assert.equal(env.DEEPSEEK_BASE_URL, undefined);
-      assert.doesNotMatch(configJson, /raw-should-not-enter-task|should-not-enter-task|deepseek-key|sk-secret|\/run\/secrets/);
-      assert.equal(harborEnv?.MAKA_HOST_API_KEY_FILE, keyFile);
-      assert.equal(harborEnv?.MAKA_HOST_BASE_URL, 'https://api.deepseek.com');
+  test('rejects provider secrets in agentEnv when no key file is configured', async () => {
+    await withRun(async ({ jobsDir, repo }) => {
+      const runner = createHarborTaskRunner({
+        makaRepoPath: repo,
+        jobsDir,
+        model: 'deepseek/deepseek-v4-flash',
+        provider: 'deepseek',
+        agentEnv: { OPENAI_API_KEY_FILE: '/tmp/openai-key' },
+        runHarbor: async () => {
+          throw new Error('harbor must not run with provider secrets in agentEnv');
+        },
+      });
+      await assert.rejects(
+        runner(runInput()),
+        /agentEnv must not contain provider secrets: OPENAI_API_KEY_FILE/,
+      );
     });
   });
 
@@ -256,6 +266,19 @@ describe('createHarborTaskRunner', () => {
 });
 
 describe('buildHarborJobConfig', () => {
+  test('rejects provider secrets in extra agent env at config-build time', () => {
+    assert.throws(
+      () => buildHarborJobConfig(runInput(), {
+        makaRepoPath: '/repo',
+        jobsDir: '/jobs/x',
+        jobName: 'trial',
+        model: 'deepseek/deepseek-v4-flash',
+        agentEnv: { DEEPSEEK_API_KEY: 'raw-secret' },
+      }),
+      /agentEnv must not contain provider secrets: DEEPSEEK_API_KEY/,
+    );
+  });
+
   test('omits pricing env when no pricing is configured', () => {
     const config = buildHarborJobConfig(runInput(), {
       makaRepoPath: '/repo',

@@ -346,6 +346,13 @@ with tempfile.TemporaryDirectory() as tmp:
     assert pi_env["ZAI_CODING_CN_API_KEY"] == "zai-key", pi_env
     assert pi_env["OPENAI_API_KEY_FILE"] == "/run/secrets/openai-key", pi_env
 
+    try:
+        MakaAgent(Path(tmp))._cell_env(Path("/logs/agent/instruction.txt"))
+    except RuntimeError as exc:
+        assert "backend=ai-sdk requires MAKA_HOST_API_KEY or MAKA_HOST_API_KEY_FILE" in str(exc), str(exc)
+    else:
+        raise AssertionError("expected ai-sdk without host-side credentials to fail")
+
     agent = MakaAgent(Path(tmp))
     context = AgentContext()
     agent._apply_cell_output(context, {
@@ -459,6 +466,7 @@ with tempfile.TemporaryDirectory() as tmp:
         raise AssertionError("expected invalid zero-token trial pricing to raise")
 
     gateway_agent = MakaAgent(Path(tmp), extra_env={
+        "MAKA_HOST_API_KEY_FILE": "/host/deepseek-key",
         "MAKA_PROVIDER": "openai-compatible",
         "MAKA_MODEL": "anthropic/claude-sonnet-4-5",
         "MAKA_TRIAL_INPUT_USD_PER_1M": "0.145",
@@ -484,11 +492,12 @@ with tempfile.TemporaryDirectory() as tmp:
     assert MakaAgent(Path(tmp), extra_env={"MAKA_CELL_TIMEOUT_SEC": "0"})._cell_timeout_sec() == 900
 
     # The default model must not be the deprecated deepseek-chat alias.
-    default_model_env = MakaAgent(Path(tmp))._cell_env(Path("/logs/agent/instruction.txt"))
+    default_model_env = MakaAgent(Path(tmp), extra_env={"MAKA_HOST_API_KEY_FILE": "/host/deepseek-key"})._cell_env(Path("/logs/agent/instruction.txt"))
     assert default_model_env["MAKA_MODEL"] == "deepseek/deepseek-v4-flash", default_model_env
 
     # The in-container Bash command-timeout floor reaches the cell.
     command_timeout_env = MakaAgent(Path(tmp), extra_env={
+        "MAKA_BACKEND": "fake",
         "MAKA_CELL_COMMAND_TIMEOUT_MS": "600000",
     })._cell_env(Path("/logs/agent/instruction.txt"))
     assert command_timeout_env["MAKA_CELL_COMMAND_TIMEOUT_MS"] == "600000", command_timeout_env
