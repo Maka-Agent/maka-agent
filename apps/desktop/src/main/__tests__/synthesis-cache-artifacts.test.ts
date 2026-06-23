@@ -134,6 +134,20 @@ describe('desktop synthesis cache artifact lifecycle', () => {
         now: 140,
       });
       await store.create({
+        id: 'bad-estimate',
+        sessionId: 'session-1',
+        turnId: 'turn-1',
+        name: 'bad-estimate.json',
+        kind: 'file',
+        content: JSON.stringify({
+          ...synthesisBlock({ blockId: 'bad-estimate' }),
+          estimatedTokens: 'tiny',
+        }),
+        mimeType: 'application/json',
+        source: 'synthesis_cache_block',
+        now: 145,
+      });
+      await store.create({
         id: 'oversized',
         sessionId: 'session-1',
         turnId: 'turn-1',
@@ -168,7 +182,7 @@ describe('desktop synthesis cache artifact lifecycle', () => {
       assert.equal(loaded.skippedReasonCounts?.deleted, 1);
       assert.equal(loaded.skippedReasonCounts?.session_mismatch, 1);
       assert.equal(loaded.skippedReasonCounts?.invalid_json, 1);
-      assert.equal(loaded.skippedReasonCounts?.invalid_schema_version, 1);
+      assert.equal(loaded.skippedReasonCounts?.invalid_schema_version, 2);
       assert.equal(loaded.skippedReasonCounts?.max_total_tokens, 1);
     });
   });

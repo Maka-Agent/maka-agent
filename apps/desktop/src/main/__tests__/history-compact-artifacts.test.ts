@@ -133,6 +133,20 @@ describe('desktop history compact artifact lifecycle', () => {
         now: 140,
       });
       await store.create({
+        id: 'bad-estimate',
+        sessionId: 'session-1',
+        turnId: 'turn-1',
+        name: 'bad-estimate.json',
+        kind: 'file',
+        content: JSON.stringify({
+          ...historyCompactBlock([textEvent('old-7', 'turn-7', 'eta')], 'bad-estimate'),
+          estimatedTokens: 'tiny',
+        }),
+        mimeType: 'application/json',
+        source: 'history_compact_block',
+        now: 145,
+      });
+      await store.create({
         id: 'oversized',
         sessionId: 'session-1',
         turnId: 'turn-1',
@@ -170,7 +184,7 @@ describe('desktop history compact artifact lifecycle', () => {
       assert.equal(loaded.skippedReasonCounts?.deleted, 1);
       assert.equal(loaded.skippedReasonCounts?.session_mismatch, 1);
       assert.equal(loaded.skippedReasonCounts?.invalid_json, 1);
-      assert.equal(loaded.skippedReasonCounts?.invalid_schema_version, 1);
+      assert.equal(loaded.skippedReasonCounts?.invalid_schema_version, 2);
       assert.equal(loaded.skippedReasonCounts?.max_total_tokens, 1);
     });
   });

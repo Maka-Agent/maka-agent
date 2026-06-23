@@ -1058,6 +1058,7 @@ export function validateHistoryCompactBlockShape(value: unknown, sessionId?: str
     && Array.isArray(block.sourceRefs)
     && block.sourceRefs.length > 0
     && block.sourceRefs.every(isValidSynthesisSourceRef)
+    && optionalNonNegativeFiniteNumber(block.estimatedTokens)
     && (
       block.sourceArchiveRefs === undefined ||
       (Array.isArray(block.sourceArchiveRefs) && block.sourceArchiveRefs.every(isValidHistoryCompactSourceArchiveRef))
@@ -1288,7 +1289,12 @@ export function validateSynthesisCacheBlockShape(value: unknown, sessionId?: str
     && Array.isArray(block.limitations)
     && Array.isArray(block.sourceRefs)
     && block.sourceRefs.length > 0
-    && block.sourceRefs.every(isValidSynthesisSourceRef);
+    && block.sourceRefs.every(isValidSynthesisSourceRef)
+    && optionalNonNegativeFiniteNumber(block.estimatedTokens);
+}
+
+function optionalNonNegativeFiniteNumber(value: unknown): boolean {
+  return value === undefined || (typeof value === 'number' && Number.isFinite(value) && value >= 0);
 }
 
 export function buildPromptSegmentEstimates(input: PromptSegmentInput): PromptSegmentEstimate[] {
