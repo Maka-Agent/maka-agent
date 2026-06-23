@@ -87,10 +87,12 @@ export const DEFAULT_PERMISSION_TIMEOUT_MS = 300_000;
 
 /**
  * Loop-gate: block a tool call once this many byte-identical calls (same tool +
- * same args) have happened back-to-back with nothing different in between.
- * Mirrors opencode's doom-loop threshold. Any different tool or different args
- * breaks the streak, so iterate-then-retry (edit a file, re-run the same test)
- * never trips it — only a true no-progress loop does.
+ * same args) have FAILED back-to-back with nothing different in between. Mirrors
+ * opencode's doom-loop threshold (#92: "same tool+args failing N times"). A
+ * success, or any different tool/args, resets the streak — so legitimate polling
+ * (re-run the same status check until it passes) and iterate-then-retry (edit a
+ * file, re-run the same failing test) are never gated; only a no-progress loop of
+ * identical *failures* is.
  */
 export const LOOP_GATE_IDENTICAL_THRESHOLD = 3;
 
@@ -130,13 +132,14 @@ export class ToolRuntime {
    */
   private gating?: ToolGating;
   /**
-   * Loop-gate state: the previous tool call's signature (tool + canonical args)
-   * and how many byte-identical calls have run back-to-back, including the most
-   * recent. Only a consecutive count is needed, so two fields suffice. Reset each
-   * turn.
+   * Loop-gate state: the signature (tool + canonical args) of the last *failed*
+   * call and how many byte-identical calls have failed back-to-back, including
+   * the most recent. A success or a different call clears it (see
+   * {@link recordLoopGateOutcome}). Only a consecutive count is needed, so two
+   * fields suffice. Reset each turn.
    */
-  private lastToolCallSignature: string | undefined;
-  private identicalToolCallStreak = 0;
+  private lastFailedToolCallSignature: string | undefined;
+  private failedToolCallStreak = 0;
 
   constructor(private readonly input: ToolRuntimeInput) {}
 
@@ -164,8 +167,31 @@ export class ToolRuntime {
   resetTurnState(): void {
     this.activeSubagentToolCount = 0;
     this.gating = undefined;
-    this.lastToolCallSignature = undefined;
-    this.identicalToolCallStreak = 0;
+    this.lastFailedToolCallSignature = undefined;
+    this.failedToolCallStreak = 0;
+  }
+
+  /**
+   * Record the terminal outcome of one tool call for the loop-gate. A success (or
+   * any call with a different signature) resets the streak; a failure with the
+   * same signature as the last failure extends it. Called once per call at every
+   * exit — the pre-impl guards call it explicitly before their early returns, and
+   * the impl section calls it from its `finally`. The pre-block itself is the one
+   * exception: a blocked call records nothing, so the streak stays parked at the
+   * threshold and every further identical repeat keeps being blocked.
+   */
+  private recordLoopGateOutcome(signature: string, failed: boolean): void {
+    if (!failed) {
+      this.lastFailedToolCallSignature = undefined;
+      this.failedToolCallStreak = 0;
+      return;
+    }
+    if (signature === this.lastFailedToolCallSignature) {
+      this.failedToolCallStreak += 1;
+    } else {
+      this.lastFailedToolCallSignature = signature;
+      this.failedToolCallStreak = 1;
+    }
   }
 
   async writeSyntheticToolResult(
@@ -238,17 +264,30 @@ export class ToolRuntime {
       ...(tool.categoryHint !== undefined ? { categoryHint: tool.categoryHint } : {}),
     });
 
-    // Loop-gate bookkeeping: update the identical-call streak up front — before
-    // the guards below that can early-return — so that any different tool or
-    // args, even a guard-rejected one, breaks the streak. The block decision
-    // happens after the guards, so a not-yet-loaded or gated tool gets its own
-    // (more actionable) message first.
+    // Loop-gate (#92): block this call up front — before the guards and the real
+    // impl — if this exact call (tool + canonical args) has already FAILED
+    // back-to-back the last (THRESHOLD-1) times. Re-running an identical failing
+    // call cannot change the outcome; it only drains the turn. Checked first so a
+    // tool that keeps failing the availability guard (not loaded) or permission
+    // also trips it — those rejections count as failures (see
+    // recordLoopGateOutcome). A success or any different call resets the streak,
+    // so polling and iterate-then-retry are never gated. Recoverable: the model
+    // is told to change its approach. The block itself records no outcome, so the
+    // streak stays parked and every further identical repeat stays blocked.
     const callSignature = `${tool.name} ${loopGateArgsKey(args, toolUseId)}`;
-    if (callSignature === this.lastToolCallSignature) {
-      this.identicalToolCallStreak += 1;
-    } else {
-      this.lastToolCallSignature = callSignature;
-      this.identicalToolCallStreak = 1;
+    if (
+      callSignature === this.lastFailedToolCallSignature
+      && this.failedToolCallStreak >= LOOP_GATE_IDENTICAL_THRESHOLD - 1
+    ) {
+      const reason = formatLoopGateText(tool.name);
+      await this.writeSyntheticToolResult(toolUseId, turnId, reason, queue);
+      trace?.emit('tool', 'tool_failed', 'Loop-gate blocked a repeated identical failing call', {
+        toolUseId,
+        toolName: tool.name,
+        status: 'error',
+        errorClass: 'LoopGate',
+      });
+      return this.errorReturn(reason);
     }
 
     // Tool-availability execute-boundary guard (Codex Δ5). Uses the step-start
@@ -267,23 +306,7 @@ export class ToolRuntime {
         status: 'error',
         errorClass: 'DeferredNotLoaded',
       });
-      return this.errorReturn(reason);
-    }
-
-    // Loop-gate: block a back-to-back run of byte-identical calls (same tool +
-    // args) — re-running it cannot change the result. A different tool or args
-    // (recorded above, even for a guard-rejected call) breaks the streak, so
-    // iterate-then-retry (edit a file, then re-run the same test) is never gated.
-    // Recoverable: the model is told to change its approach.
-    if (this.identicalToolCallStreak >= LOOP_GATE_IDENTICAL_THRESHOLD) {
-      const reason = formatLoopGateText(tool.name);
-      await this.writeSyntheticToolResult(toolUseId, turnId, reason, queue);
-      trace?.emit('tool', 'tool_failed', 'Loop-gate blocked a repeated identical call', {
-        toolUseId,
-        toolName: tool.name,
-        status: 'error',
-        errorClass: 'LoopGate',
-      });
+      this.recordLoopGateOutcome(callSignature, true);
       return this.errorReturn(reason);
     }
 
@@ -312,6 +335,7 @@ export class ToolRuntime {
           status: 'error',
           errorClass: 'Permission',
         });
+        this.recordLoopGateOutcome(callSignature, true);
         return this.errorReturn(verdict.reason);
       }
 
@@ -342,6 +366,7 @@ export class ToolRuntime {
             status: 'error',
             errorClass: 'Permission',
           });
+          this.recordLoopGateOutcome(callSignature, true);
           return this.errorReturn(reason);
         }
 
@@ -383,6 +408,7 @@ export class ToolRuntime {
             status: 'error',
             errorClass: 'Permission',
           });
+          this.recordLoopGateOutcome(callSignature, true);
           return this.errorReturn(reason);
         }
       } else {
@@ -403,6 +429,7 @@ export class ToolRuntime {
         errorClass: 'RuntimeLimit',
       });
       await this.writeSyntheticToolResult(toolUseId, turnId, SUBAGENT_TOOL_LIMIT_MESSAGE, queue);
+      this.recordLoopGateOutcome(callSignature, true);
       return this.errorReturn(SUBAGENT_TOOL_LIMIT_MESSAGE);
     }
     const startedAt = this.input.now();
@@ -414,6 +441,11 @@ export class ToolRuntime {
       now: this.input.now,
       push: (event) => queue.push(event),
     });
+    // Loop-gate outcome for the real impl. Default failed; the success path below
+    // overwrites it from the derived result status, and the finally records it
+    // once for every exit (return or throw). The pre-impl guards record their own
+    // failures above, since they early-return before this point.
+    let attemptFailed = true;
     try {
       const pauseTarget = tool.categoryHint === 'subagent'
         ? this.input.getPermissionPauseTarget()
@@ -502,6 +534,7 @@ export class ToolRuntime {
           },
         );
 
+        attemptFailed = toolResultStatus !== 'success';
         return result;
       } finally {
         pauseTarget?.resume();
@@ -582,6 +615,7 @@ export class ToolRuntime {
       });
       return this.errorReturn(msg);
     } finally {
+      this.recordLoopGateOutcome(callSignature, attemptFailed);
       if (reservedSubagentSlot) this.releaseSubagentSlot(tool);
     }
   }
@@ -675,14 +709,14 @@ function loopGateArgsKey(args: unknown, callId: string): string {
 
 /**
  * Recoverable message returned when the loop-gate blocks a repeated identical
- * call. Tells the model the retry is pointless and to change its approach.
+ * failing call. Tells the model the retry is pointless and to change its approach.
  */
 export function formatLoopGateText(toolName: string): string {
   return (
-    `Blocked: this exact ${toolName} call (identical arguments) is being repeated ` +
-    `with no change between attempts, so it was not run again — the result would be ` +
-    `the same. Change the arguments or take a different step (for example Read the ` +
-    `file or inspect the relevant state) before retrying.`
+    `Blocked: this exact ${toolName} call (identical arguments) has already failed ` +
+    `repeatedly with no change between attempts, so it was not run again — the result ` +
+    `would be the same. Change the arguments or take a different step (for example ` +
+    `Read the file or inspect the relevant state) before retrying.`
   );
 }
 

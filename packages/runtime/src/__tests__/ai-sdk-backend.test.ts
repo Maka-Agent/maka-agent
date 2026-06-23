@@ -3479,6 +3479,42 @@ describe('AiSdkBackend tool-call repair', () => {
   });
 });
 
+describe('AiSdkBackend loop-gate turn wiring', () => {
+  test('send() resets ToolRuntime per turn (at turn start and at cleanup)', async () => {
+    const model = completionModel();
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header(),
+      appendMessage: async () => {},
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'mock-model-id',
+      permissionEngine: new PermissionEngine({ newId: () => 'permission-id', now: () => 1 }),
+      modelFactory: () => model,
+      tools: [],
+      newId: idGenerator(),
+      now: monotonicClock(),
+    });
+
+    // Spy on the real ToolRuntime the backend already constructed, counting how
+    // many times send() resets it during one completed turn.
+    const runtime = (backend as unknown as { toolRuntime: { resetTurnState: () => void } }).toolRuntime;
+    const original = runtime.resetTurnState.bind(runtime);
+    let resets = 0;
+    runtime.resetTurnState = () => { resets += 1; original(); };
+
+    await drain(backend.send({ turnId: 'turn-1', text: 'hi', context: [] }));
+
+    // A completed turn resets the per-turn ToolRuntime state twice: once at the
+    // START of the turn (so the loop-gate failure streak, subagent count, and
+    // gating never carry over from the previous turn's teardown) and once at the
+    // END via cleanupAfterTurn(). Removing the start-of-turn reset drops this to 1
+    // and fails — which is what proves the wiring the ToolRuntime unit test alone
+    // cannot.
+    assert.equal(resets, 2, 'resetTurnState runs at turn start and at cleanup');
+  });
+});
+
 function completionModel(): MockLanguageModelV3 {
   const chunks: LanguageModelV3StreamPart[] = [
     { type: 'stream-start', warnings: [] },

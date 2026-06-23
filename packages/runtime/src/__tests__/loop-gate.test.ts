@@ -7,14 +7,17 @@ import type { SessionHeader, StoredMessage } from '@maka/core/session';
 import {
   ToolRuntime,
   formatLoopGateText,
+  formatDeferredNotLoadedText,
   LOOP_GATE_IDENTICAL_THRESHOLD,
   type MakaTool,
 } from '../tool-runtime.js';
 import { PermissionEngine } from '../permission-engine.js';
 
 // The loop-gate blocks a back-to-back run of byte-identical tool calls (same
-// tool + same args). These tests drive ToolRuntime directly so the path resolves
-// synchronously (no streaming, no permission parking).
+// tool + same args) only after they have FAILED N-1 times in a row (#92). A
+// success — or any different call — resets the streak, so legitimate polling and
+// iterate-then-retry are never gated. These tests drive ToolRuntime directly so
+// the path resolves synchronously (no streaming, no permission parking).
 
 function header(): SessionHeader {
   return {
@@ -65,6 +68,7 @@ function makeHarness(): Harness {
   return { runtime, pushed, impl };
 }
 
+// A tool that succeeds (returns {ok:true}). Used for the polling / no-gate cases.
 function makeTool(name: string, impl: string[]): MakaTool {
   return {
     name,
@@ -75,16 +79,43 @@ function makeTool(name: string, impl: string[]): MakaTool {
   };
 }
 
+// A tool that always throws — its synthetic error counts as a loop-gate failure.
+function makeFailingTool(name: string, impl: string[], message = 'boom'): MakaTool {
+  return {
+    name,
+    description: name,
+    parameters: z.object({}).passthrough(),
+    permissionRequired: false,
+    impl: (args) => { impl.push(`${name}:${JSON.stringify(args)}`); throw new Error(message); },
+  };
+}
+
+// A tool whose outcome flips with `box.fail`, so one tool can both fail and
+// succeed across calls (for the success-resets-the-streak case).
+function makeFlakyTool(name: string, impl: string[], box: { fail: boolean }, message = 'boom'): MakaTool {
+  return {
+    name,
+    description: name,
+    parameters: z.object({}).passthrough(),
+    permissionRequired: false,
+    impl: (args) => {
+      impl.push(`${name}:${JSON.stringify(args)}`);
+      if (box.fail) throw new Error(message);
+      return { ok: true };
+    },
+  };
+}
+
 let callSeq = 0;
 function call(h: Harness, t: MakaTool, args: unknown, turnId = 'turn-1'): Promise<unknown> {
   const exec = h.runtime.wrapToolExecute(t, turnId, { push: (e) => h.pushed.push(e) });
   return exec(args, { toolCallId: `tc-${++callSeq}`, abortSignal: new AbortController().signal });
 }
 
-describe('loop-gate for repeated identical tool calls', () => {
-  test('runs the first N-1 identical calls then blocks the Nth (and keeps blocking)', async () => {
+describe('loop-gate for repeated identical FAILING tool calls', () => {
+  test('runs the first N-1 identical failing calls then blocks the Nth (and keeps blocking)', async () => {
     const h = makeHarness();
-    const t = makeTool('Edit', h.impl);
+    const t = makeFailingTool('Edit', h.impl, 'edit failed');
     const args = { path: 'a.ts', old_string: 'x', new_string: 'y' };
 
     const results: unknown[] = [];
@@ -98,31 +129,67 @@ describe('loop-gate for repeated identical tool calls', () => {
     assert.equal(h.impl.length, LOOP_GATE_IDENTICAL_THRESHOLD - 1, 'no further impl runs');
   });
 
-  test('a different tool or different args between identical calls breaks the streak', async () => {
+  test('identical SUCCEEDING calls are never gated — polling is allowed', async () => {
     const h = makeHarness();
-    const bash = makeTool('Bash', h.impl);
-    const edit = makeTool('Edit', h.impl);
+    const poll = makeTool('Bash', h.impl);
+    const args = { command: 'git status --porcelain' };
+
+    const runs = LOOP_GATE_IDENTICAL_THRESHOLD + 2;
+    const results: unknown[] = [];
+    for (let i = 0; i < runs; i++) results.push(await call(h, poll, args));
+
+    assert.equal(h.impl.length, runs, 'every successful poll ran');
+    assert.deepEqual(results, Array.from({ length: runs }, () => ({ ok: true })), 'no poll was gated');
+  });
+
+  test('a success between failures resets the streak', async () => {
+    const h = makeHarness();
+    const box = { fail: true };
+    const t = makeFlakyTool('Bash', h.impl, box);
+    const args = { command: 'npm test' };
+
+    box.fail = true;
+    await call(h, t, args); // fail → streak 1
+    box.fail = false;
+    await call(h, t, args); // success → streak reset to 0
+    box.fail = true;
+    await call(h, t, args); // fail → streak 1
+    const stillRuns = await call(h, t, args); // fail → streak 2 (was 1 at the gate, so it ran)
+
+    assert.deepEqual(stillRuns, { error: 'boom' }, 'the success reset the streak, so this still ran');
+    assert.equal(h.impl.length, 4, 'all four ran — the success prevented an early block');
+
+    // Only now, after two fresh back-to-back failures, is the next identical call blocked.
+    const blocked = await call(h, t, args);
+    assert.deepEqual(blocked, { error: formatLoopGateText('Bash') }, 'blocked after two fresh failures');
+    assert.equal(h.impl.length, 4, 'the blocked call did not run');
+  });
+
+  test('a different tool or args between failures resets the streak', async () => {
+    const h = makeHarness();
+    const bash = makeFailingTool('Bash', h.impl);
+    const edit = makeFailingTool('Edit', h.impl);
     const cmd = { command: 'npm test' };
 
-    // Bash(cmd), Edit, Bash(cmd), Edit, Bash(cmd): three identical Bash calls but
-    // never back-to-back — iterate-then-retry must not be gated.
+    // Three identical Bash failures, but never back-to-back — iterate-then-retry
+    // (fail a test, edit, re-run the same failing test) must not be gated.
     await call(h, bash, cmd);
     await call(h, edit, { path: 'a' });
     await call(h, bash, cmd);
     await call(h, edit, { path: 'a' });
     const last = await call(h, bash, cmd);
 
-    assert.deepEqual(last, { ok: true }, 'the re-run after progress is not blocked');
+    assert.deepEqual(last, { error: 'boom' }, 'the re-run after a different call is not blocked');
     assert.equal(h.impl.length, 5, 'all five calls ran');
   });
 
   test('treats args as identical regardless of key order', async () => {
     const h = makeHarness();
-    const t = makeTool('Write', h.impl);
+    const t = makeFailingTool('Write', h.impl);
 
-    await call(h, t, { path: 'a', content: 'x' });
-    await call(h, t, { content: 'x', path: 'a' }); // same canonical args, reordered keys
-    const third = await call(h, t, { path: 'a', content: 'x' });
+    await call(h, t, { path: 'a', content: 'x' }); // fail → streak 1
+    await call(h, t, { content: 'x', path: 'a' }); // same canonical args → fail → streak 2
+    const third = await call(h, t, { path: 'a', content: 'x' }); // blocked
 
     assert.deepEqual(third, { error: formatLoopGateText('Write') });
     assert.equal(h.impl.length, 2);
@@ -130,7 +197,7 @@ describe('loop-gate for repeated identical tool calls', () => {
 
   test('the block is recoverable — a different call afterwards still runs', async () => {
     const h = makeHarness();
-    const grep = makeTool('Grep', h.impl);
+    const grep = makeFailingTool('Grep', h.impl);
     const read = makeTool('Read', h.impl);
     const args = { pattern: 'foo' };
 
@@ -144,50 +211,50 @@ describe('loop-gate for repeated identical tool calls', () => {
     assert.ok(h.impl.includes('Read:{"path":"x"}'), 'a different call after a block runs normally');
   });
 
-  test('the streak is per-turn: a turn reset clears it so a new turn is not falsely blocked', async () => {
+  test('a repeatedly not-loaded tool trips the gate — guard rejections count as failures', async () => {
     const h = makeHarness();
-    const t = makeTool('Edit', h.impl);
+    const gated = makeTool('browser_click', h.impl);
+    // browser_click is gated and never active this turn, so the availability guard
+    // rejects every call before it runs. The first N-1 rejections give the
+    // actionable load hint; the Nth identical rejection is loop-gated.
+    h.runtime.setGating({ gatedNames: new Set(['browser_click']), activeNames: () => new Set() });
+    const args = { sel: '#x' };
+
+    const r1 = await call(h, gated, args);
+    const r2 = await call(h, gated, args);
+    const r3 = await call(h, gated, args);
+
+    assert.deepEqual(r1, { error: formatDeferredNotLoadedText('browser_click') }, 'first: load hint');
+    assert.deepEqual(r2, { error: formatDeferredNotLoadedText('browser_click') }, 'second: load hint');
+    assert.deepEqual(r3, { error: formatLoopGateText('browser_click') }, 'third: loop-gated');
+    assert.equal(h.impl.length, 0, 'the gated tool never actually ran');
+  });
+
+  test('the failure streak is per-turn: a turn reset clears it so a new turn is not falsely blocked', async () => {
+    const h = makeHarness();
+    const t = makeFailingTool('Edit', h.impl);
     const args = { path: 'a.ts', old_string: 'x', new_string: 'y' };
 
-    // Two identical calls in the first turn — the streak builds but stays under
-    // the gate, so both run.
+    // Two identical failures in the first turn — the streak builds to N-1 but the
+    // gate has not fired yet, so both run.
     await call(h, t, args, 'turn-1');
     await call(h, t, args, 'turn-1');
-    assert.equal(h.impl.length, 2, 'both first-turn calls ran');
+    assert.equal(h.impl.length, 2, 'both first-turn failures ran');
 
     // ToolRuntime state is per-instance, not auto-keyed on turnId: a third
-    // identical call carrying a NEW turn id but with no reset is still the 3rd
-    // back-to-back repeat and is blocked. This is exactly why send() must reset
-    // per turn rather than relying on the turn id alone.
+    // identical failing call carrying a NEW turn id but with no reset is still the
+    // 3rd back-to-back failure and is blocked. This is exactly why send() must
+    // reset per turn rather than relying on the turn id alone.
     const withoutReset = await call(h, t, args, 'turn-2');
     assert.deepEqual(withoutReset, { error: formatLoopGateText('Edit') }, 'without a reset the streak leaks across turns');
 
     // send() resets ToolRuntime at each turn boundary (at turn start, and via
     // cleanupAfterTurn at turn end). After the reset, the same call is the first
-    // of a fresh turn and runs — not mistaken for a 3rd repeat.
+    // of a fresh turn and runs (failing on its own merits) — not mistaken for a
+    // 3rd repeat.
     h.runtime.resetTurnState();
     const afterReset = await call(h, t, args, 'turn-3');
-    assert.deepEqual(afterReset, { ok: true }, 'after the per-turn reset the identical call runs again');
+    assert.deepEqual(afterReset, { error: 'boom' }, 'after the per-turn reset the identical call runs again');
     assert.equal(h.impl.length, 3, 'the post-reset call ran');
-  });
-
-  test('a guard-rejected call between identical calls still breaks the streak', async () => {
-    const h = makeHarness();
-    const edit = makeTool('Edit', h.impl);
-    const gated = makeTool('browser_click', h.impl);
-    // browser_click is gated and not active this turn, so the availability guard
-    // rejects it before it runs — but it is still a different call in the
-    // sequence and must reset the identical-Edit streak.
-    h.runtime.setGating({ gatedNames: new Set(['browser_click']), activeNames: () => new Set(['Edit']) });
-    const args = { path: 'a.ts' };
-
-    await call(h, edit, args); // Edit #1
-    await call(h, edit, args); // Edit #2
-    await call(h, gated, { sel: '#x' }); // rejected by the guard, not the loop-gate
-    const third = await call(h, edit, args); // streak broken by the rejected call
-
-    assert.deepEqual(third, { ok: true }, 'the repeat after a different (rejected) call is not gated');
-    assert.equal(h.impl.length, 3, 'three Edits ran; the gated tool never executed');
-    assert.ok(!h.impl.some((c) => c.startsWith('browser_click:')), 'the gated tool did not run');
   });
 });
