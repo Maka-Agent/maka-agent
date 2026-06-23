@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import type { LlmConnection } from '@maka/core';
 import type { Config } from './contracts.js';
 import type { FixedPromptTask, HarborTaskRunner } from './fixed-prompt-controller.js';
-import { createHarborTaskRunner, type HarborTaskPricing } from './harbor-task-runner.js';
+import { createHarborTaskRunner, modelIdForProvider, type HarborTaskPricing } from './harbor-task-runner.js';
 import { createAiSdkMetaAgent } from './meta-agent-completion.js';
 import { createCliPromptCandidateGit, type MetaAgent } from './prompt-candidate-loop.js';
 import {
@@ -214,9 +214,7 @@ export async function runPromptOptimizationRun(
 ): Promise<PromptOptimizationRunResult> {
   assertValidPromptTaskPartitions(input.heldInTasks, input.heldOutTasks);
 
-  const modelId = input.model.includes('/')
-    ? input.model.slice(input.model.indexOf('/') + 1)
-    : input.model;
+  const modelId = resolvePromptOptimizationModelId(input.model, input.provider);
 
   const harborRunner = input.harborRunner ?? createHarborTaskRunner({
     makaRepoPath: input.makaRepoPath,
@@ -276,6 +274,10 @@ export async function runPromptOptimizationRun(
     ...(input.now ? { now: input.now } : {}),
     ...(input.newId ? { newId: input.newId } : {}),
   });
+}
+
+export function resolvePromptOptimizationModelId(model: string, provider: string): string {
+  return modelIdForProvider(model, provider);
 }
 
 function assertValidPromptTaskPartitions(

@@ -358,7 +358,7 @@ const defaultHarborProcessRunner: HarborProcessRunner = async (request) => {
  * ("openai-compatible" routing "anthropic/claude-sonnet-4-5"). The cell's
  * parseModelSpec preserves whatever it receives when a provider is set, so the
  * stripping must happen here. */
-function modelIdForProvider(model: string, provider: string): string {
+export function modelIdForProvider(model: string, provider: string): string {
   const prefix = `${provider}/`;
   return model.startsWith(prefix) ? model.slice(prefix.length) : model;
 }

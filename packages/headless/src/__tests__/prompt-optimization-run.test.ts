@@ -10,6 +10,7 @@ import {
   extractRewardHackVerifierPatterns,
   partitionPromptTasks,
   resolvePromptOptimizationRunRoot,
+  resolvePromptOptimizationModelId,
   runPromptOptimizationRun,
 } from '../prompt-optimization-run.js';
 
@@ -133,6 +134,20 @@ describe('resolvePromptOptimizationRunRoot', () => {
         /MAKA_PROMPT_RUN_ID must contain only/,
       );
     }
+  });
+});
+
+describe('resolvePromptOptimizationModelId', () => {
+  test('strips only the prefix owned by the selected native provider', () => {
+    assert.equal(resolvePromptOptimizationModelId('deepseek/deepseek-v4-flash', 'deepseek'), 'deepseek-v4-flash');
+    assert.equal(resolvePromptOptimizationModelId('openai/gpt-4.1', 'openai'), 'gpt-4.1');
+  });
+
+  test('keeps slashful gateway-routed model ids when the prefix is not the provider', () => {
+    assert.equal(
+      resolvePromptOptimizationModelId('anthropic/claude-sonnet-4-5', 'openai-compatible'),
+      'anthropic/claude-sonnet-4-5',
+    );
   });
 });
 
