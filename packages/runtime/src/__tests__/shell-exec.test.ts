@@ -79,6 +79,9 @@ describe('runShellWithBoundedTail', () => {
     assert.equal(r.exitCode, 0);
     assert.ok(!r.stdout.includes('xxxx'), 'dropped content is not leaked');
     assert.ok(r.stdout.includes('omitted for safety'), 'a recoverable safety marker is present');
+    // Shares the recovery hint with truncateToolOutput: re-run only when safe.
+    assert.ok(r.stdout.includes('safe to re-run'), 'recovery guidance is conditioned on safety');
+    assert.ok(r.stdout.includes('side effects'), 'warns about repeating side effects');
   });
 
   test('emits every chunk live via emitOutput', async () => {

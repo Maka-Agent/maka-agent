@@ -20,6 +20,7 @@
 
 import { spawn } from 'node:child_process';
 import { BashTailBuffer } from './bash-tail-buffer.js';
+import { OUTPUT_RECOVERY_HINT } from './tool-output.js';
 
 // Per-stream cap on the output RETAINED for the result (~1MB). This only bounds
 // what is kept to return. The tool layer (truncateToolOutput) trims this further
@@ -51,8 +52,8 @@ const LIVE_OUTPUT_SUPPRESSED_MARKER =
 // command whose only output was one giant line would look like it produced
 // nothing. Carries no dropped content — just a recoverable notice.
 const UNSAFE_DROP_MARKER =
-  '[a single line larger than the output limit was omitted for safety; ' +
-  're-run with output redirected to a file (e.g. `cmd > out.txt 2>&1`) to inspect it]';
+  '[a single line larger than the output limit was omitted for safety. '
+  + OUTPUT_RECOVERY_HINT + ']';
 
 function withUnsafeDropMarker(buf: BashTailBuffer): string {
   const text = buf.value(); // value() trims first, so the drop flag is current after it
