@@ -239,41 +239,65 @@ export async function runFixedPromptController(
     maxInfraFailureRate: input.maxInfraFailureRate,
     costCeilingUsd: input.costCeilingUsd,
   });
-  // Always validate the requested concurrency (even when a stop guard forces the
-  // effective value to 1) so a fractional/NaN value never slips through unchecked.
-  const requestedConcurrency = normalizeMaxConcurrency(input.maxConcurrency);
-  const maxConcurrency = hasStopGuard(input) ? 1 : requestedConcurrency;
+  // Stop guards are checked after completed tasks; in-flight tasks are allowed
+  // to finish so configured concurrency remains useful for benchmark waves.
+  const maxConcurrency = normalizeMaxConcurrency(input.maxConcurrency);
+  let nextTaskIndex = 0;
+  let nextAppendIndex = 0;
+  const pendingEvents = new Map<number, FixedPromptTaskWalEvent>();
+  const active = new Map<number, Promise<{ index: number; event: FixedPromptTaskWalEvent }>>();
 
-  for (let index = 0; index < input.tasks.length;) {
-    if (stopReason) break;
-    const batch: FixedPromptTask[] = [];
-    while (batch.length < maxConcurrency && index < input.tasks.length) {
-      const task = input.tasks[index++]!;
-      if (!completed.has(task.id)) batch.push(task);
-    }
-    if (batch.length === 0) continue;
-    const batchEvents = await Promise.all(batch.map((task) => runTaskAndBuildEvent({
-      input,
-      task,
-      config,
-      systemPrompt,
-      expectedPromptHash,
-      id: newId(),
-      ts: now(),
-    })));
-    for (const event of batchEvents) {
+  const appendReadyEvents = async () => {
+    while (nextAppendIndex < input.tasks.length) {
+      const task = input.tasks[nextAppendIndex]!;
+      if (completed.has(task.id) && !pendingEvents.has(nextAppendIndex)) {
+        nextAppendIndex += 1;
+        continue;
+      }
+      const event = pendingEvents.get(nextAppendIndex);
+      if (!event) break;
       await appendFixedPromptWalEvent(input.resultsJsonlPath, event);
       events.push(event);
       completed.set(event.taskId, event);
       stopEvidence.set(event.taskId, event);
+      pendingEvents.delete(nextAppendIndex);
+      nextAppendIndex += 1;
     }
+  };
+
+  const launchReadyTasks = () => {
+    while (!stopReason && active.size < maxConcurrency && nextTaskIndex < input.tasks.length) {
+      const index = nextTaskIndex;
+      const task = input.tasks[nextTaskIndex++]!;
+      if (completed.has(task.id)) continue;
+      active.set(index, runTaskAndBuildEvent({
+        input,
+        task,
+        config,
+        systemPrompt,
+        expectedPromptHash,
+        id: newId(),
+        ts: now(),
+      }).then((event) => ({ index, event })));
+    }
+  };
+
+  launchReadyTasks();
+  while (active.size > 0) {
+    const { index, event } = await Promise.race(active.values());
+    active.delete(index);
+    pendingEvents.set(index, event);
+    stopEvidence.set(event.taskId, event);
     stopReason = controllerStopReason({
       events: [...stopEvidence.values()],
       taskCount: input.tasks.length,
       maxInfraFailureRate: input.maxInfraFailureRate,
       costCeilingUsd: input.costCeilingUsd,
     });
+    await appendReadyEvents();
+    launchReadyTasks();
   }
+  await appendReadyEvents();
 
   const resultByTask = stopReason ? stopEvidence : completed;
   const resultEvents = input.tasks
@@ -694,10 +718,6 @@ function controllerStopReason(input: {
     return 'cost_ceiling_exceeded';
   }
   return undefined;
-}
-
-function hasStopGuard(input: RunFixedPromptControllerInput): boolean {
-  return input.maxInfraFailureRate !== undefined || input.costCeilingUsd !== undefined;
 }
 
 function infraFailureRate(events: readonly FixedPromptTaskWalEvent[], taskCount: number): number {

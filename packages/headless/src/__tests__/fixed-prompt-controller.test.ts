@@ -376,7 +376,7 @@ describe('fixed prompt controller', () => {
     });
   });
 
-  test('checks infra failure rate between tasks even when concurrency is configured', async () => {
+  test('checks infra failure rate between rolling concurrency waves', async () => {
     await withDir(async (dir) => {
       const systemPromptPath = join(dir, 'system_prompt.md');
       const resultsJsonlPath = join(dir, 'results.jsonl');
@@ -413,10 +413,10 @@ describe('fixed prompt controller', () => {
         newId: idFactory(),
       });
 
-      assert.equal(maxInFlight, 1);
-      assert.deepEqual([...new Set(calls)], ['task-a', 'task-b']);
+      assert.equal(maxInFlight, 3);
+      assert.deepEqual([...new Set(calls)], ['task-a', 'task-b', 'task-c', 'task-d']);
       assert.equal(result.stopReason, 'infra_failure_rate_exceeded');
-      assert.deepEqual(result.taskIds, ['task-a', 'task-b']);
+      assert.deepEqual(result.taskIds, ['task-a', 'task-b', 'task-c', 'task-d']);
     });
   });
 
@@ -563,7 +563,7 @@ describe('fixed prompt controller', () => {
     });
   });
 
-  test('checks the cost ceiling between tasks even when concurrency is configured', async () => {
+  test('checks the cost ceiling between rolling concurrency waves', async () => {
     await withDir(async (dir) => {
       const systemPromptPath = join(dir, 'system_prompt.md');
       const resultsJsonlPath = join(dir, 'results.jsonl');
@@ -601,11 +601,11 @@ describe('fixed prompt controller', () => {
         newId: idFactory(),
       });
 
-      assert.equal(maxInFlight, 1);
-      assert.deepEqual(calls, ['task-a', 'task-b']);
+      assert.equal(maxInFlight, 3);
+      assert.deepEqual(calls, ['task-a', 'task-b', 'task-c']);
       assert.equal(result.stopReason, 'cost_ceiling_exceeded');
-      assert.equal(result.totalCostUsd, 0.04);
-      assert.deepEqual(result.taskIds, ['task-a', 'task-b']);
+      assert.equal(result.totalCostUsd, 0.06);
+      assert.deepEqual(result.taskIds, ['task-a', 'task-b', 'task-c']);
     });
   });
 
@@ -677,6 +677,54 @@ describe('fixed prompt controller', () => {
       });
 
       assert.equal(maxInFlight, 2);
+      assert.deepEqual(result.taskIds, ['task-a', 'task-b', 'task-c']);
+      const events = (await readFile(resultsJsonlPath, 'utf8')).trimEnd().split('\n').map((line) => JSON.parse(line));
+      assert.deepEqual(events.map((event) => event.taskId), ['task-a', 'task-b', 'task-c']);
+    });
+  });
+
+  test('refills concurrency slots before a slow task finishes', async () => {
+    await withDir(async (dir) => {
+      const systemPromptPath = join(dir, 'system_prompt.md');
+      const resultsJsonlPath = join(dir, 'results.jsonl');
+      await writeFile(systemPromptPath, 'fixed prompt\n', 'utf8');
+
+      const releaseA = deferred<void>();
+      const taskCStarted = deferred<void>();
+      let taskAFinished = false;
+      const calls: string[] = [];
+      const run = runFixedPromptController({
+        runId: 'run-1',
+        roundId: 'round-1',
+        config,
+        systemPromptPath,
+        resultsJsonlPath,
+        resultsTsvPath: join(dir, 'results.tsv'),
+        tasks: [
+          { id: 'task-a', path: '/bench/task-a' },
+          { id: 'task-b', path: '/bench/task-b' },
+          { id: 'task-c', path: '/bench/task-c' },
+        ],
+        maxConcurrency: 2,
+        harborRunner: async ({ task }) => {
+          calls.push(task.id);
+          if (task.id === 'task-a') {
+            await releaseA.promise;
+            taskAFinished = true;
+          }
+          if (task.id === 'task-c') taskCStarted.resolve();
+          return harborOutput({ taskId: task.id });
+        },
+        now: () => 100,
+        newId: idFactory(),
+      });
+
+      await withTimeout(taskCStarted.promise, 200, 'task-c should start before task-a finishes');
+      assert.equal(taskAFinished, false);
+      releaseA.resolve();
+      const result = await run;
+
+      assert.deepEqual(calls, ['task-a', 'task-b', 'task-c']);
       assert.deepEqual(result.taskIds, ['task-a', 'task-b', 'task-c']);
       const events = (await readFile(resultsJsonlPath, 'utf8')).trimEnd().split('\n').map((line) => JSON.parse(line));
       assert.deepEqual(events.map((event) => event.taskId), ['task-a', 'task-b', 'task-c']);
@@ -894,6 +942,30 @@ function idFactory(): () => string {
 
 async function delay(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T | PromiseLike<T>) => void; reject: (error: unknown) => void } {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function withDir(fn: (dir: string) => Promise<void>): Promise<void> {
