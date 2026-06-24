@@ -57,6 +57,15 @@ function envZeroToOne(name, fallback) {
   return value;
 }
 
+function envBool(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const normalized = raw.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  throw new Error(`${name} must be a boolean`);
+}
+
 function envIds(name) {
   const raw = process.env[name];
   if (!raw) return undefined;
@@ -122,7 +131,8 @@ async function main() {
   const model = 'deepseek/deepseek-v4-flash';
   const candidateLimit = envPosInt('MAKA_PROMPT_AB_CANDIDATE_LIMIT', 60);
   const maxExpertTimeEstimateMin = envPosInt('MAKA_PROMPT_AB_MAX_EXPERT_MIN', 30);
-  const targetEvaluationTaskCount = envPosInt('MAKA_PROMPT_AB_EVALUATION_TASKS', 30);
+  const targetEvaluationTaskCount = envPosInt('MAKA_PROMPT_AB_EVALUATION_TASKS', undefined);
+  const useQualification = envBool('MAKA_PROMPT_AB_USE_QUALIFICATION', false);
   const qualificationReps = envPosInt('MAKA_PROMPT_AB_QUALIFICATION_REPS', 3);
   const reps = envPosInt('MAKA_PROMPT_AB_REPS', 3);
   const calibrationSamplesPerBucket = envPosInt('MAKA_PROMPT_AB_CALIBRATION_SAMPLES_PER_BUCKET', 1);
@@ -191,25 +201,33 @@ async function main() {
   const resultsJsonlPath = join(controllerDir, 'results.jsonl');
   const taskDurationsMs = await readTaskDurationsMs(taskDurationsPath);
 
-  console.log(`Calibration: levels [${calibrationLevels.join(', ')}], samples_per_bucket ${calibrationSamplesPerBucket}, reps ${calibrationReps}`);
-  const calibration = await runPromptAbConcurrencyCalibration({
-    runId,
-    config,
-    systemPromptPath: baselinePromptPath,
-    resultsJsonlPath,
-    tasks: evaluationTasks.length > 0 ? evaluationTasks : candidateTasks,
-    taskDurationsMs,
-    samplesPerBucket: calibrationSamplesPerBucket,
-    concurrencyLevels: calibrationLevels,
-    repsPerLevel: calibrationReps,
-    maxInfraFailureRate,
-    harborRunner,
-  });
-  const maxConcurrency = explicitMaxConcurrency ?? calibration.recommendedConcurrency;
-  console.log(`Recommended concurrency: ${calibration.recommendedConcurrency}; using ${maxConcurrency}`);
+  let calibration = null;
+  let maxConcurrency;
+  if (explicitMaxConcurrency !== undefined) {
+    maxConcurrency = explicitMaxConcurrency;
+    console.log(`Skipping calibration because MAKA_PROMPT_AB_MAX_CONCURRENCY=${explicitMaxConcurrency} is set`);
+  } else {
+    console.log(`Calibration: levels [${calibrationLevels.join(', ')}], samples_per_bucket ${calibrationSamplesPerBucket}, reps ${calibrationReps}`);
+    calibration = await runPromptAbConcurrencyCalibration({
+      runId,
+      config,
+      systemPromptPath: baselinePromptPath,
+      resultsJsonlPath,
+      tasks: evaluationTasks.length > 0 ? evaluationTasks : candidateTasks,
+      taskDurationsMs,
+      samplesPerBucket: calibrationSamplesPerBucket,
+      concurrencyLevels: calibrationLevels,
+      repsPerLevel: calibrationReps,
+      maxInfraFailureRate,
+      harborRunner,
+    });
+    maxConcurrency = calibration.recommendedConcurrency;
+    console.log(`Recommended concurrency: ${calibration.recommendedConcurrency}; using ${maxConcurrency}`);
+  }
 
-  if (!evaluationIds) {
-    console.log(`Qualification: ${candidateTasks.length} candidate tasks, target ${targetEvaluationTaskCount}, reps ${qualificationReps}`);
+  if (!evaluationIds && useQualification) {
+    const qualificationTargetTaskCount = targetEvaluationTaskCount ?? 30;
+    console.log(`Qualification: ${candidateTasks.length} candidate tasks, target ${qualificationTargetTaskCount}, reps ${qualificationReps}`);
     qualification = await runPromptAbTaskQualification({
       runId,
       config,
@@ -217,19 +235,24 @@ async function main() {
       resultsJsonlPath,
       candidateTasks,
       reps: qualificationReps,
-      targetTaskCount: targetEvaluationTaskCount,
+      targetTaskCount: qualificationTargetTaskCount,
       maxConcurrency,
       harborRunner,
     });
     evaluationTasks = qualification.selectedTasks;
-    console.log(`Qualified evaluation tasks: ${evaluationTasks.length}/${targetEvaluationTaskCount}`);
+    console.log(`Qualified evaluation tasks: ${evaluationTasks.length}/${qualificationTargetTaskCount}`);
     if (qualification.shortage > 0) {
       console.log(`Qualification shortage: ${qualification.shortage}; not filling with easy tasks`);
     }
+  } else if (!evaluationIds) {
+    evaluationTasks = targetEvaluationTaskCount !== undefined
+      ? candidateTasks.slice(0, targetEvaluationTaskCount)
+      : candidateTasks;
+    console.log(`Direct evaluation tasks: ${evaluationTasks.length}/${candidateTasks.length} metadata-filtered candidates`);
   }
 
   if (evaluationTasks.length === 0) {
-    throw new Error('no evaluation tasks qualified for prompt A/B');
+    throw new Error('no evaluation tasks available for prompt A/B');
   }
 
   const summary = await runPromptAbComparison({
@@ -252,6 +275,8 @@ async function main() {
     taskDurationsPath,
     taskBudgetSec,
     harborTimeoutMs,
+    useQualification,
+    targetEvaluationTaskCount: targetEvaluationTaskCount ?? null,
     metadataFilter,
     calibration,
     qualification,
@@ -295,7 +320,7 @@ function renderQualificationMarkdown(qualification) {
     return [
       '# Prompt A/B Qualification',
       '',
-      '- Mode: explicit evaluation task IDs',
+      '- Mode: skipped; using explicit IDs or direct metadata-filtered evaluation tasks',
       '',
     ].join('\n');
   }

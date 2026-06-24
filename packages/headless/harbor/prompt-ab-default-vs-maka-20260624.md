@@ -10,26 +10,26 @@ This PR now treats the run as a pure A/B evaluator:
 
 - one `evaluationTasks` set, not held-in/held-out partitions;
 - metadata prefilter keeps the primary short-horizon pool to tasks with `expert_time_estimate_min <= 30` by default;
-- baseline A qualification selects medium tasks where A passes 1/3 or 2/3 reps;
-- formal comparison uses fresh A and B reps, so qualification runs are not reused;
-- primary statistics are task-level deltas, not 90 independent attempt samples;
+- baseline A qualification is opt-in; the default primary run directly evaluates the metadata-filtered short pool;
+- primary statistics are task-level deltas with an exact sign test, not independent attempt samples;
 - result language is `B better`, `A better`, or `inconclusive`;
 - budget exhaustion is reported separately from infrastructure failures.
 
 ## Formal Run Shape
 
-- Metadata filter: reject tasks whose declared expert estimate is above `MAKA_PROMPT_AB_MAX_EXPERT_MIN` (default 30 minutes) before primary qualification.
-- Qualification: run A for 3 reps over the filtered candidate pool and select up to 30 medium tasks.
-- Primary A/B: 30 qualified tasks x 3 reps x 2 arms = 180 formal jobs.
-- Execution: A/B arms are interleaved by rep to reduce time-of-day/provider/cache drift.
+- Metadata filter: reject tasks whose declared expert estimate is above `MAKA_PROMPT_AB_MAX_EXPERT_MIN` (default 30 minutes) before primary comparison.
+- Qualification: skipped by default. Set `MAKA_PROMPT_AB_USE_QUALIFICATION=1` only for a separate baseline-medium slice.
+- Primary A/B: all metadata-filtered short tasks by default; on the current local cache that is 34 tasks x 3 reps x 2 arms = 204 formal jobs.
+- Execution: A/B arms run adjacent within each task-rep pair, with first arm alternated by deterministic task/rep parity.
+- Decision: exact two-sided task-level sign test at `p <= 0.05`, with task-level mean delta agreeing with the winning direction.
 - Default task budget: `MAKA_PROMPT_AB_TASK_BUDGET_SEC=1800`.
 - Default Harbor watchdog: `MAKA_PROMPT_AB_HARBOR_TIMEOUT_MS=2100000`, leaving 5 minutes for Harbor/Docker cleanup after the 30-minute cell budget.
 
 ## Timeout Limitation
 
-The primary comparison is intentionally cost-bounded to tasks whose declared expert estimate is at most 30 minutes, and the default task budget matches that pool at 30 minutes. A 10-minute budget is useful only for smoke runs; it should not be used for the primary A/B result because it can hide prompt gains that need more exploration, verification, or repair time. The report must show per-arm timeout counts, and asymmetric timeout rates force an `inconclusive` decision.
+The primary comparison is intentionally time-bounded to tasks whose declared expert estimate is at most 30 minutes, and the default task budget matches that pool at 30 minutes. A 10-minute budget is useful only for smoke runs; it should not be used for the primary A/B result because it can hide prompt gains that need more exploration, verification, or repair time. The report must show per-arm timeout counts, and task-rep pair-level timeout asymmetry forces an `inconclusive` decision.
 
-Tasks with 60+ minute expert estimates should not be mixed into this primary medium-task A/B summary. Long-horizon sensitivity should be run separately on a smaller hard/near-timeout slice with an explicit longer budget and 1-2 reps.
+Tasks with 60+ minute expert estimates should not be mixed into this primary short-task A/B summary. Long-horizon sensitivity should be run separately on a smaller hard/near-timeout slice with an explicit longer budget and 1-2 reps.
 
 ## Artifacts
 

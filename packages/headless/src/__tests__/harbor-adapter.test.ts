@@ -119,10 +119,15 @@ describe('Harbor adapter contract', () => {
     assert.match(source, /apiKeyFile: keyFile/);
     assert.match(source, /MAKA_CELL_TIMEOUT_SEC/);
     assert.match(source, /MAKA_PROMPT_AB_MAX_EXPERT_MIN/);
+    assert.match(source, /MAKA_PROMPT_AB_USE_QUALIFICATION/);
     assert.match(source, /MAKA_PROMPT_AB_TASK_BUDGET_SEC/);
     assert.match(source, /MAKA_PROMPT_AB_HARBOR_TIMEOUT_MS/);
+    assert.match(source, /const targetEvaluationTaskCount = envPosInt\('MAKA_PROMPT_AB_EVALUATION_TASKS', undefined\);/);
+    assert.match(source, /const useQualification = envBool\('MAKA_PROMPT_AB_USE_QUALIFICATION', false\);/);
     assert.match(source, /const taskBudgetSec = envPosInt\('MAKA_PROMPT_AB_TASK_BUDGET_SEC', 30 \* 60\);/);
     assert.match(source, /const harborTimeoutMs = envPosInt\('MAKA_PROMPT_AB_HARBOR_TIMEOUT_MS', \(taskBudgetSec \+ 300\) \* 1000\);/);
+    assert.match(source, /Skipping calibration because MAKA_PROMPT_AB_MAX_CONCURRENCY=/);
+    assert.match(source, /Direct evaluation tasks:/);
     assert.match(source, /MAKA_PROMPT_AB_CANDIDATE_PROMPT_PATH/);
     assert.match(source, /from '#prompt-ab-run'/);
     assert.match(source, /from '#harbor-task-runner'/);
