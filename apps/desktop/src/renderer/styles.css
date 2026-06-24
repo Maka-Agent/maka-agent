@@ -11642,7 +11642,14 @@ button:active {
 
 @keyframes maka-reasoning-panel-pulse {
   0%, 100% { opacity: 0.6; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.15); }
+  /* PR-FE-BUG-HUNT-6 (kenji aesthetic audit reminder 9, finding #5):
+     standardize live-dot pulse amplitude across the three streaming
+     indicators. The semantic is identical ("live work happening")
+     but the amplitudes drifted: list-row dot 10%, reasoning-panel
+     dot 15%, tool-output dot 18%. Settled on scale(1.1) — the
+     calmest of the three — because the dots run continuously while
+     a turn is streaming and the larger pulses read as agitated. */
+  50% { opacity: 1; transform: scale(1.1); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -12631,7 +12638,8 @@ button:active {
 
 @keyframes maka-tool-output-stream-pulse {
   0%, 100% { opacity: 0.55; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.18); }
+  /* PR-FE-BUG-HUNT-6: see reasoning-dot block — unified to 1.1. */
+  50% { opacity: 1; transform: scale(1.1); }
 }
 
 /* PR-UI-12 fixup (@xuan review): the visual-smoke fixture attr collapsed
