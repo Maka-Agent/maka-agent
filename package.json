@@ -27,5 +27,12 @@
   "devDependencies": {
     "@types/node": "^25.0.0",
     "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@jackwener/opencli",
+      "electron",
+      "esbuild"
+    ]
   }
 }
