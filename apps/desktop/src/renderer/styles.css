@@ -4671,26 +4671,6 @@ button:active {
   border-color: var(--border);
 }
 
-.chatToolbar > div {
-  min-width: 0;
-  display: grid;
-  gap: 1px;
-}
-
-.chatToolbar strong,
-.chatToolbar small {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chatToolbar small {
-  color: var(--foreground-50);
-  font-size: 11px;
-}
-
 .messages {
   position: relative;
   flex: 1;
@@ -5369,8 +5349,7 @@ button:active {
  * Legacy `.emptyChat` and `.eyebrow` are kept as aliases so any
  * external CSS / smoke fixture references still match.
  */
-.maka-hero,
-.emptyChat {
+.maka-hero {
   width: min(750px, 80vw);
   margin: auto;
   padding: 0;
@@ -5391,14 +5370,12 @@ button:active {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .maka-hero,
-  .emptyChat {
+  .maka-hero {
     animation: none;
   }
 }
 
-[data-maka-visual-smoke="true"] .maka-hero,
-[data-maka-visual-smoke="true"] .emptyChat {
+[data-maka-visual-smoke="true"] .maka-hero {
   animation: none;
 }
 
@@ -5472,8 +5449,7 @@ button:active {
   font-weight: 700;
 }
 
-.maka-hero-eyebrow,
-.eyebrow {
+.maka-hero-eyebrow {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -5484,13 +5460,7 @@ button:active {
   text-transform: uppercase;
 }
 
-.emptyChat.compact {
-  margin-top: auto;
-  margin-bottom: auto;
-}
-
-.maka-hero h1,
-.emptyChat h1 {
+.maka-hero h1 {
   margin: 0;
   max-width: 34ch;
   /* Phase 4A hero typography — atlas §15 deep RE notes reference uses
@@ -5508,8 +5478,7 @@ button:active {
   text-wrap: balance;
 }
 
-.maka-hero p,
-.emptyChat p {
+.maka-hero p {
   margin: 0;
   max-width: 54ch;
   color: var(--foreground-60);
@@ -6791,18 +6760,14 @@ button:active {
   margin: 2px 0 0;
 }
 
-.permissionRemember,
-.credentialField {
+.permissionRemember {
   display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
   gap: 5px;
   margin-top: 10px;
   color: var(--foreground-70);
   font-size: 12px;
-}
-
-.permissionRemember {
-  grid-template-columns: auto 1fr;
-  align-items: center;
 }
 
 /* PR30 Permission dialog: per-reason iconography + per-tool summary block */
