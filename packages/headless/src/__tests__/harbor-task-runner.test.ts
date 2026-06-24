@@ -123,6 +123,44 @@ describe('createHarborTaskRunner', () => {
     });
   });
 
+  test('selects the Harbor result trial instead of a stale matching directory', async () => {
+    await withRun(async ({ jobsDir, repo }) => {
+      const runner = createHarborTaskRunner({
+        makaRepoPath: repo,
+        jobsDir,
+        model: 'deepseek/deepseek-v4-flash',
+        runHarbor: async (request) => {
+          const staleDir = join(request.jobsDir, request.jobName, 'cobol-modernization__aaa');
+          await mkdir(join(staleDir, 'agent'), { recursive: true });
+          await writeFile(join(staleDir, 'agent', 'maka-cell-output.json'), JSON.stringify(cellOutput({ promptHash: 'sha256:stale' })), 'utf8');
+
+          const realDir = join(request.jobsDir, request.jobName, 'cobol-modernization__zzz');
+          await mkdir(join(realDir, 'verifier'), { recursive: true });
+          await mkdir(join(realDir, 'agent'), { recursive: true });
+          await writeFile(join(realDir, 'verifier', 'reward.txt'), '1\n', 'utf8');
+          await writeFile(join(realDir, 'agent', 'maka-cell-output.json'), JSON.stringify(cellOutput({ promptHash: 'sha256:real' })), 'utf8');
+          await writeFile(join(realDir, 'agent', 'runtime-events.jsonl'), '{"type":"x"}\n', 'utf8');
+          await mkdir(join(realDir, 'agent', 'maka-storage', 'sessions', 'sess', 'runs', 'run'), { recursive: true });
+          await writeFile(join(realDir, 'agent', 'maka-storage', 'sessions', 'sess', 'runs', 'run', 'events.jsonl'), '{"type":"tool_failed"}\n', 'utf8');
+          await writeFile(join(request.jobsDir, request.jobName, 'result.json'), JSON.stringify({
+            stats: {
+              evals: {
+                maka: {
+                  reward_stats: { reward: { '1.0': ['cobol-modernization__zzz'] } },
+                },
+              },
+            },
+          }), 'utf8');
+          return { exitCode: 0, stdout: 'ok', stderr: '' };
+        },
+      });
+
+      const output = await runner(runInput());
+      assert.equal(output.cell.promptHash, 'sha256:real');
+      assert.equal(output.harbor.reward, 1);
+    });
+  });
+
   test('generates a JobConfig with verbatim prompt, host-side provider auth, and trial pricing', async () => {
     await withRun(async ({ jobsDir, repo, keyFile }) => {
       const captured: { config?: Record<string, unknown> } = {};
@@ -289,6 +327,27 @@ describe('createHarborTaskRunner', () => {
             exception_info: {
               exception_type: 'RuntimeError',
               exception_message: 'Maka host cell exceeded 1800s',
+            },
+          },
+        }),
+      });
+      await assert.rejects(runner(runInput()), FixedPromptBudgetExhaustedError);
+    });
+  });
+
+  test('treats Harbor agent timeout with verifier reward as budget exhausted', async () => {
+    await withRun(async ({ jobsDir, repo }) => {
+      const runner = createHarborTaskRunner({
+        makaRepoPath: repo,
+        jobsDir,
+        model: 'deepseek/deepseek-v4-flash',
+        runHarbor: fakeRunner({
+          reward: '0\n',
+          cell: cellOutput(),
+          trialResult: {
+            exception_info: {
+              exception_type: 'AgentTimeoutError',
+              exception_message: 'Agent execution timed out after 60.0 seconds',
             },
           },
         }),

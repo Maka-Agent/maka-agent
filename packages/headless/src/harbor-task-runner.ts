@@ -174,6 +174,13 @@ export function createHarborTaskRunner(options: HarborTaskRunnerOptions): Harbor
     const resultPath = join(trialDir, TRIAL_RESULT);
     const hostEventsPath = join(trialDir, TRIAL_RUNTIME_EVENTS);
 
+    const trialException = await readTrialException(resultPath);
+    if (trialException && isBudgetExhaustedTrialException(trialException)) {
+      throw new FixedPromptBudgetExhaustedError(
+        `agent budget exhausted for task ${input.task.id}`,
+        trialException,
+      );
+    }
     const reward = await readReward(rewardPath, resultPath, input.task.id);
     const cell = await readCellOutput(cellOutputPath, input.task.id);
 
@@ -319,11 +326,55 @@ async function findTrialDir(jobDir: string, taskName: string): Promise<string> {
     throw new HarborInfraError(`harbor produced no job output at ${jobDir}`, errorText(error));
   }
   const dirs = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  const resultTrialName = await readResultTrialName(join(jobDir, 'result.json'));
+  if (resultTrialName && dirs.includes(resultTrialName)) {
+    return join(jobDir, resultTrialName);
+  }
   const match = dirs.find((name) => name === taskName || name.startsWith(`${taskName}__`)) ?? dirs[0];
   if (!match) {
     throw new HarborInfraError(`harbor produced no trial directory under ${jobDir} for task ${taskName}`);
   }
   return join(jobDir, match);
+}
+
+async function readResultTrialName(resultPath: string): Promise<string | null> {
+  let raw: string;
+  try {
+    raw = await readFile(resultPath, 'utf8');
+  } catch {
+    return null;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed) || !isRecord(parsed.stats) || !isRecord(parsed.stats.evals)) return null;
+  for (const evalResult of Object.values(parsed.stats.evals)) {
+    if (!isRecord(evalResult)) continue;
+    const rewardStats = isRecord(evalResult.reward_stats) ? evalResult.reward_stats : null;
+    const rewards = rewardStats && isRecord(rewardStats.reward) ? Object.values(rewardStats.reward) : [];
+    for (const trialNames of rewards) {
+      const trialName = firstString(trialNames);
+      if (trialName) return trialName;
+    }
+    const exceptionStats = isRecord(evalResult.exception_stats) ? Object.values(evalResult.exception_stats) : [];
+    for (const trialNames of exceptionStats) {
+      const trialName = firstString(trialNames);
+      if (trialName) return trialName;
+    }
+  }
+  return null;
+}
+
+function firstString(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    const first = value.find((item): item is string => typeof item === 'string');
+    return first ?? null;
+  }
+  return null;
 }
 
 async function readReward(rewardPath: string, resultPath: string, taskId: string): Promise<number> {
@@ -333,7 +384,7 @@ async function readReward(rewardPath: string, resultPath: string, taskId: string
   } catch (error) {
     const trialException = await readTrialException(resultPath);
     if (trialException) {
-      if (isHostCellBudgetExhaustedTrialException(trialException)) {
+      if (isBudgetExhaustedTrialException(trialException)) {
         throw new FixedPromptBudgetExhaustedError(
           `host cell budget exhausted for task ${taskId}`,
           trialException,
@@ -375,8 +426,9 @@ async function readTrialException(resultPath: string): Promise<string | null> {
   return message ? `${type}: ${message}` : type;
 }
 
-function isHostCellBudgetExhaustedTrialException(message: string): boolean {
-  return /^RuntimeError: Maka host cell exceeded \d+(?:\.\d+)?s$/.test(message);
+function isBudgetExhaustedTrialException(message: string): boolean {
+  return /^RuntimeError: Maka host cell exceeded \d+(?:\.\d+)?s$/.test(message)
+    || /^AgentTimeoutError: Agent execution timed out after \d+(?:\.\d+)? seconds$/.test(message);
 }
 
 async function readCellOutput(cellOutputPath: string, taskId: string): Promise<HarborCellOutput> {
