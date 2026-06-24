@@ -338,7 +338,7 @@ function Count(props: { value: number }) {
   return <small>{props.value}</small>;
 }
 
-export interface SkillEntry {
+interface SkillEntry {
   id: string;
   name: string;
   description: string;
@@ -796,7 +796,7 @@ export function SessionListPanel(props: {
  * `.maka-button.maka-empty-state-cta` so we never grow a competing
  * pile of "empty-state action variants".
  */
-export interface EmptyStateProps {
+interface EmptyStateProps {
   Icon: typeof Search;
   title: string;
   body: ReactNode;
@@ -808,7 +808,7 @@ export interface EmptyStateProps {
   dataEmptyView?: string;
 }
 
-export function EmptyState(props: EmptyStateProps) {
+function EmptyState(props: EmptyStateProps) {
   const className = cn(
     'maka-empty-state rounded-xl border-border bg-card/70 p-8 text-card-foreground shadow-maka-panel',
     props.extraClassName,
@@ -2801,7 +2801,7 @@ function searchModalThrownErrorMessage(error: unknown): string {
   return generalizedErrorMessageChinese(error, '搜索服务需要刷新，请重试。');
 }
 
-export interface SearchModalCloseOptions {
+interface SearchModalCloseOptions {
   restoreFocus?: boolean;
 }
 
