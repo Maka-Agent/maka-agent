@@ -231,6 +231,7 @@ export function buildHarborJobConfig(
   }
 
   Object.assign(agentEnv, options.agentEnv ?? {});
+  const cellTimeoutSec = positiveIntEnv(agentEnv.MAKA_CELL_TIMEOUT_SEC);
 
   return {
     job_name: options.jobName,
@@ -254,6 +255,7 @@ export function buildHarborJobConfig(
         model_name: model,
         kwargs: { backend: 'ai-sdk' },
         env: agentEnv,
+        ...(cellTimeoutSec !== undefined ? { max_timeout_sec: cellTimeoutSec } : {}),
       },
     ],
     datasets: [],
@@ -262,6 +264,12 @@ export function buildHarborJobConfig(
     extra_instruction_paths: [],
     plugins: [],
   };
+}
+
+function positiveIntEnv(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  const value = Number(raw);
+  return Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
 function providerSecretEnv(provider: string): { key: string; file: string; baseUrl: string } {

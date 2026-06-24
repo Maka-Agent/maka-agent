@@ -342,6 +342,18 @@ describe('buildHarborJobConfig', () => {
     assert.equal(env.MAKA_BACKEND, 'ai-sdk');
   });
 
+  test('mirrors the cell timeout into Harbor agent timeout', () => {
+    const config = buildHarborJobConfig(runInput(), {
+      makaRepoPath: '/repo',
+      jobsDir: '/jobs/x',
+      jobName: 'trial',
+      model: 'deepseek/deepseek-v4-flash',
+      agentEnv: { MAKA_CELL_TIMEOUT_SEC: '1800' },
+    });
+    const agent = (config.agents as Array<{ max_timeout_sec?: number }>)[0]!;
+    assert.equal(agent.max_timeout_sec, 1800);
+  });
+
   test('keeps a gateway-routed slashful model id when the prefix is not the provider', () => {
     const config = buildHarborJobConfig(runInput(), {
       makaRepoPath: '/repo',
