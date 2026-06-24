@@ -10,6 +10,14 @@ export const FIXED_PROMPT_WAL_SCHEMA_VERSION = 1;
 export interface FixedPromptTask {
   id: string;
   path: string;
+  metadata?: {
+    difficulty?: string;
+    estimatedDurationSec?: number;
+    expertTimeEstimateMin?: number;
+    juniorTimeEstimateMin?: number;
+    agentTimeoutSec?: number;
+    verifierTimeoutSec?: number;
+  };
 }
 
 export type HarborTaskRunCellOutput = HarborCellOutput & {

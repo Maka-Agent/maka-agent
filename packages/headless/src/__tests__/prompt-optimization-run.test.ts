@@ -94,13 +94,28 @@ describe('discoverCachedHarborTasks', () => {
   test('discovers <hash>/<task-name>/task.toml as id-sorted tasks', async () => {
     await withDir(async (dir) => {
       await makeCachedTask(dir, 'hashB', 'zebra');
-      await makeCachedTask(dir, 'hashA', 'alpha');
+      await makeCachedTask(dir, 'hashA', 'alpha', {
+        difficulty: 'medium',
+        expertTimeEstimateMin: 15,
+        juniorTimeEstimateMin: 120,
+        estimatedDurationSec: 540,
+        agentTimeoutSec: 900,
+        verifierTimeoutSec: 1200,
+      });
       // A hash dir whose inner dir lacks task.toml is ignored.
       await mkdir(join(dir, 'hashC', 'not-a-task'), { recursive: true });
 
       const tasks = await discoverCachedHarborTasks(dir);
       assert.deepEqual(tasks.map((t) => t.id), ['alpha', 'zebra']);
       assert.equal(tasks[0]?.path, join(dir, 'hashA', 'alpha'));
+      assert.deepEqual(tasks[0]?.metadata, {
+        difficulty: 'medium',
+        expertTimeEstimateMin: 15,
+        juniorTimeEstimateMin: 120,
+        estimatedDurationSec: 540,
+        agentTimeoutSec: 900,
+        verifierTimeoutSec: 1200,
+      });
     });
   });
 
@@ -210,10 +225,37 @@ async function makeTask(dir: string, name: string, files: Record<string, string>
   return taskPath;
 }
 
-async function makeCachedTask(root: string, hash: string, name: string): Promise<void> {
+async function makeCachedTask(
+  root: string,
+  hash: string,
+  name: string,
+  metadata: {
+    difficulty?: string;
+    expertTimeEstimateMin?: number;
+    juniorTimeEstimateMin?: number;
+    estimatedDurationSec?: number;
+    agentTimeoutSec?: number;
+    verifierTimeoutSec?: number;
+  } = {},
+): Promise<void> {
   const taskPath = join(root, hash, name);
   await mkdir(taskPath, { recursive: true });
-  await writeFile(join(taskPath, 'task.toml'), 'version = "1.0"\n', 'utf8');
+  await writeFile(join(taskPath, 'task.toml'), [
+    'version = "1.0"',
+    '',
+    '[metadata]',
+    ...(metadata.difficulty ? [`difficulty = "${metadata.difficulty}"`] : []),
+    ...(metadata.estimatedDurationSec !== undefined ? [`estimated_duration_sec = ${metadata.estimatedDurationSec}`] : []),
+    ...(metadata.expertTimeEstimateMin !== undefined ? [`expert_time_estimate_min = ${metadata.expertTimeEstimateMin}`] : []),
+    ...(metadata.juniorTimeEstimateMin !== undefined ? [`junior_time_estimate_min = ${metadata.juniorTimeEstimateMin}`] : []),
+    '',
+    '[verifier]',
+    ...(metadata.verifierTimeoutSec !== undefined ? [`timeout_sec = ${metadata.verifierTimeoutSec}`] : []),
+    '',
+    '[agent]',
+    ...(metadata.agentTimeoutSec !== undefined ? [`timeout_sec = ${metadata.agentTimeoutSec}`] : []),
+    '',
+  ].join('\n'), 'utf8');
 }
 
 async function withDir(fn: (dir: string) => Promise<void>): Promise<void> {

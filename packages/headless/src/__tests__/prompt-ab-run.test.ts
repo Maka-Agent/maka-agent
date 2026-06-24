@@ -156,6 +156,24 @@ describe('runPromptAbConcurrencyCalibration', () => {
   });
 });
 
+describe('filterPromptAbCandidateTasksByMetadata', () => {
+  test('keeps only tasks whose expert estimate fits the short-horizon slice', async () => {
+    const { filterPromptAbCandidateTasksByMetadata } = await import('../prompt-ab-run.js');
+    const result = filterPromptAbCandidateTasksByMetadata({
+      tasks: [
+        { id: 'short', path: '/tasks/short', metadata: { expertTimeEstimateMin: 20 } },
+        { id: 'long', path: '/tasks/long', metadata: { expertTimeEstimateMin: 60 } },
+        { id: 'unknown', path: '/tasks/unknown' },
+      ],
+      maxExpertTimeEstimateMin: 30,
+    });
+
+    assert.deepEqual(result.selectedTaskIds, ['short']);
+    assert.deepEqual(result.rejected.longExpertEstimateTaskIds, ['long']);
+    assert.deepEqual(result.rejected.missingExpertEstimateTaskIds, ['unknown']);
+  });
+});
+
 describe('runPromptAbTaskQualification', () => {
   test('selects only A-medium tasks and reports the selection funnel', async () => {
     await withDir(async (dir) => {

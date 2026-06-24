@@ -9,6 +9,7 @@ The earlier pilot result is superseded. It used an RSI-style held-in/held-out ac
 This PR now treats the run as a pure A/B evaluator:
 
 - one `evaluationTasks` set, not held-in/held-out partitions;
+- metadata prefilter keeps the primary short-horizon pool to tasks with `expert_time_estimate_min <= 30` by default;
 - baseline A qualification selects medium tasks where A passes 1/3 or 2/3 reps;
 - formal comparison uses fresh A and B reps, so qualification runs are not reused;
 - primary statistics are task-level deltas, not 90 independent attempt samples;
@@ -17,7 +18,8 @@ This PR now treats the run as a pure A/B evaluator:
 
 ## Formal Run Shape
 
-- Qualification: run A for 3 reps over the candidate pool and select up to 30 medium tasks.
+- Metadata filter: reject tasks whose declared expert estimate is above `MAKA_PROMPT_AB_MAX_EXPERT_MIN` (default 30 minutes) before primary qualification.
+- Qualification: run A for 3 reps over the filtered candidate pool and select up to 30 medium tasks.
 - Primary A/B: 30 qualified tasks x 3 reps x 2 arms = 180 formal jobs.
 - Execution: A/B arms are interleaved by rep to reduce time-of-day/provider/cache drift.
 - Default task budget: `MAKA_PROMPT_AB_TASK_BUDGET_SEC=600`.
@@ -25,9 +27,9 @@ This PR now treats the run as a pure A/B evaluator:
 
 ## Timeout Limitation
 
-A 10-minute task budget cannot prove long-horizon prompt gains. If B improves by spending more time exploring, verifying, or repairing, the primary result is only valid as an under-budget comparison. The report must show per-arm timeout counts, and asymmetric timeout rates force an `inconclusive` decision.
+A 10-minute task budget cannot prove long-horizon prompt gains. If B improves by spending more time exploring, verifying, or repairing, the primary result is only valid as an under-budget comparison over the metadata-filtered short-horizon pool. The report must show per-arm timeout counts, and asymmetric timeout rates force an `inconclusive` decision.
 
-Long-horizon sensitivity should be run separately on a smaller hard/near-timeout slice with a 20-30 minute budget and 1-2 reps. Those results should not be mixed into the primary medium-task A/B summary.
+Tasks with 60+ minute expert estimates should not be evaluated under a 10-minute primary budget. Long-horizon sensitivity should be run separately on a smaller hard/near-timeout slice with a 20-30 minute budget and 1-2 reps. Those results should not be mixed into the primary medium-task A/B summary.
 
 ## Artifacts
 

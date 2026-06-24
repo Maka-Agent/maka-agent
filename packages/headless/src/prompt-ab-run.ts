@@ -165,6 +165,22 @@ export interface PromptAbComparisonSummary {
   pairedAttempts: PromptAbAttemptPairSummary;
 }
 
+export interface PromptAbMetadataFilterInput {
+  tasks: readonly FixedPromptTask[];
+  maxExpertTimeEstimateMin?: number;
+}
+
+export interface PromptAbMetadataFilterResult {
+  maxExpertTimeEstimateMin: number;
+  candidateTaskCount: number;
+  selectedTaskIds: string[];
+  selectedTasks: FixedPromptTask[];
+  rejected: {
+    longExpertEstimateTaskIds: string[];
+    missingExpertEstimateTaskIds: string[];
+  };
+}
+
 export interface RunPromptAbTaskQualificationInput {
   runId: string;
   config: Config;
@@ -231,6 +247,38 @@ export function planPromptAbConcurrencyCalibration(
   }
 
   return { sampleTasks, concurrencyLevels, repsPerLevel, trials };
+}
+
+export function filterPromptAbCandidateTasksByMetadata(
+  input: PromptAbMetadataFilterInput,
+): PromptAbMetadataFilterResult {
+  const maxExpertTimeEstimateMin = input.maxExpertTimeEstimateMin ?? 30;
+  if (!Number.isFinite(maxExpertTimeEstimateMin) || maxExpertTimeEstimateMin <= 0) {
+    throw new Error(`maxExpertTimeEstimateMin must be positive (got ${String(maxExpertTimeEstimateMin)})`);
+  }
+  const selectedTasks: FixedPromptTask[] = [];
+  const longExpertEstimateTaskIds: string[] = [];
+  const missingExpertEstimateTaskIds: string[] = [];
+  for (const task of input.tasks) {
+    const expertTimeEstimateMin = task.metadata?.expertTimeEstimateMin;
+    if (expertTimeEstimateMin === undefined) {
+      missingExpertEstimateTaskIds.push(task.id);
+    } else if (expertTimeEstimateMin > maxExpertTimeEstimateMin) {
+      longExpertEstimateTaskIds.push(task.id);
+    } else {
+      selectedTasks.push(task);
+    }
+  }
+  return {
+    maxExpertTimeEstimateMin,
+    candidateTaskCount: input.tasks.length,
+    selectedTaskIds: selectedTasks.map((task) => task.id),
+    selectedTasks,
+    rejected: {
+      longExpertEstimateTaskIds,
+      missingExpertEstimateTaskIds,
+    },
+  };
 }
 
 export async function runPromptAbConcurrencyCalibration(

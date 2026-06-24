@@ -108,6 +108,7 @@ describe('Harbor adapter contract', () => {
 
   test('run-prompt-ab.mjs wires calibration and A/B comparison with a key file', async () => {
     const source = await readRepoFile('packages/headless/harbor/run-prompt-ab.mjs');
+    assert.match(source, /filterPromptAbCandidateTasksByMetadata/);
     assert.match(source, /runPromptAbConcurrencyCalibration/);
     assert.match(source, /runPromptAbTaskQualification/);
     assert.match(source, /runPromptAbComparison/);
@@ -117,6 +118,7 @@ describe('Harbor adapter contract', () => {
     assert.match(source, /createHarborTaskRunner/);
     assert.match(source, /apiKeyFile: keyFile/);
     assert.match(source, /MAKA_CELL_TIMEOUT_SEC/);
+    assert.match(source, /MAKA_PROMPT_AB_MAX_EXPERT_MIN/);
     assert.match(source, /MAKA_PROMPT_AB_TASK_BUDGET_SEC/);
     assert.match(source, /MAKA_PROMPT_AB_HARBOR_TIMEOUT_MS/);
     assert.match(source, /MAKA_PROMPT_AB_CANDIDATE_PROMPT_PATH/);
