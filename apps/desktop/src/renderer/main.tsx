@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
+import { StrictMode, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CircleGauge, Grid3X3, HelpCircle, MessageCircleQuestion, PanelLeftOpen, Search, SquarePen } from '@maka/ui/icons';
 import type {
