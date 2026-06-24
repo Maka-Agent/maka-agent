@@ -33,6 +33,13 @@ export interface HarborTaskRunInput {
 
 export type HarborTaskRunner = (input: HarborTaskRunInput) => Promise<HarborTaskRunOutput>;
 
+export class FixedPromptBudgetExhaustedError extends Error {
+  constructor(message: string, readonly detail?: string) {
+    super(message);
+    this.name = 'FixedPromptBudgetExhaustedError';
+  }
+}
+
 export interface ReadHarborTaskRunOutputInput {
   harborResultPath: string;
   cellOutputPath: string;
@@ -75,6 +82,22 @@ export interface FixedPromptTaskInfraFailedEvent {
   scored: false;
   eligible: false;
   errorClass: 'infra_error';
+  error: string;
+}
+
+export interface FixedPromptTaskBudgetExhaustedEvent {
+  schemaVersion: typeof FIXED_PROMPT_WAL_SCHEMA_VERSION;
+  type: 'task_budget_exhausted';
+  id: string;
+  ts: number;
+  runId: string;
+  roundId: string;
+  taskId: string;
+  status: 'budget_exhausted';
+  passed: false;
+  scored: false;
+  eligible: true;
+  errorClass: 'budget_exhausted';
   error: string;
 }
 
@@ -145,6 +168,7 @@ export interface PromptCandidateDecisionEvent {
 export type FixedPromptWalEvent =
   | FixedPromptTaskCompletedEvent
   | FixedPromptTaskInfraFailedEvent
+  | FixedPromptTaskBudgetExhaustedEvent
   | FixedPromptTaskPlumbingFailedEvent
   | PromptCandidateCommittedEvent
   | PromptCandidateDecisionEvent;
@@ -152,6 +176,7 @@ export type FixedPromptWalEvent =
 export type FixedPromptTaskWalEvent =
   | FixedPromptTaskCompletedEvent
   | FixedPromptTaskInfraFailedEvent
+  | FixedPromptTaskBudgetExhaustedEvent
   | FixedPromptTaskPlumbingFailedEvent;
 
 export interface RunFixedPromptControllerInput {
@@ -251,8 +276,8 @@ export async function runFixedPromptController(
   return {
     taskIds: resultEvents.map((event) => event.taskId),
     events: resultEvents,
-    totalTokens: sum(resultEvents.map((event) => event.type !== 'task_infra_failed' ? event.tokenSummary.total : 0)),
-    totalCostUsd: sum(resultEvents.map((event) => event.type !== 'task_infra_failed' ? event.tokenSummary.costUsd : 0)),
+    totalTokens: sum(resultEvents.map((event) => eventHasRunArtifacts(event) ? event.tokenSummary.total : 0)),
+    totalCostUsd: sum(resultEvents.map((event) => eventHasRunArtifacts(event) ? event.tokenSummary.costUsd : 0)),
     resultsTsvPath: input.resultsTsvPath,
     ...(stopReason ? { stopReason } : {}),
   };
@@ -334,10 +359,10 @@ export async function writeFixedPromptResultsTsv(
     String(event.scored),
     String(event.eligible),
     event.errorClass ?? '',
-    event.type !== 'task_infra_failed' ? event.promptHash ?? '' : '',
-    String(event.type !== 'task_infra_failed' ? event.tokenSummary.total : 0),
-    String(event.type !== 'task_infra_failed' ? event.tokenSummary.costUsd : 0),
-    event.type !== 'task_infra_failed' ? event.runtimeEventsPath : '',
+    eventHasRunArtifacts(event) ? event.promptHash ?? '' : '',
+    String(eventHasRunArtifacts(event) ? event.tokenSummary.total : 0),
+    String(eventHasRunArtifacts(event) ? event.tokenSummary.costUsd : 0),
+    eventHasRunArtifacts(event) ? event.runtimeEventsPath : '',
   ]);
   const body = [header, ...rows].map((row) => row.map(tsvCell).join('\t')).join('\n');
   await writeFile(path, `${body}\n`, 'utf8');
@@ -362,16 +387,38 @@ async function runTaskAndBuildEvent(input: {
   let output;
   try {
     output = await runHarbor();
-  } catch {
+  } catch (error) {
+    if (isBudgetExhaustedError(error)) {
+      return taskBudgetExhaustedEvent({
+        error,
+        taskId: input.task.id,
+        runId: input.input.runId,
+        roundId: input.input.roundId,
+        id: input.id,
+        ts: input.ts,
+      });
+    }
     // #64: a thrown Harbor/Docker error is an infra failure, often a transient
-    // flake (container build hiccup, timeout). Retry the same task + prompt once
+    // flake (container build hiccup). Retry the same task + prompt once
     // before recording task_infra_failed, so a single blip does not pollute the
     // candidate's decision. A second failure is treated as a real infra failure.
+    // A budget exhaustion is a benchmark outcome, not an infra flake, so it is
+    // recorded immediately and counted separately by A/B reports.
     // A plumbing failure (a successful run with bad output) does not throw and is
     // not retried — it is deterministic.
     try {
       output = await runHarbor();
     } catch (error) {
+      if (isBudgetExhaustedError(error)) {
+        return taskBudgetExhaustedEvent({
+          error,
+          taskId: input.task.id,
+          runId: input.input.runId,
+          roundId: input.input.roundId,
+          id: input.id,
+          ts: input.ts,
+        });
+      }
       return taskInfraFailedEvent({
         error,
         taskId: input.task.id,
@@ -537,6 +584,31 @@ function taskInfraFailedEvent(input: {
   };
 }
 
+function taskBudgetExhaustedEvent(input: {
+  error: unknown;
+  taskId: string;
+  runId: string;
+  roundId: string;
+  id: string;
+  ts: number;
+}): FixedPromptTaskBudgetExhaustedEvent {
+  return {
+    schemaVersion: FIXED_PROMPT_WAL_SCHEMA_VERSION,
+    type: 'task_budget_exhausted',
+    id: input.id,
+    ts: input.ts,
+    runId: input.runId,
+    roundId: input.roundId,
+    taskId: input.taskId,
+    status: 'budget_exhausted',
+    passed: false,
+    scored: false,
+    eligible: true,
+    errorClass: 'budget_exhausted',
+    error: errorMessage(input.error),
+  };
+}
+
 function terminalTaskEvents(
   events: readonly FixedPromptWalEvent[],
   runId: string,
@@ -550,6 +622,7 @@ function terminalTaskEvents(
     if (!eventMatchesPrompt(event, expectedPromptHash)) continue;
     if (
       event.type === 'task_completed'
+      || event.type === 'task_budget_exhausted'
       || event.type === 'task_plumbing_failed'
     ) {
       byTask.set(event.taskId, event);
@@ -576,6 +649,7 @@ function roundTaskEvents(
 
 function eventMatchesPrompt(event: FixedPromptTaskWalEvent, expectedPromptHash: string): boolean {
   if (event.type === 'task_infra_failed') return true;
+  if (event.type === 'task_budget_exhausted') return true;
   if (event.promptHash === expectedPromptHash) return true;
   return event.type === 'task_plumbing_failed' && event.expectedPromptHash === expectedPromptHash;
 }
@@ -584,6 +658,7 @@ function isTaskEvent(event: FixedPromptWalEvent): event is
   FixedPromptTaskWalEvent {
   return event.type === 'task_completed'
     || event.type === 'task_infra_failed'
+    || event.type === 'task_budget_exhausted'
     || event.type === 'task_plumbing_failed';
 }
 
@@ -623,7 +698,18 @@ function infraFailureRate(events: readonly FixedPromptTaskWalEvent[], taskCount:
 }
 
 function taskEventsCostUsd(events: readonly FixedPromptTaskWalEvent[]): number {
-  return sum(events.map((event) => event.type !== 'task_infra_failed' ? event.tokenSummary.costUsd : 0));
+  return sum(events.map((event) => eventHasRunArtifacts(event) ? event.tokenSummary.costUsd : 0));
+}
+
+function eventHasRunArtifacts(
+  event: FixedPromptTaskWalEvent,
+): event is FixedPromptTaskCompletedEvent | FixedPromptTaskPlumbingFailedEvent {
+  return event.type === 'task_completed' || event.type === 'task_plumbing_failed';
+}
+
+function isBudgetExhaustedError(error: unknown): boolean {
+  return error instanceof FixedPromptBudgetExhaustedError
+    || (typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'FixedPromptBudgetExhaustedError');
 }
 
 function normalizeMaxConcurrency(value: number | undefined): number {

@@ -15,6 +15,7 @@ import {
   FIXED_PROMPT_WAL_SCHEMA_VERSION,
   hashSystemPrompt,
   type FixedPromptTask,
+  type FixedPromptTaskBudgetExhaustedEvent,
   type FixedPromptTaskCompletedEvent,
   type HarborTaskRunOutput,
 } from '../fixed-prompt-controller.js';
@@ -154,50 +155,69 @@ describe('runPromptAbConcurrencyCalibration', () => {
 });
 
 describe('summarizePromptAbComparison', () => {
-  test('uses task plus rep as the acceptance sample and reports paired wins', () => {
+  test('summarizes fixed A/B as task-level deltas without RSI acceptance semantics', () => {
     const result = summarizePromptAbComparison({
       runId: 'ab-run',
       roundId: 'ab-summary',
       baselinePromptId: 'maka-baseline',
       candidatePromptId: 'opencode-default',
-      heldInTaskIds: ['t1', 't2'],
-      heldOutTaskIds: ['h1'],
-      baselineHeldInRuns: [
+      evaluationTaskIds: ['t1', 't2'],
+      baselineRuns: [
         [completed('t1', false), completed('t2', false)],
         [completed('t1', false), completed('t2', true)],
       ],
-      baselineHeldOutRuns: [
-        [completed('h1', true)],
-        [completed('h1', true)],
-      ],
-      candidateHeldInRuns: [
+      candidateRuns: [
         [completed('t1', true), completed('t2', true)],
         [completed('t1', true), completed('t2', true)],
       ],
-      candidateHeldOutRuns: [
-        [completed('h1', true)],
-        [completed('h1', true)],
-      ],
-      heldInPassRateNoiseBand: 0.2,
-      heldOutPassRateNoiseBand: 0.1,
+      budgetMs: 600_000,
     });
 
-    assert.equal(result.acceptance.decision, 'keep');
-    assert.equal(result.acceptance.reason, 'held_in_improved');
-    assert.equal(result.acceptance.metrics.lastKept.heldIn.taskCount, 4);
-    assert.equal(result.acceptance.metrics.candidate.heldIn.passEligibleRate, 1);
-    assert.equal(result.paired.heldIn.wins, 3);
-    assert.equal(result.paired.heldIn.losses, 0);
-    assert.equal(result.paired.heldIn.ties, 1);
-    assert.deepEqual(result.paired.heldIn.winTaskIds, ['t1#r0', 't2#r0', 't1#r1']);
-    assert.match(renderPromptAbComparisonMarkdown(result), /decision: keep \(held_in_improved\)/);
-    assert.match(renderPromptAbComparisonMarkdown(result), /held-in pass_eligible_rate: baseline=0.25, candidate=1, noise=0.2/);
-    assert.match(renderPromptAbComparisonMarkdown(result), /paired held-in: wins=3, losses=0, ties=1, missing=0/);
+    assert.equal(result.decision, 'candidate_better');
+    assert.equal(result.taskCount, 2);
+    assert.equal(result.reps, 2);
+    assert.equal(result.baseline.passRate, 0.25);
+    assert.equal(result.candidate.passRate, 1);
+    assert.equal(result.taskLevel.wins, 2);
+    assert.equal(result.taskLevel.losses, 0);
+    assert.equal(result.taskLevel.ties, 0);
+    assert.deepEqual(result.taskLevel.missingTaskIds, []);
+    assert.equal(result.taskLevel.meanPassRateDelta, 0.75);
+    assert.equal(result.outcomes.baseline.budgetExhausted, 0);
+    assert.equal(result.outcomes.candidate.budgetExhausted, 0);
+
+    const markdown = renderPromptAbComparisonMarkdown(result);
+    assert.match(markdown, /Decision: B better \(task_level_delta_positive\)/);
+    assert.match(markdown, /Budget: 600s task budget/);
+    assert.match(markdown, /Evaluation pass rate: A=1\/4 = 0.25, B=4\/4 = 1/);
+    assert.match(markdown, /Task-level delta: mean=0.75/);
+    assert.doesNotMatch(markdown, /held-in|held-out|keep|discard|acceptance/i);
+  });
+
+  test('counts task budget exhaustion separately from infra while treating it as a budgeted non-pass', () => {
+    const result = summarizePromptAbComparison({
+      runId: 'ab-run',
+      roundId: 'ab-summary',
+      baselinePromptId: 'maka-baseline',
+      candidatePromptId: 'opencode-default',
+      evaluationTaskIds: ['long-task'],
+      baselineRuns: [[completed('long-task', true)]],
+      candidateRuns: [[budgetExhausted('long-task')]],
+      budgetMs: 600_000,
+    });
+
+    assert.equal(result.decision, 'inconclusive');
+    assert.equal(result.reason, 'asymmetric_budget_exhaustion');
+    assert.equal(result.candidate.passRate, 0);
+    assert.equal(result.outcomes.candidate.budgetExhausted, 1);
+    assert.equal(result.outcomes.candidate.infraFailed, 0);
+    assert.equal(result.taskLevel.losses, 1);
+    assert.match(renderPromptAbComparisonMarkdown(result), /Budget outcomes: A timed_out=0, B timed_out=1/);
   });
 });
 
 describe('runPromptAbComparison', () => {
-  test('runs baseline and candidate prompts across reps before summarizing', async () => {
+  test('runs baseline and candidate prompts across reps with interleaved arm order', async () => {
     await withDir(async (dir) => {
       const baselinePromptPath = join(dir, 'baseline.md');
       const candidatePromptPath = join(dir, 'candidate.md');
@@ -211,36 +231,29 @@ describe('runPromptAbComparison', () => {
         baselinePromptPath,
         candidatePromptPath,
         resultsJsonlPath: join(dir, 'results.jsonl'),
-        heldInTasks: [{ id: 't1', path: '/tasks/t1' }],
-        heldOutTasks: [{ id: 'h1', path: '/tasks/h1' }],
+        evaluationTasks: [{ id: 't1', path: '/tasks/t1' }],
         reps: 2,
         maxConcurrency: 4,
-        heldInPassRateNoiseBand: 0,
-        heldOutPassRateNoiseBand: 0,
         harborRunner: async ({ roundId, task, systemPrompt }) => {
           calls.push(`${roundId}:${task.id}`);
           const isCandidate = systemPrompt.startsWith('B prompt');
           return harborOutput({
             taskId: task.id,
             promptHash: hashSystemPrompt(systemPrompt),
-            reward: isCandidate || task.id === 'h1' ? 1 : 0,
+            reward: isCandidate ? 1 : 0,
           });
         },
         now: () => 100,
         newId: idFactory(),
       });
 
-      assert.equal(result.acceptance.decision, 'keep');
-      assert.equal(result.paired.overall.wins, 2);
+      assert.equal(result.decision, 'candidate_better');
+      assert.equal(result.taskLevel.wins, 1);
       assert.deepEqual(calls, [
-        'ab-baseline-held-in-r0:t1',
-        'ab-baseline-held-out-r0:h1',
-        'ab-candidate-held-in-r0:t1',
-        'ab-candidate-held-out-r0:h1',
-        'ab-baseline-held-in-r1:t1',
-        'ab-baseline-held-out-r1:h1',
-        'ab-candidate-held-in-r1:t1',
-        'ab-candidate-held-out-r1:h1',
+        'ab-baseline-r0:t1',
+        'ab-candidate-r0:t1',
+        'ab-candidate-r1:t1',
+        'ab-baseline-r1:t1',
       ]);
     });
   });
@@ -300,6 +313,24 @@ function completed(taskId: string, passed: boolean): FixedPromptTaskCompletedEve
     durationMs: 100,
     runtimeEventsPath: `/logs/${taskId}/runtime-events.jsonl`,
     harbor: { reward: passed ? 1 : 0 },
+  };
+}
+
+function budgetExhausted(taskId: string): FixedPromptTaskBudgetExhaustedEvent {
+  return {
+    schemaVersion: FIXED_PROMPT_WAL_SCHEMA_VERSION,
+    type: 'task_budget_exhausted',
+    id: `event-${taskId}-budget`,
+    ts: 0,
+    runId: 'run',
+    roundId: 'round',
+    taskId,
+    status: 'budget_exhausted',
+    passed: false,
+    scored: false,
+    eligible: true,
+    errorClass: 'budget_exhausted',
+    error: 'harbor run timed out after 600s',
   };
 }
 

@@ -51,7 +51,7 @@ export function promptStructuralSmokeReport(
   const quarantineCount = decisionEvents.filter((event) => isQuarantineDecision(event)).length;
   const missingRewardHackScanCount = decisionEvents.filter((event) => event.rewardHackScan === undefined).length;
   const totalCostUsd = roundCost(sum(taskEvents.map((event) => (
-    event.type !== 'task_infra_failed' ? event.tokenSummary.costUsd : 0
+    event.type === 'task_completed' || event.type === 'task_plumbing_failed' ? event.tokenSummary.costUsd : 0
   ))));
   const failures: PromptStructuralSmokeFailure[] = [];
   if (observedRounds < minimumRounds) failures.push('minimum_rounds_not_met');
@@ -110,6 +110,7 @@ export function renderPromptStructuralSmokeMarkdown(report: PromptStructuralSmok
 function isTaskWalEvent(event: FixedPromptWalEvent): event is FixedPromptTaskWalEvent {
   return event.type === 'task_completed'
     || event.type === 'task_infra_failed'
+    || event.type === 'task_budget_exhausted'
     || event.type === 'task_plumbing_failed';
 }
 

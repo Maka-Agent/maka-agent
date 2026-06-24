@@ -6,12 +6,6 @@ import {
   type HarborTaskRunner,
 } from './fixed-prompt-controller.js';
 import { assertPositiveInt } from './numeric-guards.js';
-import {
-  decidePromptAcceptance,
-  promptAcceptanceNoiseBand,
-  summarizePromptAcceptancePartition,
-  type PromptAcceptanceResult,
-} from './prompt-acceptance-policy.js';
 
 export interface PromptAbConcurrencyCalibrationPlanInput {
   tasks: readonly FixedPromptTask[];
@@ -49,6 +43,7 @@ export interface PromptAbConcurrencyLevelSummary {
   concurrency: number;
   attempts: number;
   completed: number;
+  budgetExhausted: number;
   infraFailed: number;
   plumbingFailed: number;
   totalCostUsd: number;
@@ -68,14 +63,10 @@ export interface SummarizePromptAbComparisonInput {
   roundId: string;
   baselinePromptId: string;
   candidatePromptId: string;
-  heldInTaskIds: readonly string[];
-  heldOutTaskIds: readonly string[];
-  baselineHeldInRuns: readonly (readonly FixedPromptTaskWalEvent[])[];
-  baselineHeldOutRuns: readonly (readonly FixedPromptTaskWalEvent[])[];
-  candidateHeldInRuns: readonly (readonly FixedPromptTaskWalEvent[])[];
-  candidateHeldOutRuns: readonly (readonly FixedPromptTaskWalEvent[])[];
-  heldInPassRateNoiseBand?: number;
-  heldOutPassRateNoiseBand?: number;
+  evaluationTaskIds: readonly string[];
+  baselineRuns: readonly (readonly FixedPromptTaskWalEvent[])[];
+  candidateRuns: readonly (readonly FixedPromptTaskWalEvent[])[];
+  budgetMs?: number;
 }
 
 export interface RunPromptAbComparisonInput {
@@ -84,25 +75,73 @@ export interface RunPromptAbComparisonInput {
   baselinePromptPath: string;
   candidatePromptPath: string;
   resultsJsonlPath: string;
-  heldInTasks: readonly FixedPromptTask[];
-  heldOutTasks: readonly FixedPromptTask[];
+  evaluationTasks: readonly FixedPromptTask[];
   reps?: number;
   maxConcurrency?: number;
-  heldInPassRateNoiseBand?: number;
-  heldOutPassRateNoiseBand?: number;
+  budgetMs?: number;
   harborRunner: HarborTaskRunner;
   now?: () => number;
   newId?: () => string;
 }
 
-export interface PromptAbPairedPartitionSummary {
+export type PromptAbDecision =
+  | 'candidate_better'
+  | 'baseline_better'
+  | 'inconclusive';
+
+export interface PromptAbArmSummary {
+  attempts: number;
+  observed: number;
+  valid: number;
+  passed: number;
+  passRate: number | null;
+  completed: number;
+  budgetExhausted: number;
+  infraFailed: number;
+  plumbingFailed: number;
+  missing: number;
+  coverageRate: number;
+  totalCostUsd: number;
+  meanDurationMs: number | null;
+}
+
+export interface PromptAbTaskArmSummary {
+  observed: number;
+  valid: number;
+  passed: number;
+  passRate: number | null;
+  completed: number;
+  budgetExhausted: number;
+  infraFailed: number;
+  plumbingFailed: number;
+  missing: number;
+}
+
+export interface PromptAbTaskComparison {
+  taskId: string;
+  baseline: PromptAbTaskArmSummary;
+  candidate: PromptAbTaskArmSummary;
+  passRateDelta: number | null;
+  outcome: 'candidate_win' | 'baseline_win' | 'tie' | 'missing';
+}
+
+export interface PromptAbTaskLevelSummary {
+  comparableTasks: number;
+  wins: number;
+  losses: number;
+  ties: number;
+  missingTaskIds: string[];
+  meanPassRateDelta: number | null;
+  medianPassRateDelta: number | null;
+  tasks: PromptAbTaskComparison[];
+}
+
+export interface PromptAbAttemptPairSummary {
   pairs: number;
   observedPairs: number;
   wins: number;
   losses: number;
   ties: number;
-  winTaskIds: string[];
-  lossTaskIds: string[];
   missingPairIds: string[];
 }
 
@@ -111,16 +150,19 @@ export interface PromptAbComparisonSummary {
   roundId: string;
   baselinePromptId: string;
   candidatePromptId: string;
-  heldInReps: number;
-  heldOutReps: number;
-  heldInPassRateNoiseBand: number;
-  heldOutPassRateNoiseBand: number;
-  acceptance: PromptAcceptanceResult;
-  paired: {
-    heldIn: PromptAbPairedPartitionSummary;
-    heldOut: PromptAbPairedPartitionSummary;
-    overall: PromptAbPairedPartitionSummary;
+  taskCount: number;
+  reps: number;
+  budgetMs?: number;
+  decision: PromptAbDecision;
+  reason: string;
+  baseline: PromptAbArmSummary;
+  candidate: PromptAbArmSummary;
+  outcomes: {
+    baseline: PromptAbArmSummary;
+    candidate: PromptAbArmSummary;
   };
+  taskLevel: PromptAbTaskLevelSummary;
+  pairedAttempts: PromptAbAttemptPairSummary;
 }
 
 export function planPromptAbConcurrencyCalibration(
@@ -187,60 +229,30 @@ export async function runPromptAbConcurrencyCalibration(
 }
 
 export function summarizePromptAbComparison(input: SummarizePromptAbComparisonInput): PromptAbComparisonSummary {
-  assertSameRunCount('held-in', input.baselineHeldInRuns, input.candidateHeldInRuns);
-  assertSameRunCount('held-out', input.baselineHeldOutRuns, input.candidateHeldOutRuns);
-  const baselineHeldIn = virtualizeRuns(input.baselineHeldInRuns);
-  const baselineHeldOut = virtualizeRuns(input.baselineHeldOutRuns);
-  const candidateHeldIn = virtualizeRuns(input.candidateHeldInRuns);
-  const candidateHeldOut = virtualizeRuns(input.candidateHeldOutRuns);
-  const virtualHeldInTaskIds = virtualTaskIds(input.heldInTaskIds, input.baselineHeldInRuns.length);
-  const virtualHeldOutTaskIds = virtualTaskIds(input.heldOutTaskIds, input.baselineHeldOutRuns.length);
-  const baselineHeldInSummary = summarizePromptAcceptancePartition(baselineHeldIn, virtualHeldInTaskIds);
-  const baselineHeldOutSummary = summarizePromptAcceptancePartition(baselineHeldOut, virtualHeldOutTaskIds);
-  const heldInPassRateNoiseBand = input.heldInPassRateNoiseBand ?? promptAcceptanceNoiseBand({
-    sampleSize: baselineHeldInSummary.eligible,
-    passRate: baselineHeldInSummary.passEligibleRate,
-    baselineRunCount: 1,
-  });
-  const heldOutPassRateNoiseBand = input.heldOutPassRateNoiseBand ?? promptAcceptanceNoiseBand({
-    sampleSize: baselineHeldOutSummary.eligible,
-    passRate: baselineHeldOutSummary.passEligibleRate,
-    baselineRunCount: 1,
-  });
-  const acceptance = decidePromptAcceptance({
-    runId: input.runId,
-    roundId: input.roundId,
-    candidateCommitSha: input.candidatePromptId,
-    previousLastKeptCommitSha: input.baselinePromptId,
-    originalCommitSha: input.baselinePromptId,
-    heldInTaskIds: virtualHeldInTaskIds,
-    heldOutTaskIds: virtualHeldOutTaskIds,
-    previousHeldInReferencePassEligibleRate: baselineHeldInSummary.passEligibleRate,
-    originalHeldOutPassEligibleRate: baselineHeldOutSummary.passEligibleRate,
-    heldInPassRateNoiseBand,
-    heldOutPassRateNoiseBand,
-    originalEvents: baselineHeldOut,
-    lastKeptEvents: baselineHeldIn,
-    candidateEvents: [...candidateHeldIn, ...candidateHeldOut],
-    rewardHackScan: { decision: 'clean' },
-  });
-  const heldIn = pairedPartitionSummary(input.baselineHeldInRuns, input.candidateHeldInRuns, input.heldInTaskIds);
-  const heldOut = pairedPartitionSummary(input.baselineHeldOutRuns, input.candidateHeldOutRuns, input.heldOutTaskIds);
+  assertSameRunCount(input.baselineRuns, input.candidateRuns);
+  const reps = input.baselineRuns.length;
+  const taskIds = [...input.evaluationTaskIds];
+  const baseline = summarizeArm(input.baselineRuns, taskIds, reps);
+  const candidate = summarizeArm(input.candidateRuns, taskIds, reps);
+  const taskLevel = summarizeTasks(input.baselineRuns, input.candidateRuns, taskIds, reps);
+  const pairedAttempts = summarizeAttemptPairs(input.baselineRuns, input.candidateRuns, taskIds);
+  const { decision, reason } = decide(taskLevel, baseline, candidate);
+
   return {
     runId: input.runId,
     roundId: input.roundId,
     baselinePromptId: input.baselinePromptId,
     candidatePromptId: input.candidatePromptId,
-    heldInReps: input.baselineHeldInRuns.length,
-    heldOutReps: input.baselineHeldOutRuns.length,
-    heldInPassRateNoiseBand,
-    heldOutPassRateNoiseBand,
-    acceptance,
-    paired: {
-      heldIn,
-      heldOut,
-      overall: combinePairedSummaries(heldIn, heldOut),
-    },
+    taskCount: taskIds.length,
+    reps,
+    ...(input.budgetMs !== undefined ? { budgetMs: input.budgetMs } : {}),
+    decision,
+    reason,
+    baseline,
+    candidate,
+    outcomes: { baseline, candidate },
+    taskLevel,
+    pairedAttempts,
   };
 }
 
@@ -248,43 +260,34 @@ export async function runPromptAbComparison(input: RunPromptAbComparisonInput): 
   const reps = input.reps ?? 3;
   assertPositiveInt('reps', reps);
   if (input.maxConcurrency !== undefined) assertPositiveInt('maxConcurrency', input.maxConcurrency);
-  const baselineHeldInRuns: FixedPromptTaskWalEvent[][] = [];
-  const baselineHeldOutRuns: FixedPromptTaskWalEvent[][] = [];
-  const candidateHeldInRuns: FixedPromptTaskWalEvent[][] = [];
-  const candidateHeldOutRuns: FixedPromptTaskWalEvent[][] = [];
+  const baselineRuns: FixedPromptTaskWalEvent[][] = [];
+  const candidateRuns: FixedPromptTaskWalEvent[][] = [];
+
   for (let rep = 0; rep < reps; rep += 1) {
-    baselineHeldInRuns.push(await runComparisonPartition({
-      ...input,
-      promptPath: input.baselinePromptPath,
-      promptLabel: 'baseline',
-      partitionLabel: 'held-in',
-      tasks: input.heldInTasks,
-      rep,
-    }));
-    baselineHeldOutRuns.push(await runComparisonPartition({
-      ...input,
-      promptPath: input.baselinePromptPath,
-      promptLabel: 'baseline',
-      partitionLabel: 'held-out',
-      tasks: input.heldOutTasks,
-      rep,
-    }));
-    candidateHeldInRuns.push(await runComparisonPartition({
-      ...input,
-      promptPath: input.candidatePromptPath,
-      promptLabel: 'candidate',
-      partitionLabel: 'held-in',
-      tasks: input.heldInTasks,
-      rep,
-    }));
-    candidateHeldOutRuns.push(await runComparisonPartition({
-      ...input,
-      promptPath: input.candidatePromptPath,
-      promptLabel: 'candidate',
-      partitionLabel: 'held-out',
-      tasks: input.heldOutTasks,
-      rep,
-    }));
+    const baselineFirst = rep % 2 === 0;
+    const runBaseline = async () => {
+      baselineRuns[rep] = await runComparisonArm({
+        ...input,
+        promptPath: input.baselinePromptPath,
+        promptLabel: 'baseline',
+        rep,
+      });
+    };
+    const runCandidate = async () => {
+      candidateRuns[rep] = await runComparisonArm({
+        ...input,
+        promptPath: input.candidatePromptPath,
+        promptLabel: 'candidate',
+        rep,
+      });
+    };
+    if (baselineFirst) {
+      await runBaseline();
+      await runCandidate();
+    } else {
+      await runCandidate();
+      await runBaseline();
+    }
   }
 
   return summarizePromptAbComparison({
@@ -292,14 +295,10 @@ export async function runPromptAbComparison(input: RunPromptAbComparisonInput): 
     roundId: 'ab-summary',
     baselinePromptId: 'maka-baseline',
     candidatePromptId: 'opencode-default',
-    heldInTaskIds: input.heldInTasks.map((task) => task.id),
-    heldOutTaskIds: input.heldOutTasks.map((task) => task.id),
-    baselineHeldInRuns,
-    baselineHeldOutRuns,
-    candidateHeldInRuns,
-    candidateHeldOutRuns,
-    ...(input.heldInPassRateNoiseBand !== undefined ? { heldInPassRateNoiseBand: input.heldInPassRateNoiseBand } : {}),
-    ...(input.heldOutPassRateNoiseBand !== undefined ? { heldOutPassRateNoiseBand: input.heldOutPassRateNoiseBand } : {}),
+    evaluationTaskIds: input.evaluationTasks.map((task) => task.id),
+    baselineRuns,
+    candidateRuns,
+    ...(input.budgetMs !== undefined ? { budgetMs: input.budgetMs } : {}),
   });
 }
 
@@ -307,22 +306,29 @@ export function renderPromptAbComparisonMarkdown(summary: PromptAbComparisonSumm
   const lines = [
     '# Prompt A/B Comparison',
     '',
-    `- baseline: ${summary.baselinePromptId}`,
-    `- candidate: ${summary.candidatePromptId}`,
-    `- reps: held-in=${summary.heldInReps}, held-out=${summary.heldOutReps}`,
-    `- decision: ${summary.acceptance.decision} (${summary.acceptance.reason})`,
-    `- held-in pass_eligible_rate: baseline=${rate(summary.acceptance.metrics.lastKept.heldIn.passEligibleRate)}, candidate=${rate(summary.acceptance.metrics.candidate.heldIn.passEligibleRate)}, noise=${rate(summary.heldInPassRateNoiseBand)}`,
-    `- held-out pass_eligible_rate: baseline=${rate(summary.acceptance.metrics.original.heldOut.passEligibleRate)}, candidate=${rate(summary.acceptance.metrics.candidate.heldOut.passEligibleRate)}, noise=${rate(summary.heldOutPassRateNoiseBand)}`,
-    `- paired held-in: ${pairedLine(summary.paired.heldIn)}`,
-    `- paired held-out: ${pairedLine(summary.paired.heldOut)}`,
-    `- paired overall: ${pairedLine(summary.paired.overall)}`,
+    `- Baseline A: ${summary.baselinePromptId}`,
+    `- Candidate B: ${summary.candidatePromptId}`,
+    `- Evaluation tasks: ${summary.taskCount}`,
+    `- Reps: ${summary.reps}`,
+    `- Decision: ${decisionLabel(summary.decision)} (${summary.reason})`,
+    `- Budget: ${summary.budgetMs !== undefined ? `${Math.round(summary.budgetMs / 1000)}s task budget` : 'not recorded'}`,
+    `- Evaluation pass rate: A=${summary.baseline.passed}/${summary.baseline.valid} = ${rate(summary.baseline.passRate)}, B=${summary.candidate.passed}/${summary.candidate.valid} = ${rate(summary.candidate.passRate)}`,
+    `- Task-level delta: mean=${rate(summary.taskLevel.meanPassRateDelta)}, median=${rate(summary.taskLevel.medianPassRateDelta)}, wins=${summary.taskLevel.wins}, losses=${summary.taskLevel.losses}, ties=${summary.taskLevel.ties}, missing=${summary.taskLevel.missingTaskIds.length}`,
+    `- Attempt-pair auxiliary: wins=${summary.pairedAttempts.wins}, losses=${summary.pairedAttempts.losses}, ties=${summary.pairedAttempts.ties}, missing=${summary.pairedAttempts.missingPairIds.length}`,
+    `- Budget outcomes: A timed_out=${summary.outcomes.baseline.budgetExhausted}, B timed_out=${summary.outcomes.candidate.budgetExhausted}`,
+    `- Infra outcomes: A infra_failed=${summary.outcomes.baseline.infraFailed}, B infra_failed=${summary.outcomes.candidate.infraFailed}; A plumbing_failed=${summary.outcomes.baseline.plumbingFailed}, B plumbing_failed=${summary.outcomes.candidate.plumbingFailed}`,
+    '',
+    '## Limitation',
+    '',
+    'This result is scoped to the recorded task budget. Timeouts are budget outcomes, not infrastructure failures; improvements that only appear with longer trajectories require a separate long-task sensitivity slice.',
     '',
   ];
-  if (summary.paired.overall.lossTaskIds.length > 0) {
-    lines.push('## losses', '', ...summary.paired.overall.lossTaskIds.map((taskId) => `- ${taskId}`), '');
+  if (summary.taskLevel.missingTaskIds.length > 0) {
+    lines.push('## Missing Tasks', '', ...summary.taskLevel.missingTaskIds.map((taskId) => `- ${taskId}`), '');
   }
-  if (summary.paired.overall.missingPairIds.length > 0) {
-    lines.push('## missing pairs', '', ...summary.paired.overall.missingPairIds.map((taskId) => `- ${taskId}`), '');
+  const losses = summary.taskLevel.tasks.filter((task) => task.outcome === 'baseline_win');
+  if (losses.length > 0) {
+    lines.push('## B Losses', '', ...losses.map((task) => `- ${task.taskId}: delta=${rate(task.passRateDelta)}`), '');
   }
   return `${lines.join('\n')}\n`;
 }
@@ -366,18 +372,226 @@ function summarizeConcurrencyLevel(
   concurrency: number,
   events: readonly FixedPromptTaskWalEvent[],
 ): PromptAbConcurrencyLevelSummary {
-  const timed = events.filter((event) => event.type !== 'task_infra_failed');
+  const timed = events.filter((event) => event.type !== 'task_infra_failed' && event.type !== 'task_budget_exhausted');
   const durations = timed.map((event) => event.durationMs);
   return {
     concurrency,
     attempts: events.length,
     completed: events.filter((event) => event.type === 'task_completed').length,
+    budgetExhausted: events.filter((event) => event.type === 'task_budget_exhausted').length,
     infraFailed: events.filter((event) => event.type === 'task_infra_failed').length,
     plumbingFailed: events.filter((event) => event.type === 'task_plumbing_failed').length,
     totalCostUsd: sum(timed.map((event) => event.tokenSummary.costUsd)),
     meanDurationMs: durations.length > 0 ? sum(durations) / durations.length : null,
     maxDurationMs: durations.length > 0 ? Math.max(...durations) : null,
   };
+}
+
+function summarizeArm(
+  runs: readonly (readonly FixedPromptTaskWalEvent[])[],
+  taskIds: readonly string[],
+  reps: number,
+): PromptAbArmSummary {
+  const attempts = taskIds.length * reps;
+  const events = taskIds.flatMap((taskId) => runs.map((run) => run.find((event) => event.taskId === taskId)));
+  const observed = events.filter((event): event is FixedPromptTaskWalEvent => event !== undefined);
+  const valid = observed.filter(isValidBudgetedOutcome);
+  const passed = valid.filter((event) => event.passed).length;
+  const durations = valid
+    .filter((event) => event.type !== 'task_budget_exhausted')
+    .map((event) => event.durationMs);
+  return {
+    attempts,
+    observed: observed.length,
+    valid: valid.length,
+    passed,
+    passRate: valid.length > 0 ? passed / valid.length : null,
+    completed: observed.filter((event) => event.type === 'task_completed').length,
+    budgetExhausted: observed.filter((event) => event.type === 'task_budget_exhausted').length,
+    infraFailed: observed.filter((event) => event.type === 'task_infra_failed').length,
+    plumbingFailed: observed.filter((event) => event.type === 'task_plumbing_failed').length,
+    missing: attempts - observed.length,
+    coverageRate: attempts > 0 ? valid.length / attempts : 1,
+    totalCostUsd: sum(valid.filter((event) => event.type !== 'task_budget_exhausted').map((event) => event.tokenSummary.costUsd)),
+    meanDurationMs: durations.length > 0 ? sum(durations) / durations.length : null,
+  };
+}
+
+function summarizeTasks(
+  baselineRuns: readonly (readonly FixedPromptTaskWalEvent[])[],
+  candidateRuns: readonly (readonly FixedPromptTaskWalEvent[])[],
+  taskIds: readonly string[],
+  reps: number,
+): PromptAbTaskLevelSummary {
+  const tasks = taskIds.map((taskId) => summarizeTask(taskId, baselineRuns, candidateRuns, reps));
+  const comparable = tasks.filter((task) => task.passRateDelta !== null);
+  const deltas = comparable.map((task) => task.passRateDelta as number);
+  return {
+    comparableTasks: comparable.length,
+    wins: comparable.filter((task) => task.outcome === 'candidate_win').length,
+    losses: comparable.filter((task) => task.outcome === 'baseline_win').length,
+    ties: comparable.filter((task) => task.outcome === 'tie').length,
+    missingTaskIds: tasks.filter((task) => task.outcome === 'missing').map((task) => task.taskId),
+    meanPassRateDelta: deltas.length > 0 ? sum(deltas) / deltas.length : null,
+    medianPassRateDelta: median(deltas),
+    tasks,
+  };
+}
+
+function summarizeTask(
+  taskId: string,
+  baselineRuns: readonly (readonly FixedPromptTaskWalEvent[])[],
+  candidateRuns: readonly (readonly FixedPromptTaskWalEvent[])[],
+  reps: number,
+): PromptAbTaskComparison {
+  const baseline = summarizeTaskArm(taskId, baselineRuns, reps);
+  const candidate = summarizeTaskArm(taskId, candidateRuns, reps);
+  const passRateDelta = baseline.passRate !== null && candidate.passRate !== null
+    ? candidate.passRate - baseline.passRate
+    : null;
+  let outcome: PromptAbTaskComparison['outcome'] = 'missing';
+  if (passRateDelta !== null) {
+    outcome = passRateDelta > 0 ? 'candidate_win' : passRateDelta < 0 ? 'baseline_win' : 'tie';
+  }
+  return { taskId, baseline, candidate, passRateDelta, outcome };
+}
+
+function summarizeTaskArm(
+  taskId: string,
+  runs: readonly (readonly FixedPromptTaskWalEvent[])[],
+  reps: number,
+): PromptAbTaskArmSummary {
+  const observed = runs
+    .map((run) => run.find((event) => event.taskId === taskId))
+    .filter((event): event is FixedPromptTaskWalEvent => event !== undefined);
+  const valid = observed.filter(isValidBudgetedOutcome);
+  const passed = valid.filter((event) => event.passed).length;
+  return {
+    observed: observed.length,
+    valid: valid.length,
+    passed,
+    passRate: valid.length > 0 ? passed / valid.length : null,
+    completed: observed.filter((event) => event.type === 'task_completed').length,
+    budgetExhausted: observed.filter((event) => event.type === 'task_budget_exhausted').length,
+    infraFailed: observed.filter((event) => event.type === 'task_infra_failed').length,
+    plumbingFailed: observed.filter((event) => event.type === 'task_plumbing_failed').length,
+    missing: reps - observed.length,
+  };
+}
+
+function summarizeAttemptPairs(
+  baselineRuns: readonly (readonly FixedPromptTaskWalEvent[])[],
+  candidateRuns: readonly (readonly FixedPromptTaskWalEvent[])[],
+  taskIds: readonly string[],
+): PromptAbAttemptPairSummary {
+  const missingPairIds: string[] = [];
+  let observedPairs = 0;
+  let wins = 0;
+  let losses = 0;
+  let ties = 0;
+  for (let rep = 0; rep < baselineRuns.length; rep += 1) {
+    const baselineByTask = new Map((baselineRuns[rep] ?? []).map((event) => [event.taskId, event]));
+    const candidateByTask = new Map((candidateRuns[rep] ?? []).map((event) => [event.taskId, event]));
+    for (const taskId of taskIds) {
+      const pairId = `${taskId}#r${rep}`;
+      const baseline = baselineByTask.get(taskId);
+      const candidate = candidateByTask.get(taskId);
+      if (!baseline || !candidate || !isValidBudgetedOutcome(baseline) || !isValidBudgetedOutcome(candidate)) {
+        missingPairIds.push(pairId);
+        continue;
+      }
+      observedPairs += 1;
+      if (candidate.passed === baseline.passed) {
+        ties += 1;
+      } else if (candidate.passed) {
+        wins += 1;
+      } else {
+        losses += 1;
+      }
+    }
+  }
+  return {
+    pairs: taskIds.length * baselineRuns.length,
+    observedPairs,
+    wins,
+    losses,
+    ties,
+    missingPairIds,
+  };
+}
+
+function decide(
+  taskLevel: PromptAbTaskLevelSummary,
+  baseline: PromptAbArmSummary,
+  candidate: PromptAbArmSummary,
+): { decision: PromptAbDecision; reason: string } {
+  const coverage = Math.min(baseline.coverageRate, candidate.coverageRate);
+  if (coverage < 0.9) return { decision: 'inconclusive', reason: 'low_effective_coverage' };
+  if (candidate.budgetExhausted !== baseline.budgetExhausted) {
+    return { decision: 'inconclusive', reason: 'asymmetric_budget_exhaustion' };
+  }
+  const meanDelta = taskLevel.meanPassRateDelta ?? 0;
+  if (taskLevel.wins > taskLevel.losses && meanDelta > 0) {
+    return { decision: 'candidate_better', reason: 'task_level_delta_positive' };
+  }
+  if (taskLevel.losses > taskLevel.wins && meanDelta < 0) {
+    return { decision: 'baseline_better', reason: 'task_level_delta_negative' };
+  }
+  return { decision: 'inconclusive', reason: 'task_level_delta_tied' };
+}
+
+async function runComparisonArm(
+  input: RunPromptAbComparisonInput & {
+    promptPath: string;
+    promptLabel: string;
+    rep: number;
+  },
+): Promise<FixedPromptTaskWalEvent[]> {
+  const roundId = `ab-${input.promptLabel}-r${input.rep}`;
+  const result = await runFixedPromptController({
+    runId: input.runId,
+    roundId,
+    config: input.config,
+    systemPromptPath: input.promptPath,
+    resultsJsonlPath: input.resultsJsonlPath,
+    resultsTsvPath: `${input.resultsJsonlPath}.${roundId}.tsv`,
+    tasks: input.evaluationTasks,
+    harborRunner: input.harborRunner,
+    ...(input.maxConcurrency !== undefined ? { maxConcurrency: input.maxConcurrency } : {}),
+    ...(input.now ? { now: input.now } : {}),
+    ...(input.newId ? { newId: input.newId } : {}),
+  });
+  return result.events;
+}
+
+function isValidBudgetedOutcome(
+  event: FixedPromptTaskWalEvent,
+): event is Extract<FixedPromptTaskWalEvent, { type: 'task_completed' | 'task_budget_exhausted' }> {
+  return event.type === 'task_completed' || event.type === 'task_budget_exhausted';
+}
+
+function decisionLabel(decision: PromptAbDecision): string {
+  switch (decision) {
+    case 'candidate_better':
+      return 'B better';
+    case 'baseline_better':
+      return 'A better';
+    case 'inconclusive':
+      return 'inconclusive';
+  }
+}
+
+function rate(value: number | null): string {
+  if (value === null) return 'null';
+  return String(Math.round(value * 10_000) / 10_000);
+}
+
+function median(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) return sorted[mid]!;
+  return (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
 function sum(values: readonly number[]): number {
@@ -392,130 +606,10 @@ function assertZeroToOne(name: string, value: number): number {
 }
 
 function assertSameRunCount(
-  partitionName: string,
   baselineRuns: readonly unknown[],
   candidateRuns: readonly unknown[],
 ): void {
   if (baselineRuns.length !== candidateRuns.length) {
-    throw new Error(`${partitionName} baseline and candidate runs must have the same rep count`);
+    throw new Error('baseline and candidate runs must have the same rep count');
   }
-}
-
-async function runComparisonPartition(
-  input: RunPromptAbComparisonInput & {
-    promptPath: string;
-    promptLabel: string;
-    partitionLabel: string;
-    tasks: readonly FixedPromptTask[];
-    rep: number;
-  },
-): Promise<FixedPromptTaskWalEvent[]> {
-  const roundId = `ab-${input.promptLabel}-${input.partitionLabel}-r${input.rep}`;
-  const result = await runFixedPromptController({
-    runId: input.runId,
-    roundId,
-    config: input.config,
-    systemPromptPath: input.promptPath,
-    resultsJsonlPath: input.resultsJsonlPath,
-    resultsTsvPath: `${input.resultsJsonlPath}.${roundId}.tsv`,
-    tasks: input.tasks,
-    harborRunner: input.harborRunner,
-    ...(input.maxConcurrency !== undefined ? { maxConcurrency: input.maxConcurrency } : {}),
-    ...(input.now ? { now: input.now } : {}),
-    ...(input.newId ? { newId: input.newId } : {}),
-  });
-  return result.events;
-}
-
-function virtualizeRuns(runs: readonly (readonly FixedPromptTaskWalEvent[])[]): FixedPromptTaskWalEvent[] {
-  return runs.flatMap((events, rep) => events.map((event) => ({
-    ...event,
-    taskId: virtualTaskId(event.taskId, rep),
-    roundId: `${event.roundId}-r${rep}`,
-  })));
-}
-
-function pairedLine(summary: PromptAbPairedPartitionSummary): string {
-  return [
-    `wins=${summary.wins}`,
-    `losses=${summary.losses}`,
-    `ties=${summary.ties}`,
-    `missing=${summary.missingPairIds.length}`,
-  ].join(', ');
-}
-
-function rate(value: number | null): string {
-  if (value === null) return 'null';
-  return String(Math.round(value * 10_000) / 10_000);
-}
-
-function virtualTaskIds(taskIds: readonly string[], reps: number): string[] {
-  const ids: string[] = [];
-  for (let rep = 0; rep < reps; rep += 1) {
-    for (const taskId of taskIds) ids.push(virtualTaskId(taskId, rep));
-  }
-  return ids;
-}
-
-function virtualTaskId(taskId: string, rep: number): string {
-  return `${taskId}#r${rep}`;
-}
-
-function pairedPartitionSummary(
-  baselineRuns: readonly (readonly FixedPromptTaskWalEvent[])[],
-  candidateRuns: readonly (readonly FixedPromptTaskWalEvent[])[],
-  taskIds: readonly string[],
-): PromptAbPairedPartitionSummary {
-  const winTaskIds: string[] = [];
-  const lossTaskIds: string[] = [];
-  const missingPairIds: string[] = [];
-  let observedPairs = 0;
-  let ties = 0;
-  for (let rep = 0; rep < baselineRuns.length; rep += 1) {
-    const baselineByTask = new Map((baselineRuns[rep] ?? []).map((event) => [event.taskId, event]));
-    const candidateByTask = new Map((candidateRuns[rep] ?? []).map((event) => [event.taskId, event]));
-    for (const taskId of taskIds) {
-      const pairId = virtualTaskId(taskId, rep);
-      const baseline = baselineByTask.get(taskId);
-      const candidate = candidateByTask.get(taskId);
-      if (!baseline || !candidate) {
-        missingPairIds.push(pairId);
-        continue;
-      }
-      observedPairs += 1;
-      if (candidate.passed === baseline.passed) {
-        ties += 1;
-      } else if (candidate.passed) {
-        winTaskIds.push(pairId);
-      } else {
-        lossTaskIds.push(pairId);
-      }
-    }
-  }
-  return {
-    pairs: taskIds.length * baselineRuns.length,
-    observedPairs,
-    wins: winTaskIds.length,
-    losses: lossTaskIds.length,
-    ties,
-    winTaskIds,
-    lossTaskIds,
-    missingPairIds,
-  };
-}
-
-function combinePairedSummaries(
-  heldIn: PromptAbPairedPartitionSummary,
-  heldOut: PromptAbPairedPartitionSummary,
-): PromptAbPairedPartitionSummary {
-  return {
-    pairs: heldIn.pairs + heldOut.pairs,
-    observedPairs: heldIn.observedPairs + heldOut.observedPairs,
-    wins: heldIn.wins + heldOut.wins,
-    losses: heldIn.losses + heldOut.losses,
-    ties: heldIn.ties + heldOut.ties,
-    winTaskIds: [...heldIn.winTaskIds, ...heldOut.winTaskIds],
-    lossTaskIds: [...heldIn.lossTaskIds, ...heldOut.lossTaskIds],
-    missingPairIds: [...heldIn.missingPairIds, ...heldOut.missingPairIds],
-  };
 }

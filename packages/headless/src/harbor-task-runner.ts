@@ -4,7 +4,9 @@ import { writeFile } from 'node:fs/promises';
 import { basename, delimiter, join } from 'node:path';
 import { promisify } from 'node:util';
 import { validateHarborCellOutput, type HarborCellOutput } from './cell-output.js';
-import type {
+import {
+  FixedPromptBudgetExhaustedError,
+  type FixedPromptBudgetExhaustedError as FixedPromptBudgetExhaustedErrorType,
   HarborTaskRunInput,
   HarborTaskRunOutput,
   HarborTaskRunner,
@@ -86,6 +88,8 @@ export interface HarborRunResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+  timedOut?: boolean;
+  signal?: string;
 }
 
 export type HarborProcessRunner = (request: HarborRunRequest) => Promise<HarborRunResult>;
@@ -147,7 +151,14 @@ export function createHarborTaskRunner(options: HarborTaskRunnerOptions): Harbor
         env: { PYTHONPATH: pythonPath, ...(hostProviderEnv ?? {}) },
       });
     } catch (error) {
+      if (isBudgetExhaustedError(error)) throw error;
       throw new HarborInfraError(`harbor run failed to launch for task ${input.task.id}`, errorText(error));
+    }
+    if (result.timedOut) {
+      throw new FixedPromptBudgetExhaustedError(
+        `harbor run timed out for task ${input.task.id}`,
+        tail(result.stderr || result.stdout),
+      );
     }
     if (result.exitCode !== 0) {
       throw new HarborInfraError(
@@ -360,9 +371,22 @@ const defaultHarborProcessRunner: HarborProcessRunner = async (request) => {
       exitCode,
       stdout: String((error as { stdout?: unknown }).stdout ?? ''),
       stderr: String((error as { stderr?: unknown }).stderr ?? '') || errorText(error),
+      timedOut: isExecFileTimeout(error),
+      ...(typeof (error as { signal?: unknown }).signal === 'string' ? { signal: (error as { signal: string }).signal } : {}),
     };
   }
 };
+
+function isExecFileTimeout(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const record = error as { killed?: unknown; signal?: unknown };
+  return record.killed === true && record.signal === 'SIGKILL';
+}
+
+function isBudgetExhaustedError(error: unknown): error is FixedPromptBudgetExhaustedErrorType {
+  return error instanceof FixedPromptBudgetExhaustedError
+    || (typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'FixedPromptBudgetExhaustedError');
+}
 
 /** Strip a model's own provider prefix so the native provider receives a bare id
  * ("deepseek/deepseek-v4-flash" + provider "deepseek" -> "deepseek-v4-flash"). A

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { tokenSummary } from './helpers/cell-output-fixtures.js';
 import type { HarborCellOutput } from '../cell-output.js';
-import type { HarborTaskRunInput } from '../fixed-prompt-controller.js';
+import { FixedPromptBudgetExhaustedError, type HarborTaskRunInput } from '../fixed-prompt-controller.js';
 import {
   buildHarborJobConfig,
   createHarborTaskRunner,
@@ -359,6 +359,25 @@ describe('createHarborTaskRunner timeout', () => {
       });
       await runner(runInput());
       assert.equal(seenTimeout, 1234);
+    });
+  });
+
+  test('throws a budget exhaustion error when the harbor process times out', async () => {
+    await withRun(async ({ jobsDir, repo }) => {
+      const runner = createHarborTaskRunner({
+        makaRepoPath: repo,
+        jobsDir,
+        model: 'deepseek/deepseek-v4-flash',
+        harborTimeoutMs: 600_000,
+        runHarbor: async () => ({
+          exitCode: 1,
+          stdout: '',
+          stderr: 'killed after timeout',
+          timedOut: true,
+          signal: 'SIGKILL',
+        }),
+      });
+      await assert.rejects(runner(runInput()), FixedPromptBudgetExhaustedError);
     });
   });
 });

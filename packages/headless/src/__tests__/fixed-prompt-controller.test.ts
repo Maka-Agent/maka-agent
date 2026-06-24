@@ -6,6 +6,7 @@ import { describe, test } from 'node:test';
 import type { Config } from '../contracts.js';
 import { tokenSummary } from './helpers/cell-output-fixtures.js';
 import {
+  FixedPromptBudgetExhaustedError,
   hashSystemPrompt,
   readHarborTaskRunOutput,
   runFixedPromptController,
@@ -301,6 +302,38 @@ describe('fixed prompt controller', () => {
       assert.equal(attempts, 2);
       assert.equal(result.events.length, 1);
       assert.equal(result.events[0]?.type, 'task_infra_failed');
+    });
+  });
+
+  test('records task_budget_exhausted without retrying budget errors', async () => {
+    await withDir(async (dir) => {
+      const systemPromptPath = join(dir, 'system_prompt.md');
+      const resultsJsonlPath = join(dir, 'results.jsonl');
+      await writeFile(systemPromptPath, 'fixed prompt\n', 'utf8');
+
+      let attempts = 0;
+      const result = await runFixedPromptController({
+        runId: 'run-1',
+        roundId: 'round-1',
+        config,
+        systemPromptPath,
+        resultsJsonlPath,
+        resultsTsvPath: join(dir, 'results.tsv'),
+        tasks: [{ id: 'task-a', path: '/bench/task-a' }],
+        harborRunner: async () => {
+          attempts += 1;
+          throw new FixedPromptBudgetExhaustedError('harbor run timed out after 600s');
+        },
+        now: () => 100,
+        newId: idFactory(),
+      });
+
+      assert.equal(attempts, 1);
+      assert.equal(result.events.length, 1);
+      assert.equal(result.events[0]?.type, 'task_budget_exhausted');
+      assert.equal(result.events[0]?.eligible, true);
+      assert.equal(result.events[0]?.passed, false);
+      assert.match(await readFile(resultsJsonlPath, 'utf8'), /"type":"task_budget_exhausted"/);
     });
   });
 
