@@ -132,8 +132,13 @@ describe('local MEMORY.md Settings UI contract', () => {
     assert.match(src, /\.\.\.entry\.tags/);
     assert.match(src, /memoryOriginLabel\(entry\.origin\)/);
     assert.match(src, /无匹配条目/);
-    assert.match(src, /<div className="settingsMemoryEntryList" role="list" aria-label=\{`\$\{props\.title\}列表`\}>/);
-    assert.match(src, /<article className="settingsMemoryEntryCard" role="listitem" key=\{entry\.id\}>/);
+    // PR-MEMORY-ENTRY-LIST-A11Y-0 (round 18/30): list container
+    // switched from `<div role="list">` to semantic `<ul>`; rows
+    // wrapped in `<li>` (the inner `<article>` per row stays
+    // because articles are valid sectioning content inside list
+    // items). aria-label is preserved.
+    assert.match(src, /<ul className="settingsMemoryEntryList" aria-label=\{`\$\{props\.title\}列表`\}>/);
+    assert.match(src, /<li key=\{entry\.id\}>[\s\S]*?<article className="settingsMemoryEntryCard">/);
     assert.match(src, /<div className="settingsMemoryEntryActions" role="group" aria-label=\{`\$\{entry\.title\}记忆操作`\}>/);
     assert.doesNotMatch(src, /<div className="settingsMemoryEntryActions">\s*\{props\.onCopyReference && \(/);
   });
@@ -635,8 +640,13 @@ describe('local MEMORY.md Settings UI contract', () => {
     assert.match(pageBlock, /localMemoryBackupKindLabel\(backup\.kind\)/);
     assert.match(pageBlock, /localMemoryBackupSummary\(backup\)/);
     assert.match(pageBlock, /const backupCandidateLabel = `\$\{localMemoryBackupKindLabel\(backup\.kind\)\} · \$\{localMemoryBackupSummary\(backup\)\}`/);
-    assert.match(pageBlock, /<div role="list" aria-label="本地记忆备份候选列表">/);
-    assert.match(pageBlock, /className="settingsMemoryBackupCandidate" role="listitem"/);
+    // PR-MEMORY-BACKUP-LIST-A11Y-0 (round 16/30): list container
+    // switched from `<div role="list">` + `<span role="listitem">`
+    // to semantic <ul>/<li>. The behavioral pins (aria-label on
+    // the list, className on each row) are preserved — the
+    // assertions now match the semantic markup.
+    assert.match(pageBlock, /<ul className="settingsMemoryBackupCandidates" aria-label="本地记忆备份候选列表">/);
+    assert.match(pageBlock, /className="settingsMemoryBackupCandidate"/);
     assert.match(pageBlock, /aria-label=\{`打开备份候选 \$\{backupCandidateLabel\}`\}/);
     assert.match(pageBlock, /aria-label=\{`恢复备份候选 \$\{backupCandidateLabel\}`\}/);
     assert.match(pageBlock, /aria-label=\{`复制备份候选引用 \$\{backupCandidateLabel\}`\}/);

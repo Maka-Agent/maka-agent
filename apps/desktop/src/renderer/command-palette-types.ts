@@ -5,7 +5,7 @@
  * main-process tsconfig that does NOT compile JSX.
  */
 
-import type { LucideIcon } from 'lucide-react';
+import type { LucideIcon } from '@maka/ui/icons';
 
 export type CommandKind = 'action' | 'session';
 

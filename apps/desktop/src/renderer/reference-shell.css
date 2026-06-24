@@ -24,18 +24,20 @@
      visible (≈#e6e6e6) so the floating content card, skill list and task cards
      read as distinct surfaces like 参考实现 — the old 60% washed them out. */
   --color-border-tertiary: color-mix(in srgb, var(--border) 92%, transparent);
-  --agents-layout-bg: linear-gradient(
-    172deg,
-    var(--color-fill-tertiary, #f9f9f9) 19.61%,
-    var(--color-bg-container, #fff) 81.35%
-  );
+  /* Flat neutral shell/backplate. This must never be a gradient; the
+     white content surface reads through radius + shadow on top. */
+  --agents-layout-bg: var(--surface-canvas);
   --agents-content-area-bg: var(--color-bg-container);
   --agents-fade-bg: var(--agents-content-area-bg);
   /* reference layout-derived values (2026-06-20 WAWQAQ ef6b2852).
      The original 8px/12px we shipped at 7013f0f read too loose vs the
-     real bundle's 4px gap + 6px radius. */
+     real bundle's 4px gap + 6px radius.
+     PR-CHAT-CHROME-FIX-1 (WAWQAQ msg `4a1b8c13`): bumped radius
+     6 → 12 so the floating surface's bottom corners actually read.
+     6px was geometrically present but optically invisible against a
+     same-color shell. */
   --agents-content-area-gap: 4px;
-  --agents-content-area-radius: 6px;
+  --agents-content-area-radius: 12px;
   --settings-nav-row-selected-bg: var(--color-fill-secondary);
 }
 
@@ -78,7 +80,11 @@
 
 .agents-content-area {
   flex: 1 1 auto;
-  margin: var(--agents-content-area-gap) var(--agents-content-area-gap) var(--agents-content-area-gap) 0;
+  /* PR-CHAT-CHROME-FIX-0 (WAWQAQ msg `486b5611`): zero left
+     margin made the content card butt up against the sidebar;
+     gradient-meets-flat seam read as a visible border line. The
+     panel is a floating card — give it a left gap too. */
+  margin: var(--agents-content-area-gap);
   border-radius: var(--agents-content-area-radius);
   background: var(--agents-content-area-bg);
   transition: margin-left 150ms ease-out;
@@ -91,7 +97,10 @@
    still reads as its own canvas. */
 .maka-panel-detail.maka-floating-panel.agents-content-area {
   position: relative;
-  margin: var(--agents-content-area-gap) var(--agents-content-area-gap) var(--agents-content-area-gap) 0;
+  /* PR-CHAT-CHROME-FIX-0 (WAWQAQ msg `486b5611`): symmetric margin
+     so the floating card has a left gap too — see the matching
+     change in `styles.css` `.maka-panel-detail.maka-floating-panel`. */
+  margin: var(--agents-content-area-gap);
   border: 0;
   border-radius: var(--agents-content-area-radius);
   background: var(--agents-content-area-bg);

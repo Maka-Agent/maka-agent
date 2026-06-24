@@ -44,12 +44,13 @@ import {
   FolderOpen,
   Copy,
   Trash2,
-} from 'lucide-react';
+} from '@maka/ui/icons';
 import type {
   ArtifactKind,
   ArtifactRecord,
 } from '@maka/core';
 import {
+  formatRelativeTimestamp,
   generalizedErrorMessageChinese,
   redactSecrets,
 } from '@maka/core';
@@ -68,6 +69,7 @@ import {
   Toolbar,
   ToolbarGroup,
   ToolbarSeparator,
+  formatBytes,
   useToast,
 } from '@maka/ui';
 import { ArtifactPreview } from './artifact-preview';
@@ -445,7 +447,7 @@ export function ArtifactPane(props: { sessionId: string | undefined }) {
                   <span className="maka-artifact-row-name">{record.name}</span>
                   <span className="maka-artifact-row-meta">
                     <span className="maka-artifact-row-size">{formatBytes(record.sizeBytes)}</span>
-                    <span className="maka-artifact-row-time">{formatRelative(record.createdAt)}</span>
+                    <span className="maka-artifact-row-time">{formatRelativeTimestamp(record.createdAt)}</span>
                   </span>
                   {record.status === 'deleted' && (
                     <Badge variant="destructive" className="maka-artifact-row-badge">已删除</Badge>
@@ -604,26 +606,16 @@ function readCollapsed(): boolean {
   return safeLocalStorageGet(COLLAPSE_KEY) === '1';
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
+/* PR-FORMAT-BYTES-DEDUP-0 (round 21/30): the local `formatBytes`
+   was a less-robust variant of the one in `@maka/ui`
+   components.tsx. Removed; we now import the shared helper. */
+
+/* PR-FORMAT-RELATIVE-DEDUP-0 (round 22/30): the local
+   `formatRelative` was a less-feature variant of @maka/core's
+   `formatRelativeTimestamp` — it missed clock-skew handling,
+   the 7-day-then-absolute horizon, and the locale-switching
+   formatter cache. Removed; we import the shared helper. */
 
 function preferredArtifactSelectionId(records: readonly ArtifactRecord[]): string | null {
   return (records.find((record) => record.status !== 'deleted') ?? records[0])?.id ?? null;
-}
-
-const relativeTimeFormat: Intl.RelativeTimeFormat =
-  typeof Intl !== 'undefined'
-    ? new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' })
-    : ({ format: (n: number, u: string) => `${n} ${u}` } as unknown as Intl.RelativeTimeFormat);
-
-function formatRelative(ts: number): string {
-  const diffMs = Date.now() - ts;
-  const diffMinutes = Math.max(1, Math.round(diffMs / 60_000));
-  if (diffMinutes < 60) return relativeTimeFormat.format(-diffMinutes, 'minute');
-  const diffHours = Math.round(diffMinutes / 60);
-  if (diffHours < 24) return relativeTimeFormat.format(-diffHours, 'hour');
-  return relativeTimeFormat.format(-Math.round(diffHours / 24), 'day');
 }

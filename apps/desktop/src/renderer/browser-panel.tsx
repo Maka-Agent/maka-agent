@@ -14,7 +14,7 @@
  * ordinary chat reserves no space.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Globe, RotateCw, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Globe, RotateCw, X } from '@maka/ui/icons';
 import type { BrowserState } from '@maka/core';
 import {
   Button,
@@ -118,6 +118,7 @@ export function BrowserPanel(props: { sessionId: string; hidden: boolean }) {
           variant="quiet"
           size="icon-sm"
           className="maka-browser-navbtn"
+          aria-label="浏览器后退"
           title="后退"
           disabled={!state.canGoBack}
           onClick={() => void window.maka.browser.back(sessionId)}
@@ -129,6 +130,7 @@ export function BrowserPanel(props: { sessionId: string; hidden: boolean }) {
           variant="quiet"
           size="icon-sm"
           className="maka-browser-navbtn"
+          aria-label="浏览器前进"
           title="前进"
           disabled={!state.canGoForward}
           onClick={() => void window.maka.browser.forward(sessionId)}
@@ -140,6 +142,7 @@ export function BrowserPanel(props: { sessionId: string; hidden: boolean }) {
           variant="quiet"
           size="icon-sm"
           className="maka-browser-navbtn"
+          aria-label={state.loading ? '停止加载页面' : '刷新页面'}
           title={state.loading ? '停止' : '刷新'}
           onClick={() =>
             state.loading ? void window.maka.browser.stop(sessionId) : void window.maka.browser.reload(sessionId)
@@ -174,6 +177,7 @@ export function BrowserPanel(props: { sessionId: string; hidden: boolean }) {
           variant="quiet"
           size="icon-sm"
           className="maka-browser-navbtn"
+          aria-label="关闭浏览器页面"
           title="关闭页面"
           onClick={() => void window.maka.browser.close(sessionId)}
         >

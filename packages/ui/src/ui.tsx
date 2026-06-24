@@ -19,15 +19,21 @@ import { ToggleGroup as BaseToggleGroup } from '@base-ui/react/toggle-group';
 import { Tooltip as BaseTooltip } from '@base-ui/react/tooltip';
 import { Select as BaseSelect } from '@base-ui/react/select';
 import { Separator as BaseSeparator } from '@base-ui/react/separator';
-import { Check, ChevronDown, ChevronRight, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, X } from './icons.js';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from './utils.js';
 
 export { cn } from './utils.js';
 
+// PR-UIBUTTON-NAV-SIZE-0 (round 12/30): refactored so each
+// `size` variant owns its h-* / px-* / text-* utilities.
+// Previously these were baked into the base layer, which meant
+// callers couldn't introduce a "let className own layout" size
+// without `!important`. The `nav` size below adds nothing —
+// the consumer's className brings height, padding, font.
 export const buttonVariants = cva(
   [
-    'inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium',
+    'inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-medium',
     'transition-[background,border-color,box-shadow,transform,opacity] duration-150 ease-[var(--ease-maka)]',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
     'active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45',
@@ -45,10 +51,17 @@ export const buttonVariants = cva(
       },
       size: {
         sm: 'h-8 rounded-md px-2.5 text-xs',
-        md: 'h-9 px-3',
-        lg: 'h-10 rounded-lg px-4',
-        icon: 'h-9 w-9 px-0',
-        'icon-sm': 'h-8 w-8 px-0',
+        md: 'h-9 px-3 text-sm',
+        lg: 'h-10 rounded-lg px-4 text-sm',
+        icon: 'h-9 w-9 px-0 text-sm',
+        'icon-sm': 'h-8 w-8 px-0 text-sm',
+        // Bare layout variant. Consumer's className must set
+        // height (or min-height), padding, font-size. Used to
+        // route raw `<button>` tags whose bespoke CSS encodes
+        // tight density that fights the standard size variants
+        // (e.g. `.maka-nav-row` is 30px min-height with 3px 6px
+        // padding — `h-9 px-3` would inflate it).
+        nav: '',
       },
     },
     defaultVariants: {

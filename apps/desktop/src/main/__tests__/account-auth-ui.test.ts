@@ -150,7 +150,10 @@ describe('Account settings credential probe UI', () => {
     assert.match(page, /模型密钥和订阅账号令牌会交给系统安全存储加密保存/);
     assert.match(page, /每个会话都会在本机保留消息、工具调用、权限决策与模式变更记录/);
     assert.match(page, /修改模型密钥、服务地址或默认模型会清掉「已验证」状态/);
-    assert.match(page, /<div className="settingsConnectionList" role="list" aria-label="模型连接列表">/);
+    // PR-CONNECTION-LIST-A11Y-0 (round 17/30): list container
+    // switched from `<div role="list">` to semantic `<ul>`. The
+    // aria-label is preserved.
+    assert.match(page, /<ul className="settingsConnectionList" aria-label="模型连接列表">/);
     assert.match(row, /<div className="settingsConnectionActions" role="group" aria-label=\{`\$\{props\.connection\.name\} 账号操作`\}>/);
     assert.doesNotMatch(row, /<div className="settingsConnectionActions" aria-label=\{`\$\{props\.connection\.name\} 账号操作`\}>/);
     assert.match(connectionStatus, /最近一次测试成功。修改模型密钥、服务地址或默认模型会清掉此状态；发送链路需独立验证/);

@@ -31,30 +31,38 @@ describe('deep research visible surface contract', () => {
   });
 
   it('uses a research-specific empty state with starter prompts', async () => {
+    // PR-UI-LIB-EXTRACT-8 (round 9/10): the two chat empty hero
+    // components and their DeepResearch sections moved out of
+    // `components.tsx` into a sibling `chat-empty-hero.tsx`. The
+    // `<DeepResearchEmptyHero>` reference is still in
+    // `components.tsx` (rendered by ChatView), but the body of
+    // the hero now lives in the new file. Behavioral pins
+    // unchanged — just need to read both files.
     const ui = await readRepo('packages/ui/src/components.tsx');
+    const hero = await readRepo('packages/ui/src/chat-empty-hero.tsx');
 
     assert.match(
       ui,
       /deepResearchActive\s*\?\s*\(\s*<DeepResearchEmptyHero/,
       'an empty deep-research session must not fall back to the generic blank chat hero',
     );
-    assert.match(ui, /DEEP_RESEARCH_STARTER_PROMPTS\.map/);
-    assert.doesNotMatch(ui, /DEEP_RESEARCH_PROMPT_SUGGESTIONS/);
-    assert.match(ui, /固定在只读权限/);
-    assert.match(ui, /DEEP_RESEARCH_WORKFLOW_STEPS\.map/);
-    assert.match(ui, /aria-label="深度研究流程"/);
-    assert.match(ui, /DEEP_RESEARCH_REPORT_SECTIONS\.map/);
-    assert.match(ui, /aria-label="深度研究输出结构"/);
-    assert.match(ui, /输出必须能直接落地/);
-    assert.match(ui, /DEEP_RESEARCH_SCOPE_OPTIONS\.map/);
-    assert.match(ui, /aria-label="深度研究范围"/);
-    assert.match(ui, /默认按标准深度研究/);
-    assert.match(ui, /DEEP_RESEARCH_EVIDENCE_CHECKLIST\.map/);
-    assert.match(ui, /aria-label="深度研究证据清单"/);
-    assert.match(ui, /每次研究都要留证据/);
-    assert.match(ui, /DEEP_RESEARCH_PROGRESS_CHECKPOINTS\.map/);
-    assert.match(ui, /aria-label="深度研究检查点"/);
-    assert.match(ui, /多步研究要按检查点推进/);
+    assert.match(hero, /DEEP_RESEARCH_STARTER_PROMPTS\.map/);
+    assert.doesNotMatch(hero, /DEEP_RESEARCH_PROMPT_SUGGESTIONS/);
+    assert.match(hero, /固定在只读权限/);
+    assert.match(hero, /DEEP_RESEARCH_WORKFLOW_STEPS\.map/);
+    assert.match(hero, /aria-label="深度研究流程"/);
+    assert.match(hero, /DEEP_RESEARCH_REPORT_SECTIONS\.map/);
+    assert.match(hero, /aria-label="深度研究输出结构"/);
+    assert.match(hero, /输出必须能直接落地/);
+    assert.match(hero, /DEEP_RESEARCH_SCOPE_OPTIONS\.map/);
+    assert.match(hero, /aria-label="深度研究范围"/);
+    assert.match(hero, /默认按标准深度研究/);
+    assert.match(hero, /DEEP_RESEARCH_EVIDENCE_CHECKLIST\.map/);
+    assert.match(hero, /aria-label="深度研究证据清单"/);
+    assert.match(hero, /每次研究都要留证据/);
+    assert.match(hero, /DEEP_RESEARCH_PROGRESS_CHECKPOINTS\.map/);
+    assert.match(hero, /aria-label="深度研究检查点"/);
+    assert.match(hero, /多步研究要按检查点推进/);
   });
 
   it('pins deep research starter prompts in the shared core contract', async () => {

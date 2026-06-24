@@ -8,7 +8,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MoreHorizontalIcon,
-} from "lucide-react";
+} from "../icons.js";
 import type * as React from "react";
 
 export function Pagination({
@@ -17,7 +17,7 @@ export function Pagination({
 }: React.ComponentProps<"nav">): React.ReactElement {
   return (
     <nav
-      aria-label="pagination"
+      aria-label="分页"
       className={cn("mx-auto flex w-full justify-center", className)}
       data-slot="pagination"
       {...props}
@@ -84,13 +84,13 @@ export function PaginationPrevious({
 }: React.ComponentProps<typeof PaginationLink>): React.ReactElement {
   return (
     <PaginationLink
-      aria-label="Go to previous page"
+      aria-label="上一页"
       className={cn("max-sm:aspect-square max-sm:p-0", className)}
       size="default"
       {...props}
     >
       <ChevronLeftIcon className="sm:-ms-1" />
-      <span className="max-sm:hidden">Previous</span>
+      <span className="max-sm:hidden">上一页</span>
     </PaginationLink>
   );
 }
@@ -101,12 +101,12 @@ export function PaginationNext({
 }: React.ComponentProps<typeof PaginationLink>): React.ReactElement {
   return (
     <PaginationLink
-      aria-label="Go to next page"
+      aria-label="下一页"
       className={cn("max-sm:aspect-square max-sm:p-0", className)}
       size="default"
       {...props}
     >
-      <span className="max-sm:hidden">Next</span>
+      <span className="max-sm:hidden">下一页</span>
       <ChevronRightIcon className="sm:-me-1" />
     </PaginationLink>
   );
@@ -124,7 +124,7 @@ export function PaginationEllipsis({
       {...props}
     >
       <MoreHorizontalIcon className="size-5 sm:size-4" />
-      <span className="sr-only">More pages</span>
+      <span className="sr-only">更多页码</span>
     </span>
   );
 }

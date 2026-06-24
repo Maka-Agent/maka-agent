@@ -45,7 +45,7 @@
 | Settings IA + Coming Soon copy | ✅（§5 文案契约） |
 | Markdown 渲染 / hljs 调色板 | ✅ |
 | 后端 IPC / runtime / @maka/core 的 token 命名 | ❌（后端 contract 见 @kenji notes/）|
-| 第三方依赖（lucide-react / react-markdown / rehype-highlight）内部样式 | ❌（仅约束其使用方式） |
+| 第三方依赖（@iconify/react / react-markdown / rehype-highlight）内部样式 | ❌（仅约束其使用方式） |
 
 ### 0.4 核心原则
 
@@ -159,11 +159,14 @@ background / foreground / accent (purple) / info (amber) / success (green) / des
 | `--radius-modal` | 8px | Settings / Confirm / Permission modal |
 | 行内代码 | 4px hardcoded | inline `<code>`，不引 token 因为只此一处 |
 | code block | 10px hardcoded | `.maka-code-block` wrapper |
+| 内部 workspace 面板 | 12px hardcoded | `.agents-content-area` / floating card 等"大面"。匹配 macOS 窗口外圆角，让面板有"卡片嵌在 chrome 里"的视觉。这是允许的最大值。 |
 | Pill / chip / round dot | 999px hardcoded | 视觉上必须圆 |
 | `smooth-corners` utility | superellipse（iOS 风） | 选用，浏览器支持自动 fallback |
 
-> 这是有意的反规范：Maka 整体 0px 直角 + 关键交互组件 6/8/10px。新 PR 不要引
-> 入 "更柔和" 的 12/14/16px，那会破坏 sharp 视觉。
+> 这是有意的反规范：Maka 整体 0px 直角 + 关键交互组件 6/8/10px + 大面板上限 12px。
+> 新 PR 不要引入 "更柔和" 的 14/16/18/20px，那会破坏 sharp 视觉。
+> `radius-converge-contract.test.ts` 锁住这条规则：`border-radius` 不准 > 12px
+> （`999px` 圆头例外）。
 
 ### 1.5 间距（Spacing）
 
@@ -216,7 +219,8 @@ Maka 不提供用户可配置的界面密度。新增布局应按具体 surface 
 
 ### 1.9 图标（Iconography）
 
-图标用 `lucide-react`，按**语境分档**，不是全局统一一个尺寸。
+图标由 `@maka/ui/icons` 出口（底层是 Phosphor via Iconify，迁移自 lucide-react；call-site
+API 仍是 Lucide-shaped `<Settings size={16} strokeWidth={1.5} />`），按**语境分档**，不是全局统一一个尺寸。
 
 | 档 | 尺寸 | 设定方式 | 用途 |
 |---|---|---|---|
@@ -280,7 +284,7 @@ Maka 不提供用户可配置的界面密度。新增布局应按具体 surface 
 - **API**：`toast / success / error / info / warning / confirm / dismiss`，通过
   `useToast()` 取，**禁止在 ToastProvider 之外调用**（hook 会显式抛错）。
 - **token**：4 个 variant 颜色绑定 info / success / warning / error；icon 来自
-  lucide-react，`size={16}` 固定。
+  `@maka/ui/icons`（Lucide-shaped API，底层 Phosphor via Iconify），`size={16}` 固定。
 - **ARIA**：`<ol role="region" aria-live="polite" aria-label="Notifications">`
   + 每条 toast `<li>`，dismiss 按钮 `aria-label="Dismiss"`。ConfirmDialog 是
   `role="alertdialog" aria-modal="true"` + `aria-labelledby` + 可选
@@ -1606,7 +1610,7 @@ checklist 仍要勾。
 |---|---|---|
 | react / react-dom | ^19.2.1 | UI |
 | electron | ^39.2.7 | shell |
-| lucide-react | — | icon 唯一来源 |
+| @iconify/react + @iconify-json/ph | — | icon 底层（packages/ui/src/icons.tsx 是唯一接口；call-site 用 `@maka/ui/icons`） |
 | react-markdown + remark-gfm + remark-breaks | — | assistant markdown |
 | rehype-highlight | — | code 高亮 |
 | @fontsource-variable/geist + geist-mono | ^5.2.x | 字体 |

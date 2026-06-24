@@ -7,7 +7,7 @@
 // crashed early just left the user staring at an empty viewport).
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { AlertTriangle, Check, Clipboard, RotateCw } from 'lucide-react';
+import { AlertTriangle, Check, Clipboard, RotateCw } from '@maka/ui/icons';
 import { Button as UiButton, redactSecrets } from '@maka/ui';
 
 type State = {

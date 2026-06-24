@@ -7,7 +7,7 @@
 // already covered.
 
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard, X } from 'lucide-react';
+import { Keyboard, X } from '@maka/ui/icons';
 import { Button, Kbd, useModalA11y } from '@maka/ui';
 
 type Section = {

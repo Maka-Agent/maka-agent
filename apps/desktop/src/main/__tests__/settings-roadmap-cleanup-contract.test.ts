@@ -270,8 +270,12 @@ describe('Settings coming-soon cleanup contract', () => {
     assert.match(healthPage![0], /发送通路以运行态探测结果为准/, 'Health Center must keep validation and operational runtime distinct');
     assert.match(healthPage![0], /健康信号会阻塞发送/, 'Health Center blocker copy should use localized product wording');
     assert.match(healthPage![0], /健康信号会阻塞能力/, 'Health Center capability blocker copy should use localized product wording');
-    assert.match(healthPage![0], /<section aria-label="健康摘要" className="settingsHealthSummary" role="list">/, 'Health Center summary metrics must expose list semantics');
-    assert.match(settings, /<div className="settingsHealthSummaryTile" role="listitem" data-tone=\{props\.tone\} data-empty=\{props\.count === 0\}>/, 'Health Center summary metric tiles must expose listitem semantics');
+    // PR-HEALTH-SUMMARY-LIST-A11Y-0 (round 19/30): semantic
+    // `<ul>` / `<li>` replaces `<section role="list">` +
+    // `<div role="listitem">`. ARIA list semantics still hold
+    // — the elements carry them implicitly.
+    assert.match(healthPage![0], /<ul aria-label="健康摘要" className="settingsHealthSummary">/, 'Health Center summary metrics must expose list semantics');
+    assert.match(settings, /<li className="settingsHealthSummaryTile" data-tone=\{props\.tone\} data-empty=\{props\.count === 0\}>/, 'Health Center summary metric tiles must expose listitem semantics');
     assert.match(healthPage![0], /aria-label=\{`\$\{copy\.label\}健康信号`\}/, 'Health Center section aria labels should not mix English "signals" into Chinese UI');
     assert.match(healthPage![0], /<ul className="settingsHealthSignalList" aria-label=\{`\$\{copy\.label\}健康信号列表`\}>/, 'Health Center signal lists must expose product-scoped accessible names');
     assert.match(healthSignalRow![0], /来源：\{HEALTH_SOURCE_LABEL\[signal\.source\]\}/, 'Health Center row should present localized source labels');

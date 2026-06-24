@@ -1,6 +1,6 @@
 import { StrictMode, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { createRoot } from 'react-dom/client';
-import { CircleGauge, Grid3X3, HelpCircle, MessageCircleQuestion, PanelLeftOpen, Search, SquarePen } from 'lucide-react';
+import { CircleGauge, Grid3X3, HelpCircle, MessageCircleQuestion, PanelLeftOpen, Search, SquarePen } from '@maka/ui/icons';
 import type {
   ConnectionTestResult,
   ConnectionEvent,
@@ -206,12 +206,15 @@ function buildChatModelChoices(connections: readonly LlmConnection[]): ChatModel
       const trimmed = model.trim();
       if (!trimmed || seen.has(trimmed)) continue;
       seen.add(trimmed);
+      /* PR-CHAT-MODEL-CHOICE-DROP-LABEL-0 (round 23/30): dropped
+         `label: ${connection.name} · ${trimmed}` — the model
+         switcher no longer renders this string (PR-CHAT-CHROME-
+         FIX-0 changed items to show just `choice.model`). */
       choices.push({
         connectionSlug: connection.slug,
         connectionLabel: connection.name,
         providerType: connection.providerType,
         model: trimmed,
-        label: `${connection.name} · ${trimmed}`,
       });
     }
   }

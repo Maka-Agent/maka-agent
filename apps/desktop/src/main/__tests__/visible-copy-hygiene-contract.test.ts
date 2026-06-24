@@ -32,6 +32,7 @@ import { join, resolve } from 'node:path';
 // sidebar-scroll-contract pattern).
 const FILES_TO_SCAN = [
   resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'components.tsx'),
+  resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'chat-empty-hero.tsx'),
   join(process.cwd(), 'src', 'renderer', 'main.tsx'),
   join(process.cwd(), 'src', 'renderer', 'OnboardingHero.tsx'),
   join(process.cwd(), 'src', 'renderer', 'artifact-pane.tsx'),
@@ -252,13 +253,33 @@ describe('visible-copy hygiene contract (PR-SIDEBAR-IA-0 Phase 3 P0 fixup v2)', 
   }
 
   it('pins the zh empty-chat hero product tagline', async () => {
-    const heroPath = resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'components.tsx');
+    const heroPath = resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'chat-empty-hero.tsx');
     const src = stripComments(await readFile(heroPath, 'utf8'));
 
     assert.match(
       src,
       /intro:\s*'自主规划，陪你把事做完的智能个人助手。'/,
       'The default zh chat empty hero should carry Maka’s exact product tagline.',
+    );
+    assert.match(
+      src,
+      /primaryBubble:\s*'好，我来帮你理清楚。'/,
+      'The default zh chat empty hero visual should not leak the English fixture bubble.',
+    );
+    assert.match(
+      src,
+      /secondaryBubble:\s*'为这个任务起草计划'/,
+      'The default zh chat empty hero visual should keep the task prompt bubble Chinese-first.',
+    );
+    assert.match(
+      src,
+      /maka-hero-bubble-primary">\{copy\.primaryBubble\}/,
+      'The empty hero primary bubble should render from the locale copy bundle.',
+    );
+    assert.match(
+      src,
+      /maka-hero-bubble-secondary">\{copy\.secondaryBubble\}/,
+      'The empty hero secondary bubble should render from the locale copy bundle.',
     );
   });
 });
@@ -333,13 +354,20 @@ describe('terminal truncation handoff contract', () => {
       /className="maka-tool-terminal-copy"[\s\S]{0,240}data-size="sm"/,
       'The capped-output handoff copy action should rely on shared primitive Button size props instead of redundant data-size styling.',
     );
+    // PR-UI-LIB-EXTRACT-7 (round 8/10): the shared clipboard
+    // feedback hook moved from `components.tsx` into a sibling
+    // `clipboard-feedback.ts` leaf module. The behavioral
+    // contract is unchanged; we just read the hook from where
+    // it now lives.
+    const clipboardPath = resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'clipboard-feedback.ts');
+    const clipboardSrc = await readFile(clipboardPath, 'utf8');
     assert.match(
-      src,
-      /function useClipboardCopyFeedback/,
+      clipboardSrc,
+      /export function useClipboardCopyFeedback/,
       'Clipboard copy actions should share one pending/failure feedback boundary instead of silently firing raw writes.',
     );
     assert.match(
-      src,
+      clipboardSrc,
       /navigator\.clipboard\.writeText\(options\.redact === false \? text : redactSecrets\(text\)\)/,
       'The shared clipboard feedback helper must redact by default and require an explicit raw-copy opt-out.',
     );
@@ -395,9 +423,14 @@ describe('terminal truncation handoff contract', () => {
 
 describe('turn footer copy feedback contract', () => {
   it('keeps shared clipboard feedback from updating state after unmount', async () => {
-    const componentsPath = resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'components.tsx');
-    const src = await readFile(componentsPath, 'utf8');
-    const hookBlock = src.match(/function useClipboardCopyFeedback[\s\S]*?function TurnFooterActions/)?.[0] ?? '';
+    // PR-UI-LIB-EXTRACT-7 (round 8/10): the shared clipboard
+    // feedback hook moved out of `components.tsx` into the leaf
+    // module `clipboard-feedback.ts`. The behavioral pin
+    // (StrictMode-safe mount guard, settle/setTimeout
+    // post-unmount guards, no cleanup-only `useEffect`) is
+    // unchanged; we just point the regex at the new file.
+    const clipboardPath = resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'clipboard-feedback.ts');
+    const hookBlock = await readFile(clipboardPath, 'utf8');
 
     assert.match(hookBlock, /const copyMountedRef = useRef\(true\)/, 'Shared copy feedback must track mounted state.');
     assert.match(
@@ -531,7 +564,12 @@ describe('chat markdown copy feedback contract', () => {
   it('gates assistant message copy without redacting the raw message markdown', async () => {
     const componentsPath = resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'components.tsx');
     const src = await readFile(componentsPath, 'utf8');
-    const block = src.match(/function MessageCopyButton[\s\S]*?const MARKDOWN_REMARK_PLUGINS/)?.[0] ?? '';
+    // PR-UI-LIB-EXTRACT-6 (round 7/10) moved the markdown layer
+    // out of components.tsx; PR-UI-LIB-EXTRACT-8 (round 9/10)
+    // then moved `EmptyChatHero` itself into `chat-empty-hero.tsx`.
+    // The next-named-thing anchor after `MessageCopyButton` in
+    // `components.tsx` is now `ChatHeaderAlertBadge`.
+    const block = src.match(/function MessageCopyButton[\s\S]*?function ChatHeaderAlertBadge/)?.[0] ?? '';
 
     assert.match(block, /useClipboardCopyFeedback\(1400, \{ redact: false \}\)/, 'Message copy should preserve raw assistant markdown.');
     assert.match(block, /await copyFeedback\.copy\('message', props\.text\)/, 'Message copy should route through the guarded helper.');
@@ -548,8 +586,13 @@ describe('chat markdown copy feedback contract', () => {
   });
 
   it('gates code-block copy and keeps code-copy accessibility copy Chinese-first', async () => {
-    const componentsPath = resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'components.tsx');
-    const src = await readFile(componentsPath, 'utf8');
+    // PR-UI-LIB-EXTRACT-6 (round 7/10): `CodeBlock` moved out of
+    // `components.tsx` into `markdown.tsx` (along with `Markdown`,
+    // `MarkdownLink`, and the helper functions). The behavioral
+    // assertions stay; we just read from the file where the
+    // component now lives.
+    const markdownPath = resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'markdown.tsx');
+    const src = await readFile(markdownPath, 'utf8');
     const block = src.match(/function CodeBlock[\s\S]*?function isElementWithClassName/)?.[0] ?? '';
 
     assert.match(block, /useClipboardCopyFeedback\(1400, \{ redact: false \}\)/, 'Code copy should preserve raw code text.');

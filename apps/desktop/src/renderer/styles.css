@@ -54,7 +54,11 @@
   --radius-lg: 10px;
   --radius-xl: 12px;
   --shadow-maka-panel: 0 1px 2px rgba(15, 23, 42, 0.04), 0 14px 40px rgba(15, 23, 42, 0.08);
-  --ease-maka: cubic-bezier(0.16, 1, 0.3, 1);
+  /* PR-MOTION-TOKEN-CONVERGE-0 (kenji's category 4, 2026-06-24):
+     dropped the duplicate `--ease-maka`; `maka-tokens.css` already
+     exposes the same curve as `--ease-out-strong` (used in 81+ sites).
+     The only `var(--ease-maka)` reference was a stale comment, now
+     rewritten to point at the canonical token. */
 }
 
 :root {
@@ -137,10 +141,10 @@ select {
 
 button {
   transition:
-    background 150ms var(--ease-out-strong),
-    border-color 150ms var(--ease-out-strong),
-    color 150ms var(--ease-out-strong),
-    transform 150ms var(--ease-out-strong);
+    background var(--duration-base) var(--ease-out-strong),
+    border-color var(--duration-base) var(--ease-out-strong),
+    color var(--duration-base) var(--ease-out-strong),
+    transform var(--duration-base) var(--ease-out-strong);
 }
 
 button:active {
@@ -191,11 +195,15 @@ button:active {
 .appFrame {
   height: 100dvh;
   padding: 0;
-  /* Direct 参考实现 layer model:
-     layout background carries the near-white gradient, sidebar stays
-     transparent, content area paints the white surface. */
-  background:
-    linear-gradient(172deg, var(--foreground-3, #f9f9f9) 19.61%, var(--background, #fff) 81.35%);
+  /* PR-CHAT-CHROME-FIX-1 (WAWQAQ msg `4a1b8c13`): the appFrame root
+     was the LAST place still painting the 172deg "上面灰下面白"
+     gradient — round-0 only killed the gradient on
+     `.maka-shell-2col`, and the macOS rule put `shell` to
+     `transparent`, so the appFrame gradient bled through and
+     revived the visual WAWQAQ explicitly rejected. Keep this flat:
+     the shell/backplate is neutral, while `.maka-panel-detail`
+     paints the white content surface. */
+  background: var(--surface-canvas);
   color: var(--foreground);
   font-size: var(--font-size-base);
   box-sizing: border-box;
@@ -214,8 +222,15 @@ button:active {
   align-items: stretch;
   gap: 0;
   overflow: hidden;
-  background:
-    linear-gradient(172deg, var(--foreground-3, #f9f9f9) 19.61%, var(--background, #fff) 81.35%);
+  /* PR-CHAT-CHROME-FIX-0 (WAWQAQ msg `1e693dee` + `486b5611`):
+     the shell used to carry a 172deg gradient from `--foreground-3`
+     to `--background`. The session sidebar is transparent and
+     showed the gradient through, so users saw "gray top, white
+     bottom" on the sidebar — distracting, and also produced a
+     visible seam where the gradient met the flat-white floating
+     detail panel. Keep the shell flat neutral; no gradient or
+     divider line. */
+  background: var(--surface-canvas);
 }
 
 .maka-panel {
@@ -237,26 +252,31 @@ button:active {
 }
 
 .maka-panel-detail.maka-floating-panel {
-  /* reference implementation's right column is a page-level content surface
-     (.agents-content-area / parchment-paper-surface), while the
-     sidebar stays flat. Keep this at the shell boundary so chat,
-     modules, and artifact panes share one workspace surface.
-     gap/radius match reference layout-derived values (4px/6px)
-  per WAWQAQ ef6b2852.
-     PR-SETTINGS-CHAT-PANE-NO-BORDER-0 (WAWQAQ msg `ab6240fc`, round
-     13/15): the previous round dropped the border on the more-specific
-     `.agents-content-area` overlay, but this BASE rule still carried
-     it. Some view states (cron / skills modules) don't add the
-     `agents-content-area` class so the base border leaked through and
-     WAWQAQ saw a seam in chat. Drop the border here too. */
-  margin: 4px 4px 4px 0;
-  border: 0;
-  border-radius: 6px;
+  /* Right column = the workspace content surface (chat / module /
+     artifact panes share it). Border and box-shadow already null'd by
+     the base `.maka-floating-panel` rule above; only the geometry and
+     layout-mode bits live here.
+     PR-CHAT-CHROME-FIX-0 (WAWQAQ msg `486b5611`): symmetric `margin:
+     4px` so all four sides have a gap and the radius reads as a real
+     floating-card edge — was `4px 4px 4px 0` before.
+     PR-CHAT-CHROME-FIX-1 (WAWQAQ msg `4a1b8c13`): "圆盘感觉不对劲，
+     很不明显，尤其是下面的看都看不到" — 6px radius + 4px margin on
+     a same-color surface had no visual handle for the eye. Bumped
+     radius to 12px (matches reference's surface plate), added a soft
+     drop-shadow so the curved edge actually reads against the sidebar
+     translucent backdrop and the bottom corners are visible. The
+     window's outer rounded chrome on macOS is ~10–12px; matching that
+     reads as "card inside chrome" rather than "rectangle bleeding off
+     the bottom". */
+  margin: 4px;
+  border-radius: 12px;
   background: var(--background);
-  box-shadow: none;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  box-shadow:
+    0 1px 3px oklch(from var(--foreground) l c h / 0.06),
+    0 8px 24px oklch(from var(--foreground) l c h / 0.08);
 }
 
 .maka-shell-2col[data-sidebar-state="collapsed"] .maka-panel-list.maka-floating-panel {
@@ -324,7 +344,7 @@ button:active {
   width: 1px;
   border-radius: 999px;
   background: transparent;
-  transition: background 120ms ease;
+  transition: background var(--duration-quick) var(--ease-out-strong);
 }
 
 .maka-resize-handle:hover::after,
@@ -600,8 +620,8 @@ button:active {
   color: var(--foreground);
   padding: 6px 10px;
   transition:
-    background 150ms var(--ease-out-strong),
-    transform 180ms var(--ease-out-strong);
+    background var(--duration-base) var(--ease-out-strong),
+    transform var(--duration-emphasized) var(--ease-out-strong);
 }
 .maka-search-modal-result:hover:not([disabled]) {
   background: oklch(from var(--foreground) l c h / 0.05);
@@ -681,17 +701,12 @@ button:active {
   -webkit-app-region: drag;
 }
 
-.maka-sidebar-brand {
-  margin-right: auto;
-  color: var(--foreground);
-  font-family: Georgia, "Times New Roman", Times, serif;
-  font-size: 18px;
-  font-weight: 500;
-  line-height: 24px;
-  letter-spacing: 0;
-  -webkit-app-region: no-drag;
-  user-select: none;
-}
+/* PR-SIDEBAR-WORDMARK-KILL-0 (WAWQAQ msg `1fae5521` 2026-06-24
+   "现在侧边栏左上角有Maka这个单词，好丑啊"): removed `.maka-sidebar-brand`
+   along with its JSX usage. PR #190 added a Georgia serif "Maka"
+   wordmark in the sidebar drag strip; the brand identity already
+   lives in the macOS dock icon + window title, so the wordmark was
+   redundant chrome. */
 
 .maka-sidebar-search-button,
 .maka-sidebar-toggle {
@@ -704,7 +719,7 @@ button:active {
   border-radius: 6px;
   background: transparent;
   color: var(--foreground-55);
-  transition: background 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong), box-shadow 150ms var(--ease-out-strong);
+  transition: background var(--duration-base) var(--ease-out-strong), color var(--duration-base) var(--ease-out-strong), box-shadow var(--duration-base) var(--ease-out-strong);
 }
 
 .maka-sidebar-search-button:hover,
@@ -811,8 +826,8 @@ button:active {
   text-align: left;
   font-size: 12px;
   font-weight: 500;
-  transition: background-color 150ms var(--ease-out-strong),
-              color 150ms var(--ease-out-strong);
+  transition: background-color var(--duration-base) var(--ease-out-strong),
+              color var(--duration-base) var(--ease-out-strong);
 }
 
 .maka-sidebar-settings-button:hover {
@@ -908,8 +923,8 @@ button:active {
   font-size: 14px;
   line-height: 1.43;
   transition:
-    background 150ms var(--ease-out-strong),
-    color 150ms var(--ease-out-strong);
+    background var(--duration-base) var(--ease-out-strong),
+    color var(--duration-base) var(--ease-out-strong);
 }
 
 .maka-nav-row[aria-expanded="true"] .maka-nav-disclosure {
@@ -1093,13 +1108,13 @@ button:active {
   color: var(--foreground);
   overflow: hidden;
   transition:
-    background-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    background-color var(--duration-base) var(--ease-out-strong),
+    transform var(--duration-emphasized) var(--ease-out-strong);
   /* Session list stagger — each row fades up with a 40ms cascade per index
      via --maka-row-index custom property set by the renderer. Capped at 12
      to avoid a long visible cascade on big sidebars. Reduced-motion below
      drops the animation. */
-  animation: maka-list-row-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: maka-list-row-enter 240ms var(--ease-out-strong) both;
   animation-delay: calc(min(var(--maka-row-index, 0), 11) * 32ms);
 }
 
@@ -1120,6 +1135,23 @@ button:active {
 
 .maka-list-row:hover {
   background: oklch(from var(--foreground) l c h / 0.06);
+}
+
+/* PR-SESSION-ROW-TACTILE-0 (WAWQAQ msg `ed67a267`, skills round
+   task #116): consistent `:active scale(0.98)` press feedback —
+   sidebar session rows are the most-clicked surface in the app
+   and previously had no press signal. Pattern matches
+   .maka-onboarding-card / .maka-skill-library-row / .maka-prompt-chip
+   / .maka-artifact-row. Reduced-motion clause below keeps
+   contracts clean. */
+.maka-list-row:active {
+  transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .maka-list-row:active {
+    transform: none;
+  }
 }
 
 /* PR-UI-PIXEL-6 (2026-06-21): selected session row uses a clearly readable
@@ -1237,7 +1269,7 @@ button:active {
   border-radius: 8px;
   background: transparent;
   color: var(--foreground-60);
-  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  transition: background var(--duration-quick) var(--ease-out-strong), color var(--duration-quick) var(--ease-out-strong), box-shadow var(--duration-quick) var(--ease-out-strong);
 }
 
 .maka-list-row-action:hover {
@@ -1475,7 +1507,15 @@ button:active {
   line-height: 1.45;
 }
 
-/* Onboarding hero — first-run, no real connection configured. */
+/* Onboarding hero — first-run, no real connection configured.
+   PR-ONBOARDING-HERO-STAGGER-0 (WAWQAQ msg `cdfd68eb`, skills round
+   task #116): block-level fade-up was a single 200ms ramp — every
+   child landed at the same moment, reading as a flat reveal. Now
+   the wrapper just sets layout; each direct child fades up + scales
+   from 0.96 with a 60ms cascade (Emil Kowalski "agents-with-taste":
+   start scale at 0.95-ish, not 0; cap entry at <300ms each;
+   transform+opacity only, GPU-accelerated). The block fade is gone
+   so we don't double-animate. */
 .maka-onboarding {
   width: min(680px, 100%);
   margin: auto;
@@ -1483,19 +1523,45 @@ button:active {
   display: grid;
   gap: 10px;
   color: var(--foreground);
-  animation: maka-agents-slide-up 200ms var(--ease-out-strong) both;
 }
 
-@keyframes maka-agents-slide-up {
-  0% {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  100% {
+.maka-onboarding > * {
+  opacity: 0;
+  transform: translateY(8px) scale(0.96);
+  animation: maka-onboarding-child-enter 280ms var(--ease-out-strong) forwards;
+}
+.maka-onboarding > *:nth-child(1) { animation-delay: 0ms; }
+.maka-onboarding > *:nth-child(2) { animation-delay: 60ms; }
+.maka-onboarding > *:nth-child(3) { animation-delay: 120ms; }
+.maka-onboarding > *:nth-child(4) { animation-delay: 180ms; }
+.maka-onboarding > *:nth-child(n + 5) { animation-delay: 220ms; }
+
+@keyframes maka-onboarding-child-enter {
+  to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .maka-onboarding > * {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+[data-maka-visual-smoke="true"] .maka-onboarding > * {
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+
+/* PR-AUDIT-CLEANUP-BATCH-2 (WAWQAQ msg `01efbebb`): deleted unused
+   `@keyframes maka-agents-slide-up` and `@keyframes maka-agents-fade-in`.
+   Both were referenced only from rules that previous PRs removed
+   (PR-ONBOARDING-HERO-STAGGER-0 + PR-FRONTEND-AUDIT-CLEANUP-0 F1).
+   `maka-hero-enter` is the live block-level entrance now. */
 
 @keyframes maka-workbench-card-scale-in {
   0% {
@@ -1508,32 +1574,12 @@ button:active {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .maka-onboarding {
-    animation: none;
-  }
-}
-
-@keyframes maka-hero-enter {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .maka-onboarding {
-    animation: none;
-  }
-}
-
-[data-maka-visual-smoke="true"] .maka-onboarding {
-  animation: none;
-}
+/* PR-ONBOARDING-HERO-STAGGER-0: the prior `@media reduced-motion` +
+   `[data-maka-visual-smoke]` blocks that targeted the now-removed
+   block-level `.maka-onboarding` fade rule are gone. Per-child
+   stagger has its own guards above. (`maka-hero-enter` keyframe
+   itself is still used by `.maka-hero` / `.emptyChat` elsewhere —
+   self-review corrected an earlier "unused" claim here.) */
 
 .maka-onboarding header {
   display: grid;
@@ -1587,6 +1633,12 @@ button:active {
   flex-direction: column;
   gap: 0;
 }
+
+/* PR-FRONTEND-AUDIT-CLEANUP-0 F1 (WAWQAQ msg `dde696a1`): the earlier
+   `maka-agents-fade-in 150ms` block + nth-child delay ladder was
+   completely overridden by the `maka-card-enter 280ms` block below,
+   plus that block's own delay ladder. The dead rules silently caused
+   any "polish" attempt on the upper block to look like a no-op. Deleted. */
 
 .maka-firstrun-title {
   margin: 0;
@@ -1915,7 +1967,7 @@ button:active {
   width: min(100%, 620px);
   margin-inline: auto;
   position: relative;
-  border-radius: 20px;
+  border-radius: 12px;
   border: 1px solid oklch(from var(--foreground) l c h / 0.08);
   background: var(--background-elevated, var(--background));
   box-shadow:
@@ -2018,7 +2070,7 @@ button:active {
   min-height: 40px;
   min-width: 40px;
   padding: 0;
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--accent);
   color: var(--accent-foreground, oklch(0.985 0.003 250));
   box-shadow:
@@ -2575,10 +2627,10 @@ button:active {
   font-size: 11px;
   font-weight: 600;
   transition:
-    background-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    background-color var(--duration-base) var(--ease-out-strong),
+    border-color var(--duration-base) var(--ease-out-strong),
+    transform var(--duration-emphasized) var(--ease-out-strong),
+    box-shadow 200ms var(--ease-out-strong);
 }
 
 .maka-plan-new-task-button:hover {
@@ -3000,7 +3052,7 @@ button:active {
 }
 
 .maka-plan-card-grid > article {
-  animation: maka-workbench-card-scale-in 350ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: maka-workbench-card-scale-in 350ms var(--ease-out-strong) both;
 }
 
 .maka-plan-card-grid > article:nth-child(n + 1) { animation-delay: 60ms; }
@@ -3038,9 +3090,9 @@ button:active {
   padding: 14px 16px 13px;
   min-height: 148px;
   transition:
-    border-color 150ms var(--ease-out-strong),
-    box-shadow 150ms var(--ease-out-strong),
-    transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+    border-color var(--duration-base) var(--ease-out-strong),
+    box-shadow var(--duration-base) var(--ease-out-strong),
+    transform var(--duration-base) var(--ease-out-strong);
 }
 
 .maka-plan-card:hover {
@@ -3603,12 +3655,25 @@ button:active {
 }
 
 .maka-skill-search input {
+  /* PR-SKILL-SEARCH-DOUBLE-BOX-0 (WAWQAQ msg `703f2167` + screenshot
+     `d6218b43`): the `<Input>` primitive carries Tailwind utilities
+     `rounded-md border border-input bg-background shadow-sm` from
+     `@maka/ui inputClasses`. The per-page overrides killed
+     `border` + `background`, but `border-radius`, `box-shadow`, and
+     `min-height` (via `min-h-9` = 36px) leaked through and painted
+     a second visible rounded card INSIDE the outer
+     `.maka-skill-search` label — reading as two stacked search
+     bars. The fix zeroes every visual property the primitive can
+     paint, so the inner `<input>` reads as a bare text field and
+     the outer label is the only box. */
   min-width: 0;
   width: 100%;
   height: 30px;
+  min-height: 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
-  color: var(--foreground);
+  box-shadow: none;
   outline: none;
   padding: 0;
   font-size: 13px;
@@ -3919,9 +3984,9 @@ button:active {
   background: var(--background);
   padding: 16px;
   transition:
-    border-color 150ms var(--ease-out-strong),
-    box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    border-color var(--duration-base) var(--ease-out-strong),
+    box-shadow var(--duration-emphasized) var(--ease-out-strong),
+    transform var(--duration-emphasized) var(--ease-out-strong);
 }
 
 .maka-skill-market-card:hover {
@@ -4033,7 +4098,7 @@ button:active {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  transition: background-color 150ms var(--ease-out-strong);
+  transition: background-color var(--duration-base) var(--ease-out-strong);
 }
 
 .maka-skill-template-row:hover {
@@ -4126,8 +4191,8 @@ button:active {
   white-space: normal !important;
   text-align: left;
   transition:
-    background-color 150ms var(--ease-out-strong),
-    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    background-color var(--duration-base) var(--ease-out-strong),
+    transform var(--duration-emphasized) var(--ease-out-strong);
 }
 
 /* PR-UI-PIXEL-0 (2026-06-21): reference rule #2 — hover/selected states are
@@ -4161,7 +4226,7 @@ button:active {
   background: var(--background);
   box-shadow: 0 1px 2px oklch(from var(--foreground) l c h / 0.05);
   color: var(--foreground-55);
-  transition: background-color 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong);
+  transition: background-color var(--duration-base) var(--ease-out-strong), color var(--duration-base) var(--ease-out-strong);
 }
 
 /* PR-UI-PIXEL-1: tile stays white on hover (reference keeps icon tiles
@@ -4241,7 +4306,7 @@ button:active {
   text-align: center;
   opacity: 1;
   transform: none;
-  transition: opacity 150ms var(--ease-out-strong), transform 150ms var(--ease-out-strong), background-color 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong);
+  transition: opacity var(--duration-base) var(--ease-out-strong), transform var(--duration-base) var(--ease-out-strong), background-color var(--duration-base) var(--ease-out-strong), color var(--duration-base) var(--ease-out-strong);
 }
 
 .maka-skill-library-row:hover .maka-skill-library-action,
@@ -4445,10 +4510,29 @@ button:active {
   color: var(--foreground);
   font-size: 11px;
   box-shadow: none;
+  /* PR-MODEL-SWITCHER-TACTILE-0 (WAWQAQ msg `ed67a267`, skills round
+     task #116): tactile press feedback so the switch-model flow
+     feels physical. Same convention as the other interactive
+     surfaces in this round (artifact-row, session-row,
+     onboarding-card, prompt-chip). */
+  transition: background 140ms var(--ease-out-strong), transform var(--duration-quick) var(--ease-out-strong);
 }
 
 .maka-model-switcher-trigger:hover:not(:disabled):not([data-disabled]) {
   background: var(--foreground-8, var(--foreground-5));
+}
+
+.maka-model-switcher-trigger:active:not(:disabled):not([data-disabled]) {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .maka-model-switcher-trigger {
+    transition: background 0ms;
+  }
+  .maka-model-switcher-trigger:active:not(:disabled):not([data-disabled]) {
+    transform: none;
+  }
 }
 
 .maka-model-switcher-trigger[data-popup-open] {
@@ -4656,7 +4740,7 @@ button:active {
   font-weight: 500;
   white-space: nowrap;
   letter-spacing: 0.005em;
-  transition: background 140ms ease, color 140ms ease;
+  transition: background 140ms var(--ease-out-strong), color 140ms var(--ease-out-strong);
 }
 
 .maka-mode-switcher-option:hover:not(:disabled):not([data-active="true"]) {
@@ -4748,8 +4832,8 @@ button:active {
   box-shadow: var(--shadow-medium);
   opacity: 1;
   transition:
-    transform 180ms var(--ease-out-strong),
-    opacity 180ms var(--ease-out-strong),
+    transform var(--duration-emphasized) var(--ease-out-strong),
+    opacity var(--duration-emphasized) var(--ease-out-strong),
     background 120ms ease;
 }
 
@@ -4913,30 +4997,41 @@ button:active {
   right: 24px;
 }
 
+/* PR-TOAST-POLISH-0 (WAWQAQ msg `7f0ec4a5`): editorial card-shape pass
+   on toast notifications. Larger radius (10px) so toasts feel like
+   real floating cards instead of pill chips, and a layered depth shadow
+   (1px hairline + 3px close + 14px ambient) matching the impeccable
+   "premium card stacking" recipe. Bigger padding so copy doesn't crowd
+   the edge.
+   Entry animation slides from the right edge (`translateX(24px)→0`)
+   instead of from bottom — toasts land at bottom-right by default,
+   so right-edge slide reads as "arriving" rather than "growing up
+   from the canvas". Easing stays `var(--ease-out-strong)`. */
 .maka-toast {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr) auto auto;
   align-items: start;
-  gap: 7px;
+  gap: 9px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 10px;
   background: var(--background);
   box-shadow:
-    0 1px 2px oklch(from var(--foreground) l c h / 0.04),
-    0 6px 16px oklch(from var(--foreground) l c h / 0.06);
-  padding: 7px 9px;
+    0 1px 2px oklch(from var(--foreground) l c h / 0.05),
+    0 3px 6px oklch(from var(--foreground) l c h / 0.04),
+    0 14px 28px oklch(from var(--foreground) l c h / 0.07);
+  padding: 9px 12px;
   pointer-events: auto;
   opacity: 1;
-  transform: translateY(0);
+  transform: translateX(0);
   transition:
     opacity 200ms var(--ease-out-strong),
-    transform 220ms var(--ease-out-strong);
+    transform 240ms var(--ease-out-strong);
 }
 
 @starting-style {
   .maka-toast {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateX(24px);
   }
 }
 
@@ -4977,34 +5072,54 @@ button:active {
 .maka-toast-action {
   align-self: center;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 6px;
   background: var(--background);
   color: var(--accent);
-  padding: 2px 7px;
+  padding: 3px 9px;
   font-size: 10px;
   font-weight: 600;
-  transition: background-color 150ms var(--ease-out-strong);
+  transition:
+    background-color var(--duration-base) var(--ease-out-strong),
+    transform var(--duration-quick) var(--ease-out-strong);
 }
 
 .maka-toast-action:hover {
   background: oklch(from var(--accent) l c h / 0.08);
 }
 
+.maka-toast-action:active {
+  transform: scale(0.97);
+}
+
 .maka-toast-close {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   color: var(--foreground-50);
-  transition: background-color 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong);
+  transition:
+    background-color var(--duration-base) var(--ease-out-strong),
+    color var(--duration-base) var(--ease-out-strong),
+    transform var(--duration-quick) var(--ease-out-strong);
 }
 
 .maka-toast-close:hover {
   color: var(--foreground);
   background: var(--foreground-5);
+}
+
+.maka-toast-close:active {
+  transform: scale(0.92);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .maka-toast-action:active,
+  .maka-toast-close:active {
+    transform: none;
+  }
 }
 
 .maka-confirm-modal {
@@ -5362,7 +5477,7 @@ button:active {
   gap: 26px;
   color: var(--foreground);
   text-align: center;
-  animation: maka-hero-enter 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: maka-hero-enter 320ms var(--ease-out-strong) both;
 }
 
 /* Hero mount entrance — opacity 0 + translateY(8px) -> 0. Visible whenever
@@ -5565,13 +5680,24 @@ button:active {
   font-variant-numeric: tabular-nums;
 }
 
+/* PR-CHAT-MESSAGE-AVATAR-BEZEL-0 (WAWQAQ msg `145f15d5`): post-skills
+   review polish for chat meta. Applies high-end-visual-design "nested
+   bezel" pattern (outer ring + inner avatar) and design-taste-frontend
+   editorial typography hierarchy:
+   - avatar: 18→24px, rounded-square 30%→full circle, currentColor
+     ring shadow gives the bezel/halo
+   - meta gap: 4→8px so the avatar + name + time breathe
+   - name: slight positive tracking for editorial feel; previously the
+     compact -0.005em made the name read as one mass with the avatar
+   Skills applied: high-end-visual-design §2 (nested-shell architecture),
+   design-taste-frontend §3 (typographic hierarchy via tracking). */
 .maka-message-meta {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: -0.005em;
+  letter-spacing: 0.01em;
   color: var(--foreground-60);
 }
 
@@ -5579,15 +5705,21 @@ button:active {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 30%;
-  font-size: 10px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0;
   user-select: none;
   flex-shrink: 0;
-  box-shadow: inset 0 1px 0 oklch(from currentColor l c h / 0.18);
+  /* Nested-bezel: 1px inner top highlight + 1px outer halo so the
+     avatar reads as a tangible disc against the message surface
+     instead of a flat color blob. */
+  box-shadow:
+    inset 0 1px 0 oklch(from currentColor l c h / 0.22),
+    0 0 0 1px oklch(from var(--background) l c h / 0.6),
+    0 0 0 2px oklch(from currentColor l c h / 0.10);
 }
 
 .maka-message-avatar[data-role="user"] {
@@ -5677,7 +5809,7 @@ button:active {
   border-radius: 6px;
   background: var(--background);
   font-size: 10px;
-  animation: maka-tool-card-enter 350ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: maka-tool-card-enter 350ms var(--ease-out-strong) both;
 }
 
 .maka-load-tool-preview p {
@@ -5712,7 +5844,7 @@ button:active {
   border-radius: 8px;
   background: var(--background);
   white-space: normal;
-  animation: maka-tool-card-enter 350ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: maka-tool-card-enter 350ms var(--ease-out-strong) both;
 }
 
 /* Tool-card mount entrance — opacity 0 + scale .97 -> 1, ported from
@@ -5800,7 +5932,7 @@ button:active {
   border-radius: 8px;
   background: var(--background);
   white-space: normal;
-  animation: maka-tool-card-enter 350ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: maka-tool-card-enter 350ms var(--ease-out-strong) both;
 }
 
 .maka-tool-terminal-head {
@@ -6225,7 +6357,7 @@ button:active {
     var(--card-shadow),
     var(--card-highlight);
   transition:
-    border-color 180ms var(--ease-out-strong),
+    border-color var(--duration-emphasized) var(--ease-out-strong),
     box-shadow 220ms var(--ease-out-strong);
 }
 
@@ -6361,9 +6493,9 @@ button:active {
 .maka-composer-mode-chip,
 .maka-composer-model-chip {
   transition:
-    background-color 150ms var(--ease-out-strong),
-    color 150ms var(--ease-out-strong),
-    border-color 150ms var(--ease-out-strong);
+    background-color var(--duration-base) var(--ease-out-strong),
+    color var(--duration-base) var(--ease-out-strong),
+    border-color var(--duration-base) var(--ease-out-strong);
 }
 
 .maka-composer-role-chip:hover,
@@ -6500,9 +6632,9 @@ button:active {
   background: transparent;
   color: var(--foreground-60);
   transition:
-    background-color 150ms var(--ease-out-strong),
-    color 150ms var(--ease-out-strong),
-    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    background-color var(--duration-base) var(--ease-out-strong),
+    color var(--duration-base) var(--ease-out-strong),
+    transform var(--duration-emphasized) var(--ease-out-strong);
 }
 
 .maka-composer-context-plus {
@@ -6554,9 +6686,9 @@ button:active {
   color: oklch(1 0 0);
   box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.15);
   transition:
-    background 150ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1);
+    background var(--duration-base) var(--ease-out-strong),
+    transform var(--duration-emphasized) var(--ease-out-strong),
+    box-shadow 220ms var(--ease-out-strong);
 }
 
 .maka-composer-send-button:hover:not(:disabled) {
@@ -6608,7 +6740,7 @@ button:active {
   font-size: 12px;
   line-height: 1.25;
   text-align: left;
-  transition: color 120ms ease;
+  transition: color var(--duration-quick) var(--ease-out-strong);
 }
 
 .maka-composer-workspace-picker:hover {
@@ -6703,6 +6835,41 @@ button:active {
   .maka-composer-streaming-dot::before,
   .maka-composer-streaming-dot::after {
     animation: none;
+  }
+}
+
+/* PR-COMPOSER-PERMISSION-PULSE-0 (WAWQAQ msg `ed67a267`, skills
+   round task #116): paired with the 3-dot streaming bounce — when
+   the composer is disabled awaiting human permission decision, the
+   text gets a pulsing accent dot so the user sees "waiting on YOU"
+   instead of plain prose. Uses a slow opacity pulse (different
+   rhythm from streaming's bounce so the two states are not
+   confusable at a glance). Pattern from design-taste-frontend §8.3
+   perpetual micro-interactions. */
+.maka-composer-permission-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.maka-composer-permission-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: maka-composer-permission-pulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes maka-composer-permission-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .maka-composer-permission-dot {
+    animation: none;
+    opacity: 1;
   }
 }
 .permissionDialog pre {
@@ -7031,7 +7198,9 @@ button:active {
 
 @starting-style {
   .settingsModal.settingsPage {
-    transform: none;
+    /* PR-AUDIT-CLEANUP-BATCH-2: the matching `.settingsModal.settingsPage`
+       rule only transitions `opacity` (line ~7026), so a `transform: none`
+       here was a no-op — kept just the opacity start-style. */
     opacity: 0;
   }
 }
@@ -7151,12 +7320,16 @@ button:active {
 
 .settingsNavItem {
   /* PR-SETTINGS-SIDEBAR-SPACIOUS-0: roomier nav row matching reference.
-     PR-SETTINGS-NAV-REGROUP-0: 3rd grid column for optional Beta badge. */
+     PR-SETTINGS-CSS-ROOT-CLEANUP-0 (WAWQAQ msg `57de86ae`): the previous
+     `grid-template-columns: 24px minmax(0,1fr) auto` allocated a trailing
+     `auto` track for the Beta badge, but on the 11 rows without a
+     badge the empty auto track still consumed a 12px gap, so the label
+     ran 12px short. Switched to flex — glyph is fixed-width, label
+     fills, badge sits right-aligned naturally. No phantom gap. */
   width: calc(100% - 8px);
   height: 38px;
   min-height: 38px;
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
   gap: 12px;
   border: 0;
@@ -7169,7 +7342,19 @@ button:active {
   text-align: left;
   justify-content: initial;
   font-size: 14px;
-  transition: background-color 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong);
+  transition: background-color var(--duration-base) var(--ease-out-strong), color var(--duration-base) var(--ease-out-strong);
+}
+
+.settingsNavItem > .settingsNavGlyph {
+  flex-shrink: 0;
+}
+
+.settingsNavItem > strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* PR-SETTINGS-NAV-REGROUP-0 (WAWQAQ msg `a9ef0d5d`): small chip on nav
@@ -7190,11 +7375,17 @@ button:active {
   text-transform: none;
 }
 
+/* PR-SETTINGS-CSS-ROOT-CLEANUP-0 (WAWQAQ msg `57de86ae`): the previous
+   reset listed `[data-active="true"]` in its selector and used
+   `!important` to wipe shadow. The active rule then had to use its own
+   `!important` to put a 3-px accent bar back. Two `!important`s fighting
+   over the same property = specificity war. Drop the active selector
+   from the reset and remove the `!important` from both places. The
+   active rule below is the single source of truth for nav shadow. */
 .settingsSidebar .settingsNavItem,
-.settingsSidebar .settingsNavItem[data-active="true"],
 .settingsSidebar .settingsNavItem:hover {
   border: 0;
-  box-shadow: none !important;
+  box-shadow: none;
   transform: none;
 }
 
@@ -7214,7 +7405,7 @@ button:active {
   background: oklch(from var(--foreground) l c h / 0.065);
   color: var(--foreground);
   font-weight: 500;
-  box-shadow: inset 3px 0 0 var(--accent) !important;
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .settingsNavItem:focus-visible {
@@ -7538,18 +7729,13 @@ button:active {
   padding: 40px 24px 64px;
 }
 
-/* PR-SETTINGS-MOTION-TYPO-TOKENS-0 (round 15/15, WAWQAQ msg
-   `f7e9d166` + UI-skill deep read 2026-06-23): shared motion tokens
-   for the settings surface so timing/easing stay consistent across
-   nav rows, form rows, switches, and inputs. `--motion-fast` is the
-   default for state changes; `--motion-ease-out` is the cubic-bezier
-   recommended by Taste-Skill + 12-principles. */
-.settingsSurface,
-.settingsMainPane,
-.settingsSidebar {
-  --motion-fast: 160ms;
-  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-}
+/* PR-SETTINGS-CSS-ROOT-CLEANUP-0 (WAWQAQ msg `57de86ae`): the renamed
+   motion token block introduced in round 15 duplicated the existing
+   `--ease-out-strong` (cubic-bezier(0.16,1,0.3,1)) already declared in
+   `maka-tokens.css`. The dup was cargo-culted because the round-15 PR
+   didn't grep first. Removed — `--ease-out-strong` is now the single
+   easing token used across the renderer (3000+ consumers). The
+   settings `:active` rule below uses it directly. */
 
 /* PR-SETTINGS-NO-PANE-BORDER-0 (WAWQAQ msg `d0e7dfb3`): nested
    card-in-card was the previous problem — `.settingsStructuredPage`
@@ -7615,7 +7801,7 @@ button:active {
   border-bottom: 1px solid oklch(from var(--foreground) l c h / 0.06);
   border-radius: 0;
   background: transparent;
-  transition: background 150ms var(--ease-out-strong);
+  transition: background var(--duration-base) var(--ease-out-strong);
 }
 
 .settingsFormRow:last-child {
@@ -7633,16 +7819,17 @@ button:active {
    motion is not preferred — the @media block above already strips
    transition; here we keep `transform` declarations so the
    `:active` *snap* still fires (it's instant, not animated). */
-.settingsFormRow:active,
-.settingsRow:active,
+/* Self-review: `.settingsFormRow` and `.settingsRow` are <div>
+   containers wrapping <input>/<Switch>/<button> children. `:active`
+   on the wrapper fires when the user presses ANY of those children
+   (event bubbles), so pressing an input or switch knob scaled the
+   whole row — visually buggy. Restricted to actual <button>s. */
 .settingsBackButton:active,
 .settingsNavItem:active {
   transform: scale(0.985);
-  transition: transform 100ms var(--motion-ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+  transition: transform 100ms var(--ease-out-strong);
 }
 @media (prefers-reduced-motion: reduce) {
-  .settingsFormRow:active,
-  .settingsRow:active,
   .settingsBackButton:active,
   .settingsNavItem:active {
     transform: none;
@@ -7837,7 +8024,7 @@ button:active {
   font-size: 14px;
   line-height: 1.4;
   outline: none;
-  transition: border-color 150ms var(--ease-out-strong), box-shadow 150ms var(--ease-out-strong);
+  transition: border-color var(--duration-base) var(--ease-out-strong), box-shadow var(--duration-base) var(--ease-out-strong);
 }
 
 .settingsField textarea {
@@ -8187,7 +8374,7 @@ button:active {
   border-radius: 4px;
   background: transparent;
   color: var(--foreground-50);
-  transition: background 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong);
+  transition: background var(--duration-base) var(--ease-out-strong), color var(--duration-base) var(--ease-out-strong);
 }
 .settingsPasswordToggle:hover {
   background: var(--hover);
@@ -8219,7 +8406,7 @@ button:active {
   color: var(--accent);
   font-size: 13px;
   font-weight: 500;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition: background var(--duration-quick) var(--ease-out-strong), border-color var(--duration-quick) var(--ease-out-strong), color var(--duration-quick) var(--ease-out-strong);
 }
 .settingsBotAction:hover {
   background: oklch(from var(--accent) l c h / 0.08);
@@ -8387,7 +8574,7 @@ button:active {
   display: grid;
   gap: 18px;
   border: 1px solid color-mix(in srgb, #07C160 18%, var(--border));
-  border-radius: 16px;
+  border-radius: 12px;
   background: var(--background);
   box-shadow:
     0 24px 58px oklch(0 0 0 / 0.18),
@@ -8450,7 +8637,7 @@ button:active {
   display: grid;
   place-items: center;
   border: 1px solid color-mix(in srgb, #07C160 20%, var(--border));
-  border-radius: 14px;
+  border-radius: 12px;
   background: white;
   padding: 12px;
 }
@@ -8470,7 +8657,7 @@ button:active {
   align-content: center;
   gap: 10px;
   border: 1px dashed var(--border);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--foreground-3);
   color: var(--foreground-60);
   padding: 18px;
@@ -8651,7 +8838,7 @@ button:active {
 .settingsBotLogo[data-large="true"] {
   width: 44px;
   height: 44px;
-  border-radius: 14px;
+  border-radius: 12px;
   font-size: 20px;
 }
 
@@ -8693,7 +8880,7 @@ button:active {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: start;
   gap: 14px;
-  border-radius: 16px;
+  border-radius: 12px;
   background: color-mix(in srgb, var(--bot-brand-color, var(--accent)) 7%, var(--background));
   border: 1px solid color-mix(in srgb, var(--bot-brand-color, var(--accent)) 14%, transparent);
   padding: 16px 18px;
@@ -9025,7 +9212,6 @@ button:active {
 }
 
 .settingsCardHeader,
-.providerCard,
 .connectionActions,
 .settingsRow {
   display: flex;
@@ -9034,7 +9220,6 @@ button:active {
 }
 
 .settingsCardHeader,
-.providerCard,
 .settingsRow {
   justify-content: space-between;
 }
@@ -9067,8 +9252,20 @@ button:active {
  *   neutral / info / success / warning / destructive.
  */
 .settingsConnectionList {
+  /* PR-CONNECTION-LIST-A11Y-0 (round 17/30): switched from
+     `<div role="list">` to semantic `<ul>`. Reset the UA's
+     default bullet + 40px padding-left so the grid layout
+     stays the same. */
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: grid;
   gap: 10px;
+}
+
+.settingsConnectionList > li {
+  margin: 0;
+  padding: 0;
 }
 
 .settingsConnectionRow {
@@ -9367,15 +9564,6 @@ button:active {
   border: 1px dashed oklch(from var(--info) l c h / 0.30);
 }
 
-.providerEmpty,
-.providerCard {
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--foreground-2);
-  padding: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
-}
-
 /* PR-SETTINGS-GROUPED-CARD-0: rows flush inside outer card, hairline
    divider, last-child no border. Matches the reference grouped-list
    pattern. */
@@ -9389,7 +9577,7 @@ button:active {
   border-bottom: 1px solid oklch(from var(--foreground) l c h / 0.06);
   border-radius: 0;
   background: transparent;
-  transition: background 150ms var(--ease-out-strong);
+  transition: background var(--duration-base) var(--ease-out-strong);
 }
 
 .settingsRow:last-child {
@@ -9404,8 +9592,6 @@ button:active {
   min-width: 0;
 }
 
-.providerCard small,
-.providerEmpty span,
 .settingsRow small {
   display: block;
   margin-top: 4px;
@@ -9439,7 +9625,7 @@ button:active {
   padding: 0 12px;
   outline: none;
   font-size: 13px;
-  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+  transition: border-color 140ms var(--ease-out-strong), box-shadow 140ms var(--ease-out-strong), background 140ms var(--ease-out-strong);
 }
 .connectionForm input:focus,
 .connectionForm select:focus,
@@ -9473,7 +9659,7 @@ button:active {
 
 .settingsSurface[data-modal="true"] .providersEmpty {
   min-height: 420px;
-  border-radius: 20px;
+  border-radius: 12px;
 }
 
 .providersEmpty h3,
@@ -9495,7 +9681,7 @@ button:active {
 
 .settingsSurface[data-modal="true"] .providersList,
 .settingsSurface[data-modal="true"] .providersDetail {
-  border-radius: 18px;
+  border-radius: 12px;
   background: var(--foreground-3);
 }
 
@@ -9530,7 +9716,7 @@ button:active {
 }
 
 .settingsSurface[data-modal="true"] .providerListItem {
-  border-radius: 14px;
+  border-radius: 12px;
 }
 
 .providerListItem strong,
@@ -9687,7 +9873,7 @@ button:active {
   display: grid;
   gap: 4px;
   border: 1px solid oklch(from var(--info) l c h / 0.22);
-  border-radius: 14px;
+  border-radius: 12px;
   background: oklch(from var(--info) l c h / 0.10);
   color: var(--info-text);
   padding: 12px;
@@ -9739,7 +9925,7 @@ button:active {
   padding: 0 12px;
   outline: none;
   font-size: 13px;
-  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+  transition: border-color 140ms var(--ease-out-strong), box-shadow 140ms var(--ease-out-strong), background 140ms var(--ease-out-strong);
 }
 
 .providerEditor input:focus,
@@ -9775,7 +9961,7 @@ button:active {
   padding: 2px 6px;
   margin: -2px -6px;
   border-radius: 6px;
-  transition: background 120ms ease, box-shadow 120ms ease, text-decoration-color 120ms ease;
+  transition: background var(--duration-quick) var(--ease-out-strong), box-shadow var(--duration-quick) var(--ease-out-strong), text-decoration-color var(--duration-quick) var(--ease-out-strong);
 }
 
 .providerExternalLink:hover {
@@ -9867,7 +10053,7 @@ button:active {
   color: var(--foreground);
   font-size: 12px;
   font-family: var(--font-mono);
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  transition: border-color 140ms var(--ease-out-strong), box-shadow 140ms var(--ease-out-strong);
 }
 
 .modelTableSearch:focus {
@@ -9936,7 +10122,7 @@ button:active {
   background: transparent;
   color: var(--foreground);
   text-align: left;
-  transition: background 150ms var(--ease-out-strong), border-color 150ms var(--ease-out-strong), box-shadow 150ms var(--ease-out-strong);
+  transition: background var(--duration-base) var(--ease-out-strong), border-color var(--duration-base) var(--ease-out-strong), box-shadow var(--duration-base) var(--ease-out-strong);
 }
 
 .modelTableRow:hover {
@@ -10465,7 +10651,7 @@ button:active {
   justify-content: flex-end;
   background: oklch(0.95 0.01 90 / 0.64);
   backdrop-filter: blur(2px);
-  border-radius: 18px;
+  border-radius: 12px;
   padding: 12px;
 }
 
@@ -10475,7 +10661,7 @@ button:active {
   min-height: 100%;
   overflow: auto;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 12px;
   background: var(--background);
   box-shadow: 0 18px 46px oklch(0 0 0 / 0.14);
   padding: 16px;
@@ -10571,7 +10757,7 @@ button:active {
   height: 26px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 13px;
+  border-radius: 12px;
   background: var(--surface, var(--background));
   color: var(--text);
   font-size: 12px;
@@ -10631,7 +10817,7 @@ button:active {
   color: var(--foreground-70);
   border-radius: 6px;
   padding: 0;
-  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  transition: background var(--duration-quick) var(--ease-out-strong), color var(--duration-quick) var(--ease-out-strong), box-shadow var(--duration-quick) var(--ease-out-strong);
 }
 
 .maka-artifact-pane-collapse:hover {
@@ -10743,6 +10929,12 @@ button:active {
   margin: 0;
 }
 
+/* PR-ARTIFACT-ROW-TACTILE-0 (WAWQAQ msg `ed67a267`, skills round
+   task #116): Emil agents-with-taste — every clickable row needs
+   `:active { scale(0.97) }` so press feels physical, and a subtle
+   transform on hover gives spatial feedback. Without it, rows feel
+   like inert color blocks. Transitions limited to transform +
+   background (GPU-friendly, no reflow). */
 .maka-artifact-row {
   width: 100%;
   display: grid;
@@ -10757,15 +10949,32 @@ button:active {
   color: var(--foreground);
   text-align: left;
   font-size: 11px;
+  transition:
+    background 140ms var(--ease-out-strong),
+    border-color 140ms var(--ease-out-strong),
+    transform var(--duration-quick) var(--ease-out-strong);
 }
 
 .maka-artifact-row:hover {
   background: var(--foreground-5);
 }
 
+.maka-artifact-row:active:not([data-deleted="true"]) {
+  transform: scale(0.98);
+}
+
 .maka-artifact-row[data-selected="true"] {
   background: oklch(from var(--accent) l c h / 0.10);
   border-color: oklch(from var(--accent) l c h / 0.24);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .maka-artifact-row {
+    transition: background 0ms, border-color 0ms;
+  }
+  .maka-artifact-row:active:not([data-deleted="true"]) {
+    transform: none;
+  }
 }
 
 .maka-artifact-row[data-deleted="true"] {
@@ -11167,7 +11376,7 @@ button:active {
   background: transparent;
   color: var(--foreground-60);
   font-size: 12px;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition: background var(--duration-quick) var(--ease-out-strong), color var(--duration-quick) var(--ease-out-strong), border-color var(--duration-quick) var(--ease-out-strong);
 }
 .maka-turn-footer-action:hover:not(:disabled) {
   background: var(--foreground-5);
@@ -11296,7 +11505,7 @@ button:active {
   background: var(--foreground-5);
   color: var(--foreground-70);
   font-size: 10px;
-  transition: background 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong);
+  transition: background var(--duration-base) var(--ease-out-strong), color var(--duration-base) var(--ease-out-strong);
 }
 .maka-turn-lineage-badge:hover {
   background: var(--foreground-10, oklch(from var(--foreground) l c h / 0.08));
@@ -11337,7 +11546,7 @@ button:active {
   color: var(--info-text);
   font-size: 11px;
   line-height: 1.4;
-  transition: background 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong), border-color 150ms var(--ease-out-strong);
+  transition: background var(--duration-base) var(--ease-out-strong), color var(--duration-base) var(--ease-out-strong), border-color var(--duration-base) var(--ease-out-strong);
   align-self: flex-start;
 }
 .maka-session-branch-banner:hover {
@@ -11378,7 +11587,7 @@ button:active {
   border-radius: 8px;
   background: oklch(from var(--info) l c h / 0.04);
   overflow: hidden;
-  animation: maka-reasoning-panel-enter 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: maka-reasoning-panel-enter 280ms var(--ease-out-strong) both;
 }
 
 @keyframes maka-reasoning-panel-enter {
@@ -11407,7 +11616,7 @@ button:active {
   letter-spacing: 0.02em;
   color: var(--info-text);
   user-select: none;
-  transition: background 150ms var(--ease-out-strong);
+  transition: background var(--duration-base) var(--ease-out-strong);
 }
 .maka-reasoning-panel-header::-webkit-details-marker {
   display: none;
@@ -11486,7 +11695,7 @@ button:active {
   font-size: 12px;
   line-height: 1;
   color: var(--foreground-50);
-  transition: transform 150ms var(--ease-out-strong);
+  transition: transform var(--duration-base) var(--ease-out-strong);
 }
 
 .maka-reasoning-panel[open] .maka-reasoning-panel-chevron {
@@ -11623,7 +11832,7 @@ button:active {
   padding: 4px 10px;
   color: var(--foreground-80);
   font-size: 0.8125rem;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition: background var(--duration-quick) var(--ease-out-strong), border-color var(--duration-quick) var(--ease-out-strong), color var(--duration-quick) var(--ease-out-strong);
 }
 .settingsPermissionRefresh:hover {
   background: var(--foreground-5);
@@ -11688,7 +11897,7 @@ button:active {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition: border-color var(--duration-base) var(--ease-out-strong), box-shadow var(--duration-base) var(--ease-out-strong);
 }
 .settingsCapabilityRow:hover {
   border-color: var(--border-strong);
@@ -11938,12 +12147,10 @@ button:active {
   color: var(--foreground-70);
 }
 
-/* Status-tinted icon: when granted, color the icon plate with the success
-   tone; when denied, destructive; not_determined keeps the neutral. */
-.settingsOsPermissionRow[data-state="granted"] .settingsOsPermissionIcon {
-  background: oklch(from var(--success) l c h / 0.10);
-  color: var(--success);
-}
+/* Status-tinted icon: the denied tint lives here; the granted tint
+   was consolidated next to the granted border rule below (was dup'd
+   twice, second instance won by cascade — kept the one near its
+   border sibling). */
 .settingsOsPermissionRow[data-state="denied"] .settingsOsPermissionIcon {
   background: oklch(from var(--destructive) l c h / 0.10);
   color: var(--destructive);
@@ -11996,7 +12203,7 @@ button:active {
 
 .settingsOsPermissionReason {
   color: var(--foreground-50);
-  font-size: 0.72rem !important;
+  font-size: 0.72rem;
   font-style: italic;
 }
 
@@ -12148,7 +12355,7 @@ button:active {
   padding: 4px 10px;
   color: var(--foreground-80);
   font-size: 0.8125rem;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition: background var(--duration-quick) var(--ease-out-strong), border-color var(--duration-quick) var(--ease-out-strong), color var(--duration-quick) var(--ease-out-strong);
 }
 .settingsHealthRefresh:hover {
   background: var(--foreground-5);
@@ -12182,6 +12389,13 @@ button:active {
 }
 
 .settingsHealthSummary {
+  /* PR-HEALTH-SUMMARY-LIST-A11Y-0 (round 19/30): switched from
+     `<section role="list">` to semantic `<ul>`. Reset the UA's
+     default bullet + 40px padding-left so the 5-column grid
+     stays the same. */
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
@@ -12276,7 +12490,7 @@ button:active {
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--background);
-  transition: border-color 150ms ease;
+  transition: border-color var(--duration-base) var(--ease-out-strong);
 }
 .settingsHealthSignalRow[data-status="ok"] {
   border-color: oklch(from var(--success) l c h / 0.24);
@@ -12903,10 +13117,23 @@ button:active {
   font-size: 12px;
 }
 
-.settingsMemoryBackupList div {
+/* PR-MEMORY-BACKUP-LIST-A11Y-0 (round 16/30): selector
+   targeted the old `<div role="list">`. Container is now a
+   semantic `<ul>` (`.settingsMemoryBackupCandidates`); reset
+   the UA's bullet + padding-left so the flex-wrap layout stays
+   the same as before. */
+.settingsMemoryBackupCandidates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.settingsMemoryBackupCandidates > li {
+  margin: 0;
+  padding: 0;
 }
 
 .settingsMemoryBackupList small {
@@ -12967,12 +13194,24 @@ button:active {
 }
 
 .settingsMemoryEntryList {
+  /* PR-MEMORY-ENTRY-LIST-A11Y-0 (round 18/30): switched from
+     `<div role="list">` to semantic `<ul>`. Reset the UA's
+     bullet + padding-left so the grouped-card border + radius
+     stays the same. */
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: grid;
   gap: 0;
   border: 1px solid var(--foreground-10);
   border-radius: 8px;
   overflow: hidden;
   background: var(--foreground-2);
+}
+
+.settingsMemoryEntryList > li {
+  margin: 0;
+  padding: 0;
 }
 
 .settingsMemoryEntryCard {
@@ -12982,7 +13221,13 @@ button:active {
   border-bottom: 1px solid var(--foreground-8);
 }
 
-.settingsMemoryEntryCard:last-child {
+/* PR-MEMORY-ENTRY-DIVIDER-FIX-0 (WAWQAQ msg `610c0e5a`): after
+   PR-MEMORY-ENTRY-LIST-A11Y-0 wrapped each card in `<li>`, the
+   prior `.settingsMemoryEntryCard:last-child` selector matched
+   EVERY card (each is the sole child of its `<li>`), so every
+   between-card divider disappeared. Target the last `<li>` in
+   the list instead. */
+.settingsMemoryEntryList > li:last-child .settingsMemoryEntryCard {
   border-bottom: 0;
 }
 
@@ -13240,7 +13485,7 @@ button:active {
 .maka-first-run-checklist {
   width: min(760px, 100%);
   border: 1px solid oklch(from var(--foreground) l c h / 0.07);
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 14px;
   background: oklch(from var(--background-elevated, var(--background)) l c h / 0.58);
   display: grid;
@@ -13565,9 +13810,21 @@ button:active {
 }
 
 .maka-daily-review-archive-list {
+  /* PR-DAILYREVIEW-ARCHIVE-ROW-A11Y-0 (round 7/30): changed
+     from `<div role="list">` to semantic `<ul>`. Reset the
+     UA's default list bullet + padding-left so the visual
+     layout stays grid-driven. */
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: grid;
   gap: 3px;
   min-width: 0;
+}
+
+.maka-daily-review-archive-list > li {
+  margin: 0;
+  padding: 0;
 }
 
 .maka-daily-review-archive-row {
@@ -13582,8 +13839,8 @@ button:active {
   padding: 6px 8px;
   text-align: left;
   transition:
-    background 120ms var(--ease-out-strong),
-    border-color 120ms var(--ease-out-strong);
+    background var(--duration-quick) var(--ease-out-strong),
+    border-color var(--duration-quick) var(--ease-out-strong);
 }
 
 .maka-daily-review-archive-row:hover {
@@ -13826,17 +14083,44 @@ button:active {
   color: var(--foreground-50);
 }
 
+/* PR-DAILY-REVIEW-EYEBROW-RHYTHM-0 (WAWQAQ msg `7f0ec4a5`): granularity
+   bump. Each section now starts with a prominent eyebrow badge above
+   the title and a leading accent bar to the left, applying the editorial
+   "minimalist-ui §5 keystroke badges" + "design-taste-frontend §3
+   eyebrow + accent bar" rules from the skills audit. Visible every time
+   the user opens Daily Review. */
 .maka-daily-review-section {
   display: grid;
-  gap: 4px;
+  gap: 8px;
+  padding: 12px 0 0;
+  border-top: 1px solid oklch(from var(--foreground) l c h / 0.07);
+}
+
+.maka-daily-review-section:first-of-type {
+  border-top: 0;
+  padding-top: 4px;
 }
 
 .maka-daily-review-section-title {
-  font-size: 11px;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--foreground-50);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--foreground-60);
   margin: 0;
+}
+
+.maka-daily-review-section-title::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 12px;
+  border-radius: 999px;
+  background: oklch(from var(--accent) l c h / 0.85);
+  flex-shrink: 0;
 }
 
 .maka-daily-review-list {
@@ -13844,20 +14128,34 @@ button:active {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 2px;
+  gap: 4px;
 }
 
 .maka-daily-review-list-item {
   display: grid;
-  gap: 1px;
-  padding: 4px 8px;
-  border-radius: 6px;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 8px;
   background: transparent;
-  transition: background 120ms ease;
+  transition: background 140ms var(--ease-out-strong),
+              transform var(--duration-quick) var(--ease-out-strong);
 }
 
 .maka-daily-review-list-item:hover {
-  background: oklch(from var(--foreground) l c h / 0.04);
+  background: oklch(from var(--foreground) l c h / 0.045);
+}
+
+.maka-daily-review-list-item:active:not(:has(button:disabled)) {
+  transform: scale(0.99);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .maka-daily-review-list-item {
+    transition: background 0ms;
+  }
+  .maka-daily-review-list-item:active:not(:has(button:disabled)) {
+    transform: none;
+  }
 }
 
 .maka-daily-review-session-button {
@@ -13889,6 +14187,7 @@ button:active {
   color: var(--foreground-50);
   font-size: 11px;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .maka-daily-review-session-preview {
@@ -14055,26 +14354,17 @@ html[data-os="darwin"] .maka-shell-2col {
 }
 
 html[data-os="darwin"] .maka-session-panel {
-  background:
-    /* Warm wash so the glass material reads as a defined column rather
-       than empty translucency. Bumped from 0.04 -> 0.08 alpha so text
-       contrast holds on bright desktops (audit finding §6). Matches the
-       reference layout's parchment-mode `--agents-layout-bg` gradient
-       direction. */
-    linear-gradient(
-      172deg,
-      oklch(from var(--foreground) l c h / 0.08) 19.61%,
-      oklch(from var(--foreground) l c h / 0.02) 81.35%
-    ),
-    /* Translucent base — 50% (was 62%) gives the OS vibrancy more
-       room to show through while still keeping ~4.5:1 contrast on the
-       row text per WCAG AA. */
-    oklch(from var(--surface-canvas) l c h / 0.50);
-  /* Backdrop blur softens content that bleeds through. 8px (was 12)
-     keeps row text crisp; deeper blur made small UI text look soft. */
+  /* PR-CHAT-CHROME-FIX-1 (WAWQAQ msg `4a1b8c13`): the previous 172deg
+     gradient + 1px border-right reintroduced exactly the
+     "上面灰下面白" + visible seam that WAWQAQ called out in
+     `1e693dee` / `5d3b10e5` / `486b5611`. round-0 only stripped the
+     shell-level gradient; this `[data-os="darwin"]` rule was the
+     other place the gradient still lived. Flat translucent base only
+     — no gradient, no 1px border. The 4px gap around the floating
+     detail panel is the only visible boundary. */
+  background: oklch(from var(--surface-canvas) l c h / 0.50);
   backdrop-filter: saturate(140%) blur(8px);
   -webkit-backdrop-filter: saturate(140%) blur(8px);
-  border-right: 1px solid oklch(from var(--foreground) l c h / 0.06);
 }
 
 /* Force opaque-foreground text on every direct sidebar text surface so

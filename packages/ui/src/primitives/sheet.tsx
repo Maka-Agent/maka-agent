@@ -6,7 +6,7 @@ import { useRender } from "@base-ui/react/use-render";
 import { Button } from "./button.js";
 import { ScrollArea } from "./scroll-area.js";
 import { cn } from "../utils.js";
-import { XIcon } from "lucide-react";
+import { XIcon } from "../icons.js";
 import type React from "react";
 
 export const Sheet: typeof SheetPrimitive.Root = SheetPrimitive.Root;
@@ -99,7 +99,7 @@ export function SheetPopup({
             side === "right" &&
               "col-start-2 w-[calc(100%-(--spacing(12)))] max-w-md border-s data-ending-style:translate-x-8 data-starting-style:translate-x-8",
             variant === "inset" &&
-              "before:hidden sm:rounded-2xl sm:border sm:before:rounded-[calc(var(--radius-2xl)-1px)] sm:**:data-[slot=sheet-footer]:rounded-b-[calc(var(--radius-2xl)-1px)]",
+              "before:hidden sm:rounded-xl sm:border sm:before:rounded-[calc(var(--radius-xl)-1px)] sm:**:data-[slot=sheet-footer]:rounded-b-[calc(var(--radius-xl)-1px)]",
             className,
           )}
           data-slot="sheet-popup"
@@ -108,7 +108,7 @@ export function SheetPopup({
           {children}
           {showCloseButton && (
             <SheetPrimitive.Close
-              aria-label="Close"
+              aria-label="关闭面板"
               className="absolute end-2 top-2"
               render={<Button size="icon" variant="ghost" />}
               {...closeProps}

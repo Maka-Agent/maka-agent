@@ -23,7 +23,7 @@ import {
   Volume2,
   X,
   type LucideProps,
-} from 'lucide-react';
+} from '@maka/ui/icons';
 import type {
   AppSettings,
   BotChannelSettings,
@@ -2193,19 +2193,25 @@ function AccountSettingsPage(props: {
       {totalCount === 0 ? (
         <div className="settingsEmptyState">等待添加模型连接。可在 设置 · 模型 添加。</div>
       ) : (
-        <div className="settingsConnectionList" role="list" aria-label="模型连接列表">
+        /* PR-CONNECTION-LIST-A11Y-0 (round 17/30): same fix as
+           rounds 7 and 16. Was `<div role="list">` containing
+           `<div role="listitem">` rows — invalid ARIA layering.
+           Semantic `<ul>` / `<li>` so screen readers get the
+           relationship from the elements themselves. */
+        <ul className="settingsConnectionList" aria-label="模型连接列表">
           {props.connections.map((connection) => (
-            <AccountConnectionRow
-              key={connection.slug}
-              connection={connection}
-              secretStatus={secretMap[connection.slug] ?? 'loading'}
-              isDefault={connection.slug === props.defaultSlug}
-              testing={testingSlug === connection.slug}
-              canTest={testingSlug === null}
-              onTest={() => void testConnection(connection.slug)}
-            />
+            <li key={connection.slug}>
+              <AccountConnectionRow
+                connection={connection}
+                secretStatus={secretMap[connection.slug] ?? 'loading'}
+                isDefault={connection.slug === props.defaultSlug}
+                testing={testingSlug === connection.slug}
+                canTest={testingSlug === null}
+                onTest={() => void testConnection(connection.slug)}
+              />
+            </li>
           ))}
-        </div>
+        </ul>
       )}
       <p className="settingsHelpText">
         共 {totalCount} 个连接 · {enabledCount} 已启用。修改模型密钥、服务地址或默认模型会清掉「已验证」状态，
@@ -2271,7 +2277,6 @@ function AccountConnectionRow(props: {
   return (
     <div
       className="settingsConnectionRow"
-      role="listitem"
       data-status={status}
       data-default={props.isDefault ? 'true' : undefined}
     >
@@ -3124,7 +3129,7 @@ function WebSearchSettingsPage(props: {
             <small>
               {usingEnvKey
                 ? '当前使用环境变量 TAVILY_API_KEY / MAKA_TAVILY_API_KEY；如需改用保存的密钥，请移除环境变量后重启。'
-                : <>保存在主进程设置中，渲染器永远看不到明文。在 <a href="https://tavily.com" target="_blank" rel="noreferrer">tavily.com</a> 申请。</>}
+                : <>保存在主进程设置中，渲染器永远看不到明文。在 <a href="https://tavily.com" target="_blank" rel="noreferrer noopener">tavily.com</a> 申请。</>}
             </small>
           </div>
           <PasswordInput
@@ -3258,7 +3263,7 @@ function WebSearchSettingsPage(props: {
             <ul className="settingsWebSearchResults" aria-label="联网搜索真实查询结果">
               {safeRows.map((row, idx) => (
                 <li key={`${row.url}-${idx}`} className="settingsWebSearchResult">
-                  <a href={row.url} target="_blank" rel="noreferrer">{row.title}</a>
+                  <a href={row.url} target="_blank" rel="noreferrer noopener">{row.title}</a>
                   <small>{row.source}</small>
                   <p>{row.snippet}</p>
                 </li>
@@ -3998,11 +4003,19 @@ function MemorySettingsPage(props: {
       {effective.backups && effective.backups.length > 1 && (
         <div className="settingsMemoryBackupList" role="status">
           <strong>备份候选</strong>
-          <div role="list" aria-label="本地记忆备份候选列表">
+          {/* PR-MEMORY-BACKUP-LIST-A11Y-0 (round 16/30): same
+              fix as round-7 daily-review archive list. Was
+              `<div role="list">` with `<span role="listitem">`
+              children — invalid layering (a span is not a list,
+              and a listitem on a span has no list context to
+              attach to). Switched to semantic <ul>/<li> so
+              screen readers get the relationship from the
+              elements themselves. */}
+          <ul className="settingsMemoryBackupCandidates" aria-label="本地记忆备份候选列表">
             {effective.backups.map((backup) => {
               const backupCandidateLabel = `${localMemoryBackupKindLabel(backup.kind)} · ${localMemoryBackupSummary(backup)}`;
               return (
-                <span key={`${backup.kind}:${backup.path}`} className="settingsMemoryBackupCandidate" role="listitem">
+                <li key={`${backup.kind}:${backup.path}`} className="settingsMemoryBackupCandidate">
                   <span>{backupCandidateLabel} · <RelativeTime ts={backup.updatedAt} /></span>
                   <Button
                     type="button"
@@ -4037,10 +4050,10 @@ function MemorySettingsPage(props: {
                   >
                     {isMemoryActionPending(`backup:${backup.kind}:copy`) ? '复制中…' : '复制引用'}
                   </Button>
-                </span>
+                </li>
               );
             })}
-          </div>
+          </ul>
           <small>上一版操作会使用最近的候选；这里只显示 metadata，不展示备份正文。</small>
         </div>
       )}
@@ -4288,7 +4301,14 @@ function MemoryEntryList(props: {
       {props.entries.length === 0 ? (
         <p className="settingsMemoryEntryEmpty">{props.filtered ? '无匹配条目。' : '暂无条目。'}</p>
       ) : (
-        <div className="settingsMemoryEntryList" role="list" aria-label={`${props.title}列表`}>
+        /* PR-MEMORY-ENTRY-LIST-A11Y-0 (round 18/30): fourth
+           application of the same ARIA list fix. Was `<div
+           role="list">` with `<article role="listitem">` rows —
+           semantic `<ul>` / `<li>` so screen readers get the
+           relationship from the elements themselves. The inner
+           `<article>` per entry stays — articles are valid
+           sectioning content inside list items. */
+        <ul className="settingsMemoryEntryList" aria-label={`${props.title}列表`}>
           {props.entries.map((entry) => {
             const copyPending = props.pendingCopyIds?.has(`entry:${entry.id}:copy`) ?? false;
             const statusActionLabel = props.draftDirty
@@ -4302,7 +4322,8 @@ function MemoryEntryList(props: {
               ? `${statusActionLabel}，保存前不会写入 MEMORY.md`
               : undefined;
             return (
-              <article className="settingsMemoryEntryCard" role="listitem" key={entry.id}>
+              <li key={entry.id}>
+                <article className="settingsMemoryEntryCard">
                 <strong>{entry.title}</strong>
                 <small className="settingsMemoryEntryMeta">
                   {memoryOriginLabel(entry.origin)}
@@ -4365,10 +4386,11 @@ function MemoryEntryList(props: {
                     )}
                   </div>
                 )}
-              </article>
+                </article>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
     </section>
   );
@@ -6596,7 +6618,7 @@ function CapabilityRow(props: { capability: CapabilitySnapshot }) {
                 >
                   {copyingOfficeCliInstall ? '复制中…' : '复制 macOS/Linux 安装命令'}
                 </Button>
-                <a href={OFFICECLI_RELEASES_URL} target="_blank" rel="noreferrer">
+                <a href={OFFICECLI_RELEASES_URL} target="_blank" rel="noreferrer noopener">
                   打开二进制下载页
                 </a>
               </div>
@@ -6906,13 +6928,20 @@ function HealthCenterPage() {
         </div>
       </header>
 
-      <section aria-label="健康摘要" className="settingsHealthSummary" role="list">
+      {/* PR-HEALTH-SUMMARY-LIST-A11Y-0 (round 19/30): fifth
+          application of the ARIA list semantics fix. Was
+          `<section role="list">` containing 5 `<div
+          role="listitem">` tiles — switched to semantic
+          `<ul>` / `<li>`. The HealthSummaryTile component
+          drops its `role="listitem"` because the `<li>`
+          wrapper already carries it. */}
+      <ul aria-label="健康摘要" className="settingsHealthSummary">
         <HealthSummaryTile tone="success" label="正常" count={snapshot.summary.ok} />
         <HealthSummaryTile tone="info" label="提示" count={snapshot.summary.info} />
         <HealthSummaryTile tone="warning" label="警告" count={snapshot.summary.warning} />
         <HealthSummaryTile tone="destructive" label="错误" count={snapshot.summary.error} />
         <HealthSummaryTile tone="neutral" label="未知" count={snapshot.summary.unknown} />
-      </section>
+      </ul>
 
       {(blocksSendCount > 0 || blocksCapabilityCount > 0) && (
         <div className="settingsHealthBlockers" role="status">
@@ -6962,10 +6991,10 @@ function HealthSummaryTile(props: {
   count: number;
 }) {
   return (
-    <div className="settingsHealthSummaryTile" role="listitem" data-tone={props.tone} data-empty={props.count === 0}>
+    <li className="settingsHealthSummaryTile" data-tone={props.tone} data-empty={props.count === 0}>
       <strong>{props.count}</strong>
       <small>{props.label}</small>
-    </div>
+    </li>
   );
 }
 

@@ -21,7 +21,7 @@
  *     persistence path — this helper only constructs in-memory data.
  */
 
-import { EyeOff, Search } from 'lucide-react';
+import { EyeOff, Search } from '@maka/ui/icons';
 import type { Command } from './command-palette-types';
 import type { NormalizedThreadHit, ThreadSearchState } from './use-thread-search';
 

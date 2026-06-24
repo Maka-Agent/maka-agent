@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
-import { ChevronRight, X } from 'lucide-react';
+import { ChevronRight, X } from '@maka/ui/icons';
 import { nextRadioId } from './model-table-keyboard';
 import {
   CATALOG_PROVIDER_TYPES,
@@ -1712,7 +1712,7 @@ function ConnectionDetail(props: {
         onRefresh={() => void refreshModels()}
       />
       {defaults.signupUrl && (
-        <a className="providerExternalLink" href={defaults.signupUrl} target="_blank" rel="noreferrer">
+        <a className="providerExternalLink" href={defaults.signupUrl} target="_blank" rel="noreferrer noopener">
           获取模型密钥
         </a>
       )}

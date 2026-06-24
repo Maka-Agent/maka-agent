@@ -118,7 +118,12 @@ describe('SearchModal lifecycle contract (PR-SIDEBAR-IA-0 Phase 3 P0 fixup)', ()
   it('returns focus to the sidebar Search trigger when the modal closes', async () => {
     const components = await readFile(COMPONENTS_PATH, 'utf8');
     const main = await readFile(MAIN_TSX_PATH, 'utf8');
-    const sidebarSearchButton = components.match(/className="maka-sidebar-search-button"[\s\S]*?<\/button>/)?.[0] ?? '';
+    // PR-SIDEBAR-HEADER-BUTTONS-PRIMITIVE-0 (round 5/30): the sidebar
+    // search trigger was a raw <button> until routed through UiButton.
+    // Match either close tag so the contract pin tracks the primitive
+    // routing. The `data-maka-search-trigger` attribute still reaches
+    // the underlying DOM button because UiButton spreads data-* props.
+    const sidebarSearchButton = components.match(/className="maka-sidebar-search-button"[\s\S]*?<\/(?:button|UiButton)>/)?.[0] ?? '';
     const closeSearchModal = main.match(/function closeSearchModal\(options\?: \{ restoreFocus\?: boolean \}\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
 
     assert.match(

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Check, Copy, Eye, EyeOff } from 'lucide-react';
+import { Check, Copy, Eye, EyeOff } from '@maka/ui/icons';
 import { Button, Input, useToast } from '@maka/ui';
 
 /**

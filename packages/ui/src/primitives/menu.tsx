@@ -2,7 +2,7 @@
 
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { cn } from "../utils.js";
-import { ChevronRightIcon } from "lucide-react";
+import { ChevronRightIcon } from "../icons.js";
 import type * as React from "react";
 
 export const MenuCreateHandle: typeof MenuPrimitive.createHandle =

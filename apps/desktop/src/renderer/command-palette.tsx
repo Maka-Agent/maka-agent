@@ -28,7 +28,7 @@ import {
   SunMoon,
   Wifi,
   type LucideIcon,
-} from 'lucide-react';
+} from '@maka/ui/icons';
 import type { LlmConnection, PermissionMode, SessionSummary, SettingsSection, ThemePreference } from '@maka/core';
 import type { NavSelection } from '@maka/ui';
 import {

@@ -229,10 +229,30 @@
      Custom easing curves per emil-design-eng — the built-in CSS easings
      are too weak to feel intentional. Use --ease-out-strong for UI
      entrance/feedback, --ease-in-out-strong for on-screen movement,
-     --ease-drawer for iOS-style drawer/sheet motion. */
+     --ease-drawer for iOS-style drawer/sheet motion.
+
+     PR-MOTION-TOKEN-CONVERGE-0 (kenji's category 4, 2026-06-24):
+     duration scale paired with the easing scale. The values come from
+     the actual usage distribution in styles.css before the sweep:
+     150ms (58 sites) → base, 120ms (34) → quick, 180ms (13) → emphasized,
+     240/280ms (6) → large. Pick by intent, not by feel:
+       --duration-quick      — hover/press tactile feedback, focus rings
+       --duration-base       — color/border/transform on interactive elements
+       --duration-emphasized — modal/drawer/sheet enter, larger surface lift
+       --duration-large      — onboarding hero stagger, large list cascades
+
+     Anything outside this scale needs a justifying comment. The
+     `motion-token-converge-contract.test.ts` enforces this by banning
+     bare `cubic-bezier(0.16, 1, 0.3, 1)` (must use --ease-out-strong)
+     and `transition: all` (must enumerate properties). */
   --ease-out-strong: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --duration-quick: 120ms;
+  --duration-base: 150ms;
+  --duration-emphasized: 180ms;
+  --duration-large: 280ms;
 
   /* === page-card recipe ===
      Single source of truth for the lifted "page card" chrome used by every
@@ -940,7 +960,25 @@
   }
 
   /* Optional reasoning block — collapsed by default, expandable to inspect
-   * the model's chain of thought without cluttering the answer. */
+   * the model's chain of thought without cluttering the answer.
+   *
+   * PR-REASONING-PANEL-SMOOTH-EXPAND-0 (WAWQAQ msg `145f15d5`,
+   * skills round task #116): native `<details>` had no toggle
+   * feedback — clicking flicked content in/out without any handle.
+   * Polishes the summary into a real affordance:
+   *   - Replace browser-default disclosure triangle (varies per UA)
+   *     with a custom chevron that rotates 90deg on `[open]` using
+   *     a spring-ish cubic-bezier from design-taste-frontend §5
+   *     (220ms `cubic-bezier(0.16, 1, 0.3, 1)`).
+   *   - Body fades in on open via @starting-style — content still
+   *     mounts/unmounts (native `<details>` toggles `display`), but
+   *     the opacity ramp softens the visual snap.
+   * `cursor: pointer` deliberately NOT applied to the summary —
+   * macOS reserves the hand for links; details summaries use the
+   * default arrow. Enforced by `cursor-convention-contract.test.ts`.
+   * Native height animation requires `interpolate-size` + per-
+   * element JS state and isn't a single-element CSS fix; deferred
+   * until we route reasoning through Base UI's Accordion. */
   .maka-turn-thinking {
     margin: 0 0 8px;
     padding: 8px 10px;
@@ -958,6 +996,28 @@
     font-weight: 600;
     color: var(--accent);
     letter-spacing: 0.02em;
+    list-style: none;
+    /* `cursor: pointer` intentionally omitted — native macOS reserves
+       the hand cursor for links; `<details>` summaries are button-like
+       controls and use the default arrow. Enforced by
+       `cursor-convention-contract.test.ts`. */
+  }
+
+  /* Replace the default disclosure triangle with a custom chevron
+     that rotates smoothly on toggle. */
+  .maka-turn-thinking summary::-webkit-details-marker { display: none; }
+  .maka-turn-thinking summary::before {
+    content: '';
+    flex-shrink: 0;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 4px 0 4px 5px;
+    border-color: transparent transparent transparent currentColor;
+    transition: transform 220ms var(--ease-out-strong);
+  }
+  .maka-turn-thinking[open] > summary::before {
+    transform: rotate(90deg);
   }
 
   .maka-turn-thinking-note {
@@ -973,6 +1033,17 @@
     line-height: 1.55;
     font-style: italic;
     opacity: 0.9;
+    /* Fade-in when the parent <details> flips open. @starting-style
+       requires the rule to run on the first render after [open]
+       toggles — opacity starts at 0 then ramps to 0.9. Content
+       still mounts instantly (native <details>); the opacity ramp
+       softens the visual snap. */
+    transition: opacity 180ms ease-out;
+  }
+  @starting-style {
+    .maka-turn-thinking[open] > .maka-turn-thinking-body {
+      opacity: 0;
+    }
   }
 
   .maka-turn-thinking-actions {
@@ -1049,7 +1120,7 @@
      top-right corner to mark direction. Matches external design reference §15.1. */
   .maka-bubble-user {
     background: var(--chat-user-bg);
-    border-radius: 18px 4px 18px 18px;
+    border-radius: 12px 4px 12px 12px;
     padding: 10px 14px;
     line-height: 1.5;
     color: var(--chat-user-foreground);
@@ -1062,15 +1133,45 @@
      The bubble itself flows naturally; child markdown elements (h*, p, ul,
      code blocks, tables, blockquotes) all need their own spacing/typography
      so the content reads like a polished doc. */
+  /* PR-MESSAGE-BODY-READING-RHYTHM-0 (WAWQAQ msg `cdfd68eb`, skills
+     round task #116): apply prose-typography polish from pbakaus
+     impeccable + emilkowal.ski/agents-with-taste:
+       - `text-wrap: pretty` on body paragraphs (modern Chromium —
+         reduces orphans/widows, no JS, falls back to normal).
+       - tighten display-heading letter-spacing on h1/h2 (≥ 19px)
+         to -0.012em — at display sizes the default tracking reads
+         loose; impeccable mandates ≥ -0.04em on display headings,
+         we stay conservative since Maka mixes CJK + Latin.
+       - `tabular-nums` on inline <code> so digit columns in
+         technical replies align (price tables, version numbers,
+         build outputs). */
   .maka-bubble-assistant {
     color: var(--foreground);
     line-height: 1.65;
     padding: 4px 0;
     word-wrap: break-word;
+    /* PR-MESSAGE-BODY-MAX-WIDTH-0 (WAWQAQ msg `38055b9f`, skills
+       round task #116): cap body prose at ~72ch per pbakaus
+       impeccable (65–75ch) and design-taste-frontend (max-w-[65ch]).
+       On wide windows the assistant text used to stretch the full
+       chat-pane width and wrap into very long lines, hurting
+       eye-tracking. Cap applies to inline text only — code blocks,
+       tables, and other block-level children override with
+       max-width: 100% downstream so wide payloads still expand. */
+    max-width: 72ch;
+  }
+  .maka-bubble-assistant pre,
+  .maka-bubble-assistant table,
+  .maka-bubble-assistant .maka-code-block {
+    /* Wide payloads bypass the prose cap. */
+    max-width: 100%;
   }
   .maka-bubble-assistant > :first-child { margin-top: 0; }
   .maka-bubble-assistant > :last-child { margin-bottom: 0; }
-  .maka-bubble-assistant p { margin: 0 0 12px; }
+  .maka-bubble-assistant p {
+    margin: 0 0 12px;
+    text-wrap: pretty;
+  }
   .maka-bubble-assistant h1,
   .maka-bubble-assistant h2,
   .maka-bubble-assistant h3,
@@ -1079,6 +1180,13 @@
     line-height: 1.25;
     font-weight: 600;
     text-wrap: balance;
+  }
+  .maka-bubble-assistant h1,
+  .maka-bubble-assistant h2 {
+    letter-spacing: -0.012em;
+  }
+  .maka-bubble-assistant code {
+    font-variant-numeric: tabular-nums;
   }
   .maka-bubble-assistant h1 { font-size: 22px; }
   .maka-bubble-assistant h2 { font-size: 19px; }
@@ -1590,7 +1698,7 @@
     box-shadow:
       0 0 0 1px oklch(from var(--foreground) l c h / 0.04),
       0 1px 3px oklch(from var(--foreground) l c h / 0.04);
-    border-radius: 16px;
+    border-radius: 12px;
     background: var(--background-elevated);
     padding: 14px 16px;
     display: flex;

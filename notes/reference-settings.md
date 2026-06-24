@@ -314,9 +314,35 @@ Custom scrollbar is hidden. The inner content column has
 |----------------------------------|----------------------------------------------------------------|
 | `--agents-content-area-bg`       | `var(--color-bg-container)`                                    |
 | `--agents-content-area-gap`      | `4px`                                                          |
-| `--agents-content-area-radius`   | `6px`                                                          |
-| `--agents-layout-bg`             | linear-gradient(172deg, var(--color-fill-tertiary) 19.61%, var(--color-bg-container) 81.35%) |
+| `--agents-content-area-radius`   | `12px`                                                         |
+| `--agents-layout-bg`             | `var(--surface-canvas)` (flat neutral shell — **DO NOT** paint a 172deg gradient here, see warning below) |
 | `--settings-nav-row-selected-bg` | `var(--color-fill-secondary)`                                  |
+
+> ⚠️ **DO NOT paint a 172deg gradient on the layout/shell background.**
+>
+> The RE notes here historically said `--agents-layout-bg` is
+> `linear-gradient(172deg, var(--color-fill-tertiary) 19.61%, var(--color-bg-container) 81.35%)`. That value was an **artifact of the bundle CSS we copied**, not what the live reference product actually paints.
+> WAWQAQ has called this out four times in a row (msgs `1e693dee` /
+> `5d3b10e5` / `486b5611` / `4a1b8c13`) — "谁让你他妈的用渐变的啊？
+> 参考实现就没有啊". Every time we re-added the gradient because
+> some atlas/RE note claimed it was canon.
+>
+> Source-side enforcement: `apps/desktop/src/main/__tests__/chat-chrome-no-gradient-contract.test.ts` fails if any of `.appFrame`, `html[data-os="darwin"] .maka-session-panel`, or the floating panel reintroduces a gradient / border-right / smaller-than-12px radius. If a future RE iteration finds a *new* place where the reference product genuinely does paint a gradient, please update the contract test with the new exception in the same PR, don't silently lift the assertion.
+>
+> Use a **flat neutral shell** (`var(--surface-canvas)`) behind the
+> white content surface. Do not collapse the shell to the same white
+> as the content card: that removes the visible lower radius and lets
+> the bug come back even without a border or gradient.
+>
+> Rendered-pixel enforcement: after capturing
+> `sidebar-long-sessions/light-1280-motion`, run
+> `npm --workspace @maka/desktop run screenshots:chat-chrome:check`.
+> It verifies the actual PNG has a visible shell/content delta, no dark
+> one-pixel seam, and readable bottom surface corners.
+>
+> Surface radius is **12px** (was historically noted as 6px). 6px was
+> geometrically there but optically invisible — bottom corners of the
+> floating content card didn't read against a same-color shell.
 
 Color tokens consumed inside settings:
 - `--color-text` (primary text)

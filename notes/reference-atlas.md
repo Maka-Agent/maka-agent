@@ -202,17 +202,27 @@ and use `var(--border)` (more like `--color-border-secondary`). Visually maka's
 cards read as "bigger / softer / more isolated" than reference's tight 6px /
 hairline-tertiary cards.
 
-### The `--agents-layout-bg` (sidebar / chrome) tinted gradient
+### The `--agents-layout-bg` (sidebar / chrome) — flat, NOT gradient (corrected 2026-06-24)
 
 ```css
-background: linear-gradient(
-  172deg,
-  var(--color-fill-tertiary, #f9f9f9) 19.61%,
-  var(--color-bg-container, #fff)     81.35%
-);
+background: var(--color-bg-container);
 ```
 
-Subtle warm gradient on the outer shell that maka doesn't replicate.
+**This section originally claimed a 172° linear-gradient.** Corrected
+2026-06-24 (WAWQAQ msg `5d3b10e5` + `1e693dee`): the reference product
+actually renders a flat `--color-bg-container` here. The gradient I
+extracted from the bundle CSS *was* present, but only as a leftover
+in the source — the production app doesn't render it. Following the
+stale extracted CSS reintroduced the gradient into maka's
+`.maka-shell-2col` and `--agents-layout-bg` tokens, which WAWQAQ
+flagged as wrong:
+
+> 谁让你他妈的用渐变的啊？参考实现就没有啊
+
+PR-CHAT-CHROME-FIX-0 (`ed292897`) reverted both maka tokens to flat
+`var(--background)` / `var(--color-bg-container)`. **Future agents:
+do NOT re-add this gradient based on RE evidence; the user's
+observable ground truth is flat.**
 
 ---
 
@@ -328,7 +338,7 @@ Maka mostly uses `[data-active="true"]` on list rows. There's no `[data-agents-v
 | Page card outer      | 1px `--color-border-tertiary` + 6px radius + `0 1px 2px #0c0c0d0a` | flat (no border / no shadow after da1a40f1)                 | Restore the lift, but tight 6px radius (was 10)      |
 | Inter-card gap       | 4px (`--agents-content-area-gap`)                           | 10-14px gap                                                 | Tighten to 4-6px                                     |
 | Card shadow          | `0 1px 2px` 4% only — no second softer layer                | Used to have 2-layer (0 1px 2px + 0 8px 24px -16px 10%)     | Single 4% lift; let border do the separation         |
-| Sidebar / chrome bg  | 172° linear-gradient warm                                   | Flat `--surface-canvas`                                     | Optional: add the gradient                            |
+| Sidebar / chrome bg  | Flat `--color-bg-container` (corrected 2026-06-24)         | Flat `--background` (parity)                                | **None — do NOT add a gradient (see §4.5 correction)** |
 | Cron page heading    | (Need to extract — JS chunk has `cron-tasks` block)         | h2 24px / 650                                               | Likely larger / display weight                       |
 | Settings page        | `agents-settings-page-heading` + lede + `narrow` variant    | Modal popup (still!)                                        | Restructure as inline page in module-main pane       |
 | Active list fill     | `var(--color-bg-highlight)` = `#c9c4b8` (warm taupe)        | `oklch(from --foreground l c h / 0.07)` (neutral gray)      | Optional: warm taupe in parchment theme              |

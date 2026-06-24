@@ -47,8 +47,72 @@ import {
   Trash2,
   Wifi,
   X,
-} from 'lucide-react';
+} from './icons.js';
 import { redactSecrets } from './redact.js';
+import { DeepResearchEmptyHero, EmptyChatHero } from './chat-empty-hero.js';
+import {
+  type ClipboardCopyPhase,
+  useClipboardCopyFeedback,
+} from './clipboard-feedback.js';
+import { Markdown, MakaUriContext } from './markdown.js';
+import {
+  type UiLocale,
+  detectUiLocale,
+  getPromptSuggestions,
+} from './locale-helpers.js';
+import {
+  avatarInitial,
+  createAbsoluteTimeFormat,
+  formatAbsoluteTimestamp,
+  formatTurnDuration,
+  messageRoleLabel,
+  turnAbortMarkerLabel,
+} from './chat-display-helpers.js';
+import {
+  type ChatModelChoice,
+  groupModelChoices,
+  modelChoiceValue,
+  parseModelChoiceValue,
+} from './chat-model-helpers.js';
+import {
+  type DailyReviewRange,
+  dailyReviewPanelErrorMessage,
+  dailyReviewScopeKey,
+  formatDailyReviewArchiveGeneratedAt,
+  formatDailyReviewArchiveTitle,
+  formatDailyReviewMarkdown,
+} from './daily-review-helpers.js';
+import {
+  type ComposerHistoryState,
+  appendPromptContextDraft,
+  navigateComposerHistory,
+  readComposerDraft,
+  rememberComposerDraft,
+  rememberComposerHistoryEntry,
+} from './composer-helpers.js';
+import {
+  PLAN_REMINDER_EXAMPLE_TEMPLATES,
+  type PlanReminderDisplayRow,
+  type PlanReminderExampleTemplate,
+  comparePlanReminderBySort,
+  duplicatePlanReminderTitle,
+  formatPlanDeliveryProviderList,
+  formatPlanRecurrence,
+  formatReminderCountdown,
+  formatReminderTime,
+  normalizePlanReminderSearchQuery,
+  planReminderDisplayRows,
+  planReminderEditableRunAt,
+  planReminderFormValidationMessage,
+  planReminderMatchesSearch,
+  planReminderPresetRunAt,
+  planReminderRecurrenceValue,
+  planReminderRunRangeStart,
+  planReminderStatusLabel,
+  planReminderTemplateNextRunAt,
+  runStatusLabel,
+  toPlanReminderDateTimeInputValue,
+} from './plan-reminder-helpers.js';
 import {
   isMakaUriCandidate,
   isSafeExternalScheme,
@@ -57,10 +121,9 @@ import {
 } from './maka-uri.js';
 import { prepareSmoothStreamText, useSmoothStreamContent } from './smooth-stream.js';
 import { OverlayScrollArea } from './overlay-scroll-area.js';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkBreaks from 'remark-breaks';
-import rehypeHighlight from 'rehype-highlight';
+// Self-review: ReactMarkdown / remarkGfm / remarkBreaks / rehypeHighlight
+// imports moved to `./markdown.js` (PR-UI-LIB-EXTRACT-6). The orphan
+// imports here were leftover from the extract and unused — removed.
 import type {
   PermissionMode,
   PermissionRequestEvent,
@@ -124,7 +187,6 @@ import {
   DialogRoot,
   Input,
   SelectGroup,
-  SelectGroupLabel,
   SelectItem,
   SelectList,
   SelectPopup,
@@ -497,12 +559,23 @@ export function SessionListPanel(props: {
     >
       <header className="maka-session-panel-header">
         <div className="maka-sidebar-drag-strip">
-          {!props.sidebarCollapsed && (
-            <span className="maka-sidebar-brand" aria-hidden="true">Maka</span>
-          )}
+          {/* PR-SIDEBAR-HEADER-BUTTONS-PRIMITIVE-0 (round 5/30):
+              both icon affordances in the sidebar drag strip now
+              flow through UiButton. variant="quiet" + size="icon-sm"
+              match the 24×24 quiet-icon shape; the custom class
+              still owns -webkit-app-region + the bespoke
+              focus-visible ring (3px accent shadow). */}
+          {/* PR-SIDEBAR-WORDMARK-KILL-0 (WAWQAQ msg `1fae5521` 2026-06-24
+              "现在侧边栏左上角有Maka这个单词，好丑啊"): dropped the
+              Georgia serif `Maka` wordmark that PR #190 added next
+              to the traffic lights. The app icon + window title bar
+              already carry the brand identity; the wordmark inside
+              the sidebar drag strip read as redundant chrome. */}
           {props.onOpenSearchModal && (
-            <button
+            <UiButton
               className="maka-sidebar-search-button"
+              variant="quiet"
+              size="icon-sm"
               type="button"
               data-maka-search-trigger="true"
               onClick={props.onOpenSearchModal}
@@ -510,10 +583,12 @@ export function SessionListPanel(props: {
               title="搜索对话"
             >
               <Search size={16} strokeWidth={1.65} aria-hidden="true" />
-            </button>
+            </UiButton>
           )}
-          <button
+          <UiButton
             className="maka-sidebar-toggle"
+            variant="quiet"
+            size="icon-sm"
             type="button"
             onClick={props.onToggleSidebar}
             aria-label={props.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
@@ -525,7 +600,7 @@ export function SessionListPanel(props: {
             ) : (
               <PanelLeftClose size={16} strokeWidth={1.65} aria-hidden="true" />
             )}
-          </button>
+          </UiButton>
         </div>
       </header>
 
@@ -533,8 +608,20 @@ export function SessionListPanel(props: {
         内部参考式 IA: the primary rail is a flat list of actions/modules.
         "会话" is the lower history region, not a second top-level page entry.
       */}
+      {/* PR-SIDEBAR-NAV-ROWS-PRIMITIVE-0 (round 13/30): the 4
+          main nav rows (新任务 / 每日回顾 / 技能 / 定时任务) were
+          all raw <button>. Routed through UiButton with the
+          newly-introduced size="nav" variant — `size="nav"`
+          contributes no layout utilities so .maka-nav-row's
+          tight 30px min-height + 3px 6px padding + 14px font +
+          grid-template-columns stays the source of truth. The
+          primitive contributes `:active scale` + focus-visible
+          + disabled-state contract uniformly with the rest of
+          the panel. */}
       <nav className="maka-sidebar-modules" aria-label="主导航">
-        <button
+        <UiButton
+          variant="quiet"
+          size="nav"
           className="maka-nav-row maka-nav-new-task"
           aria-label="新任务"
           type="button"
@@ -542,13 +629,15 @@ export function SessionListPanel(props: {
         >
           <SquarePen className="maka-nav-icon" strokeWidth={1.5} aria-hidden="true" />
           <span>新任务</span>
-        </button>
+        </UiButton>
         {/* PR-UI-PIXEL-5 (2026-06-21): the standalone 搜索 nav row was
             removed — search is reachable from the dedicated search button in
             the sidebar header (`.maka-sidebar-search-button`) and ⌘K, so a
             second entry point was redundant. The `search` module id + label
             are kept for those triggers. */}
-        <button
+        <UiButton
+          variant="quiet"
+          size="nav"
           className="maka-nav-row"
           data-active={isModuleActive('daily-review')}
           aria-current={isModuleActive('daily-review') ? 'page' : undefined}
@@ -558,8 +647,10 @@ export function SessionListPanel(props: {
         >
           <LineChart className="maka-nav-icon" strokeWidth={1.5} aria-hidden="true" />
           <span>{MODULE_NAV_LABEL['daily-review']}</span>
-        </button>
-        <button
+        </UiButton>
+        <UiButton
+          variant="quiet"
+          size="nav"
           className="maka-nav-row"
           data-active={isModuleActive('skills')}
           aria-current={isModuleActive('skills') ? 'page' : undefined}
@@ -569,8 +660,10 @@ export function SessionListPanel(props: {
         >
           <Sparkles className="maka-nav-icon" strokeWidth={1.5} aria-hidden="true" />
           <span>{MODULE_NAV_LABEL.skills}</span>
-        </button>
-        <button
+        </UiButton>
+        <UiButton
+          variant="quiet"
+          size="nav"
           className="maka-nav-row"
           data-active={isModuleActive('automations')}
           aria-current={isModuleActive('automations') ? 'page' : undefined}
@@ -583,7 +676,7 @@ export function SessionListPanel(props: {
           {activePlanReminderCount > 0 && (
             <small className="maka-nav-count" aria-hidden="true">{activePlanReminderCount}</small>
           )}
-        </button>
+        </UiButton>
       </nav>
 
       {/*
@@ -659,8 +752,16 @@ export function SessionListPanel(props: {
             "Free Plan" widget falsely implied a subscription model and
             was removed per WAWQAQ msg cad3dec4. About / version info
             still reachable via Settings → 关于. */}
-        <button
+        {/* PR-SIDEBAR-SETTINGS-BUTTON-PRIMITIVE-0 (round 4/30):
+            was a raw <button>. Route through UiButton so the
+            sidebar footer respects the same :active scale,
+            hover token, focus-visible, and `data-pressed`
+            contract as every other interactive element in
+            this panel. The custom class still owns the
+            full-width grid layout (24px icon + 1fr label). */}
+        <UiButton
           className="maka-sidebar-settings-button"
+          variant="quiet"
           type="button"
           onClick={props.onOpenSettings}
           aria-label="设置"
@@ -668,7 +769,7 @@ export function SessionListPanel(props: {
         >
           <Settings className="maka-nav-icon" strokeWidth={1.5} aria-hidden="true" />
           <span>设置</span>
-        </button>
+        </UiButton>
         {/*
           PR-UX-POLISH-1 commit 4 (WAWQAQ msg `e0dbad11` + kenji
           msg `2844f64f` blocker #1): the `? 快捷键` chip in the
@@ -1279,7 +1380,6 @@ export interface DailyReviewBridge {
  * borrow: external "today" digest concept (read-only summary).
  * diverge: no cron, no auto-push, no memory promotion (privacy default).
  */
-type DailyReviewRange = 1 | 7 | 30;
 type DailyReviewMarkdownActionInput = {
   markdown: string;
   label: string;
@@ -1306,10 +1406,6 @@ const DAILY_REVIEW_ARCHIVE_TRIGGER_LABEL: Record<DailyReviewArchive['trigger'], 
   cron: '定时',
   manual: '手动',
 };
-
-function dailyReviewScopeKey(offsetDays: number, range: DailyReviewRange): string {
-  return `${offsetDays}:${range}`;
-}
 
 function DailyReviewPanel(props: {
   bridge: DailyReviewBridge;
@@ -1582,25 +1678,36 @@ function DailyReviewPanel(props: {
             </p>
           ) : (
             <div className="maka-daily-review-archive-layout">
-              <div className="maka-daily-review-archive-list" role="list" aria-label="回顾报告历史">
+              {/* PR-DAILYREVIEW-ARCHIVE-ROW-A11Y-0 (round 7/30):
+                  the archive list was a `<div role="list">` with
+                  `<button role="listitem">` children. `role` doesn't
+                  layer like that — a `<button>` is already a button,
+                  so giving it `role="listitem"` either gets ignored
+                  by ATs or produces inconsistent announcements.
+                  Switched to semantic `<ul>` / `<li>` and routed the
+                  click target through UiButton so disabled-state +
+                  focus-visible + `:active` come from the shared
+                  contract. */}
+              <ul className="maka-daily-review-archive-list" aria-label="回顾报告历史">
                 {archives.map((archive) => (
-                  <button
-                    key={archive.id}
-                    type="button"
-                    className="maka-daily-review-archive-row"
-                    data-active={selectedArchiveId === archive.id ? 'true' : undefined}
-                    onClick={() => setSelectedArchiveId(archive.id)}
-                    role="listitem"
-                  >
-                    <span className="maka-daily-review-archive-row-title">
-                      {formatDailyReviewArchiveTitle(archive)}
-                    </span>
-                    <span className="maka-daily-review-archive-row-meta">
-                      {DAILY_REVIEW_ARCHIVE_STATUS_LABEL[archive.status]} · {archive.totals.sessionCount} 对话 · {formatDailyReviewArchiveGeneratedAt(archive.generatedAt)}
-                    </span>
-                  </button>
+                  <li key={archive.id}>
+                    <UiButton
+                      type="button"
+                      variant="quiet"
+                      className="maka-daily-review-archive-row"
+                      data-active={selectedArchiveId === archive.id ? 'true' : undefined}
+                      onClick={() => setSelectedArchiveId(archive.id)}
+                    >
+                      <span className="maka-daily-review-archive-row-title">
+                        {formatDailyReviewArchiveTitle(archive)}
+                      </span>
+                      <span className="maka-daily-review-archive-row-meta">
+                        {DAILY_REVIEW_ARCHIVE_STATUS_LABEL[archive.status]} · {archive.totals.sessionCount} 对话 · {formatDailyReviewArchiveGeneratedAt(archive.generatedAt)}
+                      </span>
+                    </UiButton>
+                  </li>
                 ))}
-              </div>
+              </ul>
               <DailyReviewArchiveBody archive={selectedArchive} loading={archiveLoading} />
             </div>
           )}
@@ -1753,8 +1860,17 @@ function DailyReviewPanel(props: {
               <ul className="maka-daily-review-list" aria-label="活跃对话列表">
                 {visibleSummary.sessions.map((session) => (
                   <li key={session.id} className="maka-daily-review-list-item">
-                    <button
+                    {/* PR-DAILYREVIEW-SESSION-BUTTON-PRIMITIVE-0
+                        (round 6/30): the active-conversation row
+                        used a raw <button>. Routed through UiButton
+                        variant="quiet" so disabled-state styling +
+                        focus-visible + :active scale come from the
+                        shared button contract. Custom class still
+                        owns the in-row layout (name left, relative
+                        time right). */}
+                    <UiButton
                       type="button"
+                      variant="quiet"
                       className="maka-daily-review-session-button"
                       onClick={() => props.onSelectSession?.(session.id)}
                       disabled={!props.onSelectSession}
@@ -1764,7 +1880,7 @@ function DailyReviewPanel(props: {
                         ts={session.lastMessageAt}
                         className="maka-daily-review-session-time"
                       />
-                    </button>
+                    </UiButton>
                     {session.lastMessagePreview && (
                       <span className="maka-daily-review-session-preview">
                         {session.lastMessagePreview}
@@ -1787,10 +1903,6 @@ function DailyReviewPanel(props: {
       )}
     </div>
   );
-}
-
-function dailyReviewPanelErrorMessage(error: unknown): string {
-  return generalizedErrorMessageChinese(error, '每日回顾暂时不可用，请稍后重试。');
 }
 
 function DailyReviewArchiveBody(props: { archive: DailyReviewArchive | null; loading: boolean }) {
@@ -1850,66 +1962,6 @@ function DailyReviewArchiveBody(props: { archive: DailyReviewArchive | null; loa
       )}
     </article>
   );
-}
-
-function formatDailyReviewArchiveTitle(archive: DailyReviewArchive | DailyReviewArchiveSummary): string {
-  const d = new Date(archive.day.fromMs);
-  const date = d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
-  return `${date} · ${archive.mode === 'deep' ? '深度分析' : '每日回顾'}`;
-}
-
-function formatDailyReviewArchiveGeneratedAt(generatedAt: number): string {
-  return new Date(generatedAt).toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-/**
- * PR-DAILY-REVIEW-COPY-0: produce a Markdown summary of the current
- * Daily Review for clipboard share. Sessions list is title-only —
- * we deliberately skip lastMessagePreview because the message body
- * may contain content the user does not want in a shared note.
- */
-export function formatDailyReviewMarkdown(
-  summary: DailyReviewSummary,
-  dayLabel: string,
-): string {
-  const lines: string[] = [];
-  lines.push(`# Maka · 每日回顾 · ${dayLabel}`);
-  lines.push('');
-  lines.push(`- 对话：${summary.totals.sessionCount}`);
-  lines.push(`- 请求：${summary.totals.requestCount}`);
-  lines.push(`- Token：${summary.totals.totalTokens.toLocaleString()}`);
-  lines.push(`- 费用：$${summary.totals.costUsd.toFixed(2)}`);
-  if (summary.totals.errorCount > 0) {
-    lines.push(`- 错误：${summary.totals.errorCount}`);
-  }
-  if (summary.sessions.length > 0) {
-    lines.push('');
-    lines.push('## 活跃对话');
-    for (const session of summary.sessions) {
-      lines.push(`- ${session.name}`);
-    }
-  }
-  if (summary.topModels.length > 0) {
-    lines.push('');
-    lines.push('## 模型使用');
-    for (const entry of summary.topModels) {
-      const cost = entry.costUsd > 0 ? ` · $${entry.costUsd.toFixed(2)}` : '';
-      lines.push(`- ${entry.label}：${entry.requests} 次 · ${entry.totalTokens.toLocaleString()} tok${cost}`);
-    }
-  }
-  if (summary.topTools.length > 0) {
-    lines.push('');
-    lines.push('## 工具调用');
-    for (const entry of summary.topTools) {
-      lines.push(`- ${entry.label}：${entry.requests} 次`);
-    }
-  }
-  return lines.join('\n');
 }
 
 function DailyReviewTotalsCell(props: { label: string; value: string; tone?: 'error' }) {
@@ -1973,55 +2025,6 @@ function PlanReminderSelect<T extends string>(props: {
     </SelectRoot>
   );
 }
-
-type PlanReminderExampleTemplate = {
-  id: string;
-  title: string;
-  note: string;
-  scheduleLabel: string;
-  recurrence: PlanReminderRecurrence;
-  cronExpression: string;
-  nextRun: { weekday?: number; hour: number; minute: number };
-};
-
-const PLAN_REMINDER_EXAMPLE_TEMPLATES: readonly PlanReminderExampleTemplate[] = [
-  {
-    id: 'daily-download-cleanup',
-    title: '每日下载文件夹清理',
-    note: '请帮我整理「下载」文件夹，把截图、安装包和临时文档按类型归档，并列出可删除项。',
-    scheduleLabel: '每天 18:30',
-    recurrence: 'cron',
-    cronExpression: '30 18 * * *',
-    nextRun: { hour: 18, minute: 30 },
-  },
-  {
-    id: 'midday-reset',
-    title: '午间充电站',
-    note: '午休时间到了，帮我回顾上午完成了什么，并给下午列一个轻量可执行计划。',
-    scheduleLabel: '工作日 12:30',
-    recurrence: 'cron',
-    cronExpression: '30 12 * * 1-5',
-    nextRun: { hour: 12, minute: 30 },
-  },
-  {
-    id: 'weekend-todo-review',
-    title: '周末待办整理',
-    note: '梳理这周完成 / 未完成的待办，输出下周计划，并标记需要优先处理的 3 件事。',
-    scheduleLabel: '每周日 20:00',
-    recurrence: 'cron',
-    cronExpression: '0 20 * * 0',
-    nextRun: { weekday: 0, hour: 20, minute: 0 },
-  },
-  {
-    id: 'daily-news-brief',
-    title: '每日新闻摘要',
-    note: '总结今天科技 / AI / Maka 相关新闻 5 条，按重要性排序，并给出每条 1 句影响判断。',
-    scheduleLabel: '每天 09:30',
-    recurrence: 'cron',
-    cronExpression: '30 9 * * *',
-    nextRun: { hour: 9, minute: 30 },
-  },
-];
 
 function PlanReminderPanel(props: {
   reminders: PlanReminder[];
@@ -2750,223 +2753,6 @@ function PlanReminderPanel(props: {
   );
 }
 
-function toPlanReminderDateTimeInputValue(ts: number): string {
-  const date = new Date(ts);
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function planReminderPresetRunAt(preset: 'ten-minutes' | 'one-hour' | 'tomorrow-morning' | 'next-monday', now: number = Date.now()): number {
-  if (preset === 'ten-minutes') return now + 10 * 60 * 1000;
-  if (preset === 'one-hour') return now + 60 * 60 * 1000;
-  const date = new Date(now);
-  if (preset === 'tomorrow-morning') {
-    date.setDate(date.getDate() + 1);
-    date.setHours(9, 0, 0, 0);
-    return date.getTime();
-  }
-  const day = date.getDay();
-  const daysUntilNextMonday = ((8 - day) % 7) || 7;
-  date.setDate(date.getDate() + daysUntilNextMonday);
-  date.setHours(9, 0, 0, 0);
-  return date.getTime();
-}
-
-function planReminderTemplateNextRunAt(template: PlanReminderExampleTemplate, now: number = Date.now()): number {
-  const nextRun = new Date(now);
-  nextRun.setSeconds(0, 0);
-  nextRun.setHours(template.nextRun.hour, template.nextRun.minute, 0, 0);
-  if (typeof template.nextRun.weekday === 'number') {
-    const daysUntilTarget = (template.nextRun.weekday - nextRun.getDay() + 7) % 7;
-    nextRun.setDate(nextRun.getDate() + daysUntilTarget);
-  }
-  if (nextRun.getTime() <= now) {
-    nextRun.setDate(nextRun.getDate() + (typeof template.nextRun.weekday === 'number' ? 7 : 1));
-  }
-  return nextRun.getTime();
-}
-
-function planReminderFormValidationMessage(input: {
-  title: string;
-  parsedRunAt: number;
-  recurrence: PlanReminderRecurrence;
-  cronExpression: string;
-  delivery: PlanReminderDeliveryTarget;
-  now: number;
-}): string | null {
-  if (input.title.trim().length === 0) return '填写标题后才能保存提醒。';
-  if (!Number.isFinite(input.parsedRunAt)) return '选择有效的提醒时间。';
-  if (input.parsedRunAt < input.now) return '提醒时间必须晚于当前时间。';
-  if (input.recurrence === 'cron' && input.cronExpression.trim().split(/\s+/).length !== 5) {
-    return 'Cron 需要 5 段表达式，例如 0 9 * * 1-5。';
-  }
-  if (input.delivery.channel === 'bot' && input.delivery.chatId.length === 0) {
-    return '选择机器人聊天时需要填写 Chat ID。';
-  }
-  return null;
-}
-
-function formatPlanDeliveryProviderList(): string {
-  return BOT_DELIVERY_PROVIDERS.map((provider) => botDisplayLabel(provider)).join(' / ');
-}
-
-function comparePlanReminderForDisplay(a: PlanReminder, b: PlanReminder): number {
-  const statusDelta = planReminderStatusDisplayRank(a) - planReminderStatusDisplayRank(b);
-  if (statusDelta !== 0) return statusDelta;
-  if (a.status === 'scheduled' && b.status === 'scheduled') {
-    return planReminderNextRunSortValue(a) - planReminderNextRunSortValue(b);
-  }
-  if (a.status === 'completed' && b.status === 'completed') {
-    return planReminderLastRunSortValue(b) - planReminderLastRunSortValue(a);
-  }
-  return a.title.localeCompare(b.title, 'zh-Hans-CN');
-}
-
-function comparePlanReminderBySort(a: PlanReminder, b: PlanReminder, sort: 'created-desc' | 'next-run-asc' | 'updated-desc'): number {
-  if (sort === 'created-desc') {
-    return b.createdAt - a.createdAt || comparePlanReminderForDisplay(a, b);
-  }
-  if (sort === 'updated-desc') {
-    return b.updatedAt - a.updatedAt || comparePlanReminderForDisplay(a, b);
-  }
-  return comparePlanReminderForDisplay(a, b);
-}
-
-function planReminderStatusDisplayRank(reminder: PlanReminder): number {
-  if (reminder.status === 'scheduled') return 0;
-  if (reminder.status === 'paused') return 1;
-  if (reminder.status === 'completed') return 2;
-  return 3;
-}
-
-function planReminderNextRunSortValue(reminder: PlanReminder): number {
-  return typeof reminder.nextRunAt === 'number' ? reminder.nextRunAt : Number.MAX_SAFE_INTEGER;
-}
-
-function planReminderLastRunSortValue(reminder: PlanReminder): number {
-  return reminder.lastRun?.at ?? 0;
-}
-
-function normalizePlanReminderSearchQuery(query: string): string {
-  return query.trim().toLocaleLowerCase();
-}
-
-function planReminderMatchesSearch(reminder: PlanReminder, query: string): boolean {
-  return planReminderSearchText(reminder).toLocaleLowerCase().includes(query);
-}
-
-function planReminderSearchText(reminder: PlanReminder): string {
-  return [
-    reminder.title,
-    reminder.note,
-    reminder.status,
-    formatPlanRecurrence(reminder),
-    formatPlanReminderDeliveryTarget(reminder.delivery),
-    reminder.lastRun?.message,
-    ...reminder.runs.map((run) => `${runStatusLabel(run.status)} ${run.message}`),
-  ].filter(Boolean).join('\n');
-}
-
-type PlanReminderDisplayRow =
-  | { kind: 'group'; key: string; label: string; count: number }
-  | { kind: 'reminder'; reminder: PlanReminder };
-
-function planReminderDisplayRows(filter: 'all' | PlanReminderStatus, reminders: PlanReminder[]): PlanReminderDisplayRow[] {
-  if (filter !== 'all') return reminders.map((reminder) => ({ kind: 'reminder', reminder }));
-  const rows: PlanReminderDisplayRow[] = [];
-  for (const status of ['scheduled', 'paused', 'completed'] satisfies PlanReminderStatus[]) {
-    const group = reminders.filter((reminder) => reminder.status === status);
-    if (group.length === 0) continue;
-    rows.push({ kind: 'group', key: `group-${status}`, label: planReminderStatusGroupLabel(status), count: group.length });
-    rows.push(...group.map((reminder) => ({ kind: 'reminder' as const, reminder })));
-  }
-  return rows;
-}
-
-function planReminderStatusGroupLabel(status: PlanReminderStatus): string {
-  if (status === 'scheduled') return '待触发';
-  if (status === 'paused') return '已暂停';
-  return '已完成';
-}
-
-function planReminderStatusLabel(status: PlanReminderStatus): string {
-  return planReminderStatusGroupLabel(status);
-}
-
-function planReminderRunRangeStart(range: 'day' | 'week' | 'month' | 'all', now: number): number | null {
-  if (range === 'all') return null;
-  const date = new Date(now);
-  if (range === 'day') {
-    date.setHours(0, 0, 0, 0);
-    return date.getTime();
-  }
-  return now - (range === 'week' ? 7 : 30) * 24 * 60 * 60 * 1000;
-}
-
-function planReminderEditableRunAt(reminder: PlanReminder, now: number = Date.now()): number {
-  if (typeof reminder.nextRunAt === 'number' && reminder.nextRunAt > now) return reminder.nextRunAt;
-  const scheduledAt = reminder.schedule.kind === 'once' ? reminder.schedule.runAt : reminder.schedule.startAt;
-  return scheduledAt > now ? scheduledAt : now + 60 * 60 * 1000;
-}
-
-function planReminderRecurrenceValue(reminder: PlanReminder): PlanReminderRecurrence {
-  if (reminder.schedule.kind === 'once') return 'none';
-  if (reminder.schedule.kind === 'cron') return 'cron';
-  return reminder.schedule.recurrence;
-}
-
-function duplicatePlanReminderTitle(title: string): string {
-  const suffix = ' 副本';
-  if (title.endsWith(suffix)) return title;
-  return `${title}${suffix}`.slice(0, 120);
-}
-
-function formatReminderTime(ts: number): string {
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(ts));
-}
-
-/**
- * PR-PLAN-NEXT-RUN-COUNTDOWN-0: small chip next to the absolute
- * next-run time so the user sees both "what" and "when from now"
- * in one glance. Past-due reminders read as "已过期"; very near
- * (< 60s) reads "马上"; the rest read in minute / hour / day
- * buckets so screen-reader users get a single self-contained
- * label.
- */
-function formatReminderCountdown(ts: number, now: number = Date.now()): string {
-  const diffMs = ts - now;
-  if (diffMs <= -60_000) return '已过期';
-  if (diffMs < 60_000) return '马上';
-  const diffMin = Math.round(diffMs / 60_000);
-  if (diffMin < 60) return `${diffMin} 分钟后`;
-  const diffHour = Math.round(diffMin / 60);
-  if (diffHour < 24) return `${diffHour} 小时后`;
-  const diffDay = Math.round(diffHour / 24);
-  if (diffDay === 1) return '明天';
-  if (diffDay < 7) return `${diffDay} 天后`;
-  if (diffDay < 30) return `${Math.round(diffDay / 7)} 周后`;
-  return `${Math.round(diffDay / 30)} 个月后`;
-}
-
-function formatPlanRecurrence(reminder: PlanReminder): string {
-  if (reminder.schedule.kind === 'once') return '一次性提醒';
-  if (reminder.schedule.kind === 'cron') return `Cron：${reminder.schedule.expression}`;
-  if (reminder.schedule.recurrence === 'daily') return '重复：每天';
-  if (reminder.schedule.recurrence === 'weekly') return '重复：每周';
-  return '重复：每月';
-}
-
-function runStatusLabel(status: NonNullable<PlanReminder['lastRun']>['status']): string {
-  if (status === 'triggered') return '已触发';
-  if (status === 'blocked') return '已阻止';
-  return '失败';
-}
-
 /**
  * PR-SIDEBAR-IA-0 Phase 2 fixup (xuan `91401163` + kenji `6465cf22`,
  * `7c320898`) + Phase 3 P0 fixup (WAWQAQ msg `d53852ac`, xuan
@@ -3497,8 +3283,15 @@ function SessionListGroups(props: {
         return (
           <div key={group.key} className="maka-list-group" data-collapsible={group.collapsible || undefined}>
             {group.collapsible ? (
-              <button
+              /* PR-LIST-GROUP-TOGGLE-PRIMITIVE-0 (round 10/30):
+                 disclosure-pattern toggle (aria-expanded +
+                 aria-controls). Routed through UiButton so the
+                 collapsible group header shares the same
+                 focus-visible + `:active` contract as every
+                 other interactive surface in the session list. */
+              <UiButton
                 type="button"
+                variant="quiet"
                 className="maka-list-group-label maka-list-group-toggle"
                 onClick={toggle}
                 aria-expanded={expanded}
@@ -3518,7 +3311,7 @@ function SessionListGroups(props: {
                   can tell whether expanding the group is worth it. Open
                   groups intentionally omit counts to keep the rail flat. */}
                 <span className="maka-list-group-count">（{group.sessions.length}）</span>
-              </button>
+              </UiButton>
             ) : (
               <div className="maka-list-group-label">
                 <span>{group.label}</span>
@@ -3681,84 +3474,8 @@ const BLOCKED_REASON_TOOLTIP = {
 
 const SCROLL_BOTTOM_THRESHOLD = 64; // px
 
-/**
- * PR-UI-14 (@yuejing 2026-05-22): locale-aware prompt suggestions.
- *
- * Audit §3.7 — the v1 chip set was 6 dev-heavy zh prompts (code review,
- * unit tests, debugging…). Two problems:
- *   1. English-locale users saw a wall of Chinese chips on first run.
- *   2. Non-developer users (PMs, writers, students) saw nothing
- *      universally relevant — the chips read as "Maka is only for
- *      programmers".
- *
- * Fix: detect locale family (zh / en) via `navigator.language` and
- * return a balanced mix of dev + general starting points. Each locale
- * keeps 3 dev chips (codebase summary / explain code / Code review)
- * for the power-user path and adds 3 general chips (read a long doc,
- * translate, draft a message) so the empty-chat surface reads as a
- * general assistant first, a coding assistant second.
- */
-type PromptSuggestionLocale = 'zh' | 'en';
-type PromptSuggestion = { label: string; prompt: string };
-
-const PROMPT_SUGGESTIONS_BY_LOCALE: Record<PromptSuggestionLocale, PromptSuggestion[]> = {
-  zh: [
-    { label: '总结代码库', prompt: '帮我总结当前代码库的目录结构和关键模块。' },
-    { label: '解释这段代码', prompt: '我贴一段代码进来，请帮我逐行解释它做什么、有没有坑：\n\n```\n\n```' },
-    { label: '读一份长文', prompt: '我贴一篇文章/文档过来，请帮我提炼核心观点、列出关键事实、找出我可能漏看的地方：\n\n' },
-    { label: '翻译并润色', prompt: '把下面这段翻译成英文，保持原意，语气专业自然：\n\n' },
-    { label: '起草一条消息', prompt: '帮我起草一条 ____ 风格的消息，对象是 ____，目的是 ____：\n\n要点：\n- \n- ' },
-    { label: '代码审查', prompt: '请帮我审查这段代码，重点关注可读性、错误处理和潜在性能问题：\n\n```\n\n```' },
-  ],
-  en: [
-    { label: 'Summarize codebase', prompt: 'Help me map this codebase: directory layout, key modules, and how they fit together.' },
-    { label: 'Explain code', prompt: 'Paste a snippet — explain it line by line and flag any pitfalls:\n\n```\n\n```' },
-    { label: 'Read a long doc', prompt: 'Here\'s an article or doc — pull out the core argument, list the key facts, and tell me what I might be missing:\n\n' },
-    { label: 'Translate & polish', prompt: 'Translate the text below into Chinese; keep the meaning, tone should stay natural and professional:\n\n' },
-    { label: 'Draft message', prompt: 'Help me draft a ____ message to ____, with the goal of ____:\n\nPoints to cover:\n- \n- ' },
-    { label: 'Review code', prompt: 'Please review this code — readability, error handling, performance concerns:\n\n```\n\n```' },
-  ],
-};
-
-/**
- * Detects the renderer-side UI locale family. Used by EmptyChatHero
- * chips + hero copy (PR-UI-14) and Composer / OnboardingHero quickChat
- * placeholders (PR-UI-15). Centralized here so all UI surfaces fall
- * onto the same `zh` / `en` split — there's no per-component drift.
- */
-export type UiLocale = PromptSuggestionLocale;
-
-export function detectUiLocale(): UiLocale {
-  if (typeof document !== 'undefined') {
-    // Precedence (highest to lowest), per kenji `7e532892` +
-    // xuan `54b56858` acceptance criteria:
-    //   1. visual-smoke fixture override (deterministic baselines).
-    //   2. user preference (PR-LANG-PREF-0): persisted in
-    //      `personalization.uiLocale`; the renderer mirrors a
-    //      resolved-value attribute (`data-maka-locale="zh|en"`)
-    //      to `<html>` on mount and on every settings save so we
-    //      can read it synchronously here without an async
-    //      settings round-trip.
-    //   3. Chinese-first product fallback. Most app chrome is already
-    //      Chinese, and Electron's `navigator.language` can be `en-US`
-    //      on this dev machine, which produced a visibly mixed shell.
-    //
-    // Real users can still choose English explicitly in Settings; `auto`
-    // should not make the default Chinese shell read half-English.
-    const smokeOverride = document.documentElement.dataset.makaVisualSmokeLocale;
-    if (smokeOverride === 'zh' || smokeOverride === 'en') return smokeOverride;
-    const userPref = document.documentElement.dataset.makaLocale;
-    if (userPref === 'zh' || userPref === 'en') return userPref;
-  }
-  return 'zh';
-}
-
 // Back-compat alias for the helper introduced in PR-UI-14.
 const detectPromptSuggestionLocale = detectUiLocale;
-
-export function getPromptSuggestions(locale?: PromptSuggestionLocale): PromptSuggestion[] {
-  return PROMPT_SUGGESTIONS_BY_LOCALE[locale ?? detectUiLocale()];
-}
 
 function SessionRow(props: {
   session: SessionSummary;
@@ -3907,7 +3624,18 @@ function SessionRow(props: {
         // rail + bg tint via CSS; the row's `name` cluster also
         // recolors to accent on selected so the row reads as
         // "current" without a heavy full-bg pill.
-        <button
+        /* PR-SESSION-ROW-MAIN-PRIMITIVE-0 (round 14/30): the
+           single most-clicked button in the app — every session
+           row's main click target. Routed through UiButton with
+           size="nav" (round-12 enabler) so the bespoke
+           `.maka-list-row-main` density (32-40px height, custom
+           padding, grid layout with text/meta columns) stays the
+           source of truth, while the primitive contributes the
+           shared `:active scale`, focus-visible, and
+           disabled-state contract. */
+        <UiButton
+          variant="quiet"
+          size="nav"
           className="maka-list-row-main"
           type="button"
           data-session-id={session.id}
@@ -3971,7 +3699,7 @@ function SessionRow(props: {
           ) : (
             <span className="maka-list-row-meta">{formatSessionMeta(session)}</span>
           )}
-        </button>
+        </UiButton>
       )}
       {actions && !editing && (
         <div
@@ -3980,8 +3708,19 @@ function SessionRow(props: {
           aria-hidden={actionsVisible ? undefined : 'true'}
           data-visible={actionsVisible ? 'true' : undefined}
         >
-          <button
+          {/* PR-SESSION-ROW-ACTIONS-PRIMITIVE-0 (round 8/30):
+              four hover-revealed action buttons routed through
+              UiButton variant="quiet" size="icon-sm". Custom
+              `.maka-list-row-action` still owns the overlay
+              positioning + reveal animation; primitive carries
+              the disabled, focus-visible, and `:active` contract.
+              The danger variant only adds a destructive color
+              tint via class override, not a different primitive
+              variant — keeps the overlay shape uniform. */}
+          <UiButton
             type="button"
+            variant="quiet"
+            size="icon-sm"
             className="maka-list-row-action"
             tabIndex={actionTabIndex}
             onClick={(event) => {
@@ -3998,9 +3737,11 @@ function SessionRow(props: {
             {session.isFlagged
               ? <PinOff size={14} strokeWidth={1.75} aria-hidden="true" />
               : <Pin size={14} strokeWidth={1.75} aria-hidden="true" />}
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             type="button"
+            variant="quiet"
+            size="icon-sm"
             className="maka-list-row-action"
             tabIndex={actionTabIndex}
             onClick={startRename}
@@ -4011,9 +3752,11 @@ function SessionRow(props: {
             title="重命名（双击行名也可）"
           >
             <Pencil size={14} strokeWidth={1.75} aria-hidden="true" />
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             type="button"
+            variant="quiet"
+            size="icon-sm"
             className="maka-list-row-action"
             tabIndex={actionTabIndex}
             onClick={(event) => {
@@ -4033,9 +3776,11 @@ function SessionRow(props: {
             {session.isArchived
               ? <ArchiveRestore size={14} strokeWidth={1.75} aria-hidden="true" />
               : <Archive size={14} strokeWidth={1.75} aria-hidden="true" />}
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             type="button"
+            variant="quiet"
+            size="icon-sm"
             className="maka-list-row-action maka-list-row-action-danger"
             tabIndex={actionTabIndex}
             onClick={handleDelete}
@@ -4046,7 +3791,7 @@ function SessionRow(props: {
             title="删除"
           >
             <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
-          </button>
+          </UiButton>
         </div>
       )}
     </div>
@@ -4113,14 +3858,6 @@ export interface ChatHeaderAlert {
   tooltip?: string;
   /** Optional click handler — e.g. open Settings · 账号 to fix it. */
   onClick?(): void;
-}
-
-export interface ChatModelChoice {
-  connectionSlug: string;
-  connectionLabel: string;
-  providerType: ProviderType;
-  model: string;
-  label?: string;
 }
 
 export function ChatView(props: {
@@ -4460,8 +4197,16 @@ export function ChatView(props: {
       <header className="maka-chat-header">
         <span className="maka-chat-header-spacer" />
         {props.memoryActive && (
-          <button
+          /* PR-CHAT-HEADER-MEMORY-PILL-PRIMITIVE-0 (round 11/30):
+             accent-tinted memory indicator pill in the chat
+             header was a raw <button>. Routed through UiButton
+             variant="quiet" — the bespoke `.maka-chat-header-
+             memory-pill` class still owns the pill's tinted
+             background, 999px border-radius, 11px font, and
+             accent border. */
+          <UiButton
             type="button"
+            variant="quiet"
             className="maka-chat-header-memory-pill"
             data-active="true"
             onClick={() => props.onOpenMemorySettings?.()}
@@ -4470,7 +4215,7 @@ export function ChatView(props: {
           >
             <BookOpen size={12} strokeWidth={1.75} aria-hidden="true" />
             <span>记忆</span>
-          </button>
+          </UiButton>
         )}
         {deepResearchActive && (
           <span
@@ -4641,10 +4386,16 @@ function ChatModelSwitcher(props: {
   const currentKnownChoice = props.choices.some((choice) => modelChoiceValue(choice.connectionSlug, choice.model) === currentValue);
   const modelSelectItems = useMemo(
     () => [
+      // PR-CHAT-CHROME-FIX-0 (WAWQAQ msg `ccce4a31`): trigger
+      // and menu rows now show only the raw model name. Auth
+      // method and email used to leak in via `choice.label`
+      // (e.g. "Codex OAuth · kabikabigoog@gmail.com · gpt-5.5");
+      // user wanted just the model id. Hover-tooltip on the
+      // trigger still carries the connection context.
       ...(!currentKnownChoice ? [{ value: currentValue, label: currentModel }] : []),
       ...props.choices.map((choice) => ({
         value: modelChoiceValue(choice.connectionSlug, choice.model),
-        label: choice.label ?? choice.model,
+        label: choice.model,
       })),
     ],
     [currentKnownChoice, currentModel, currentValue, props.choices],
@@ -4725,26 +4476,33 @@ function ChatModelSwitcher(props: {
         <SelectPortal>
           <SelectPositioner alignItemWithTrigger={false} sideOffset={8} className="maka-model-switcher-positioner">
             <SelectPopup className="maka-model-switcher-popup">
+              {/* PR-CHAT-CHROME-FIX-0 (WAWQAQ msg `ccce4a31`):
+                   menu rows show only the raw model name. The
+                   group label (connection + email) and the meta
+                   line (duplicate model id) used to render below
+                   each row but produced "Codex OAuth ·
+                   kabikabigoog@gmail.com / gpt-5.5 / gpt-5.5" —
+                   user wanted just "gpt-5.5". Groups still
+                   separate connections visually via
+                   `<SelectSeparator>` between them. */}
               <SelectList>
                 {!currentKnownChoice && (
                   <>
                     <SelectItem value={currentValue}>
                       <span className="maka-model-switcher-item-main">{currentModel}</span>
-                      <span className="maka-model-switcher-item-meta">当前会话</span>
                     </SelectItem>
                     {grouped.length > 0 && <SelectSeparator />}
                   </>
                 )}
-                {grouped.map((group) => (
+                {grouped.map((group, groupIdx) => (
                   <SelectGroup key={group.connectionSlug}>
-                    <SelectGroupLabel>{group.connectionLabel}</SelectGroupLabel>
+                    {groupIdx > 0 && <SelectSeparator />}
                     {group.choices.map((choice) => (
                       <SelectItem
                         key={modelChoiceValue(choice.connectionSlug, choice.model)}
                         value={modelChoiceValue(choice.connectionSlug, choice.model)}
                       >
-                        <span className="maka-model-switcher-item-main">{choice.label ?? choice.model}</span>
-                        <span className="maka-model-switcher-item-meta">{choice.model}</span>
+                        <span className="maka-model-switcher-item-main">{choice.model}</span>
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -4756,44 +4514,6 @@ function ChatModelSwitcher(props: {
       </SelectRoot>
     </div>
   );
-}
-
-function groupModelChoices(choices: ChatModelChoice[]): Array<{
-  connectionSlug: string;
-  connectionLabel: string;
-  choices: ChatModelChoice[];
-}> {
-  const bySlug = new Map<string, { connectionSlug: string; connectionLabel: string; choices: ChatModelChoice[] }>();
-  for (const choice of choices) {
-    const group = bySlug.get(choice.connectionSlug);
-    if (group) {
-      group.choices.push(choice);
-    } else {
-      bySlug.set(choice.connectionSlug, {
-        connectionSlug: choice.connectionSlug,
-        connectionLabel: choice.connectionLabel,
-        choices: [choice],
-      });
-    }
-  }
-  return [...bySlug.values()];
-}
-
-function modelChoiceValue(connectionSlug: string, model: string): string {
-  return `${encodeURIComponent(connectionSlug)}:${encodeURIComponent(model)}`;
-}
-
-function parseModelChoiceValue(value: string): { llmConnectionSlug: string; model: string } | undefined {
-  const idx = value.indexOf(':');
-  if (idx <= 0) return undefined;
-  try {
-    const llmConnectionSlug = decodeURIComponent(value.slice(0, idx));
-    const model = decodeURIComponent(value.slice(idx + 1));
-    if (!llmConnectionSlug || !model) return undefined;
-    return { llmConnectionSlug, model };
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -4861,211 +4581,6 @@ function MessageCopyButton(props: { text: string; label?: string }) {
   );
 }
 
-const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkBreaks];
-const MARKDOWN_REHYPE_PLUGINS = [
-  // `detect: true` lets hljs guess the language when the fence didn't tag one;
-  // `ignoreMissing: true` keeps bogus tags like ```mermaid from throwing.
-  [rehypeHighlight, { detect: true, ignoreMissing: true }],
-] as const;
-
-function Markdown(props: { text: string }) {
-  return (
-    <ReactMarkdown
-      remarkPlugins={MARKDOWN_REMARK_PLUGINS}
-      rehypePlugins={MARKDOWN_REHYPE_PLUGINS as never}
-      components={{
-        // PR-UI-RENDER-2: route `maka://` links through the internal
-        // URI parser so the assistant can drop in-app navigation
-        // affordances ("用账号登录 Settings → Account"). The parser
-        // is a strict allowlist; anything outside (`maka://tool/`,
-        // `maka://auth/`, malformed sections) renders as a
-        // non-clickable broken-link inline error. NEVER falls back
-        // to `openExternal` — internal-link routing must not become
-        // a hidden external-URL escape.
-        a: ({ children, href, ...rest }) => (
-          <MarkdownLink href={href} {...rest}>
-            {children}
-          </MarkdownLink>
-        ),
-        // Inline `code` keeps the bubble's foreground color; only block code
-        // gets the framed treatment via `pre > code` in CSS.
-        code: ({ children, className, ...rest }) => (
-          <code {...rest} className={className}>
-            {children}
-          </code>
-        ),
-        // Wrap block code with a language pill header + copy affordance.
-        // The pill is from an external design reference (40-markdown-deep §7a) — surfaces the
-        // detected language so users can verify hljs got it right.
-        pre: ({ children, ...rest }) => <CodeBlock {...rest}>{children}</CodeBlock>,
-      }}
-    >
-      {props.text}
-    </ReactMarkdown>
-  );
-}
-
-/**
- * PR-UI-RENDER-2 — Markdown link router.
- *
- * Routes by parser result, NOT by string inspection in JSX:
- *
- *   parseMakaUri(href)
- *     ├─ MakaUriDest      → <button onClick={dispatch(dest)}>
- *     ├─ null AND isMakaUri  → broken-link inline error <span>
- *     │                        (NOT a clickable element; NOT openExternal)
- *     └─ null AND !isMakaUri → ordinary external link (Electron OS browser)
- *
- * The `MakaUriContext` provider in `main.tsx` injects the dispatcher
- * once at the App root; consumers read it via `useContext`. If a
- * Markdown island renders without a provider, valid `maka://` links
- * still get the broken-link treatment (we don't trigger uninstalled
- * navigation).
- */
-function MarkdownLink(props: {
-  href?: string;
-  children?: ReactNode;
-  [key: string]: unknown;
-}) {
-  const { href, children, ...rest } = props;
-  const dispatch = useContext(MakaUriContext);
-
-  // PR-UI-C2 review fixup (@kenji msg 7fb8d15c): case-insensitive
-  // candidate probe so `Maka://` / `MAKA://` / `MaKa://` route to
-  // the broken-link inline error rather than falling through to
-  // the external `<a target=_blank>` path. `parseMakaUri` still
-  // strictly accepts only lowercase `maka:`, so case-variants
-  // hit the `internal-link-broken` rendering with the "内部链接
-  // 无效" copy.
-  if (typeof href === 'string' && isMakaUriCandidate(href)) {
-    const dest = parseMakaUri(href);
-    if (dest && dispatch) {
-      // Valid internal link with an installed dispatcher.
-      // Render as a button (not <a>) so screen readers announce
-      // "button" rather than "link" — this is in-app navigation,
-      // not a hyperlink to a URL.
-      return (
-        <button
-          type="button"
-          className="maka-markdown-link maka-markdown-link-internal"
-          data-maka-uri-kind={dest.kind}
-          onClick={() => dispatch(dest)}
-        >
-          {children}
-        </button>
-      );
-    }
-    // Either parseMakaUri returned null (unsupported namespace /
-    // malformed section / case-variant scheme) OR no dispatcher
-    // is installed. Render as a non-clickable broken-link inline
-    // error. Plain `<span>` (no role) so screen readers do not
-    // announce it as a link or button.
-    return (
-      <span
-        className="maka-markdown-link maka-markdown-link-broken"
-        data-reason="internal-invalid"
-        title="内部链接无效"
-        aria-label="内部链接无效"
-      >
-        {children}
-      </span>
-    );
-  }
-
-  // PR-UI-C2 review fixup (@kenji msg 7fb8d15c): explicit safe-
-  // scheme gate on the external path. Only `http:` / `https:` /
-  // `mailto:` are rendered as `<a target=_blank>`. Anything else
-  // (`javascript:`, `data:`, `file:`, `vbscript:`, custom schemes,
-  // garbage / unparseable hrefs) renders as a non-clickable
-  // "link unsafe" inline error. Distinct copy + data-reason from
-  // the internal-invalid case so visual-smoke baselines can
-  // distinguish which gate fired.
-  if (typeof href === 'string' && isSafeExternalScheme(href)) {
-    return (
-      <a {...rest} href={href} className="maka-markdown-link maka-markdown-link-external" target="_blank" rel="noreferrer noopener">
-        {children}
-      </a>
-    );
-  }
-  return (
-    <span
-      className="maka-markdown-link maka-markdown-link-broken"
-      data-reason="unsafe-scheme"
-      title="链接不安全"
-      aria-label="链接不安全"
-    >
-      {children}
-    </span>
-  );
-}
-
-/**
- * PR-UI-RENDER-2 — context for the internal-link dispatcher.
- *
- * The desktop renderer installs the dispatcher once at the App root
- * (see `apps/desktop/src/renderer/main.tsx`). The dispatcher takes a
- * typed `MakaUriDest` and routes to whatever real navigation surface
- * the app uses (e.g. `setNavSelection({section: 'settings', tab: ...})`
- * for `kind: 'settings'`, or `composer.prefill(text)` for `kind:
- * 'compose'`). The Markdown link renderer never invokes navigation
- * directly — that's the dispatcher's job, and the dispatcher is the
- * single chokepoint to add observability / consent prompts later.
- */
-export const MakaUriContext = createContext<((dest: MakaUriDest) => void) | undefined>(undefined);
-
-function CodeBlock({ children, ...rest }: { children?: ReactNode }) {
-  // Extract the language from the inner <code class="language-xxx hljs"> if
-  // there is one. react-markdown's `pre` always receives a single `code`
-  // child, but downstream rehype plugins may have layered classes on it.
-  const code = isElementWithClassName(children) ? children : null;
-  const lang = code?.props.className?.match(/language-([A-Za-z0-9_+-]+)/)?.[1]?.toLowerCase();
-  const copyFeedback = useClipboardCopyFeedback(1400, { redact: false });
-  const copyPhase = copyFeedback.phaseFor('code');
-  const copyPending = copyPhase === 'pending';
-  const copied = copyPhase === 'copied';
-
-  async function copy() {
-    const text = collectCodeText(code?.props.children);
-    await copyFeedback.copy('code', text);
-  }
-
-  return (
-    <div className="maka-code-block">
-      <div className="maka-code-block-header">
-        <span className="maka-code-block-lang">{lang ?? 'code'}</span>
-        <UiButton
-          type="button"
-          className="maka-code-block-copy"
-          variant="quiet"
-          size="icon-sm"
-          onClick={() => void copy()}
-          aria-label={copyPhase === 'pending' ? '复制代码中' : copyPhase === 'copied' ? '已复制代码' : copyPhase === 'failed' ? '复制代码失败' : '复制代码'}
-          aria-busy={copyPending ? 'true' : undefined}
-          disabled={copyPending}
-          data-copied={copied}
-          data-copy-feedback={copyPhase ?? undefined}
-          data-pending={copyPending ? 'true' : undefined}
-        >
-          {copied
-            ? <Check size={12} strokeWidth={2} aria-hidden="true" />
-            : <Copy size={12} strokeWidth={1.75} aria-hidden="true" />}
-        </UiButton>
-      </div>
-      <pre {...rest}>{children}</pre>
-    </div>
-  );
-}
-
-function isElementWithClassName(node: ReactNode): node is React.ReactElement<{ className?: string; children?: ReactNode }> {
-  return typeof node === 'object' && node !== null && 'props' in node;
-}
-
-function collectCodeText(children: ReactNode): string {
-  if (typeof children === 'string') return children;
-  if (Array.isArray(children)) return children.map(collectCodeText).join('');
-  if (isElementWithClassName(children)) return collectCodeText(children.props.children);
-  return '';
-}
 
 /**
  * Locale-aware copy bundle for the empty-chat hero. Mirrors the
@@ -5082,210 +4597,6 @@ function collectCodeText(children: ReactNode): string {
  * `${greeting}{label}` if the user set a display name, otherwise
  * just the greeting + a softer fallback line.
  */
-type DayPeriod = 'morning' | 'noon' | 'afternoon' | 'evening';
-
-/**
- * PR-UI-LAYOUT-4 / B1-a1 review fixup (@kenji msg 1d7ba56c):
- * Compute the day-period bucket from a millisecond epoch timestamp,
- * not from `new Date()`. Visual-smoke fixtures freeze `Date.now()`
- * to a deterministic value (see `applyVisualSmokeFixture` in
- * `apps/desktop/src/renderer/main.tsx`) but do NOT freeze the
- * `Date` constructor itself; reading `new Date()` directly would
- * pick up the host clock and let screenshot baselines drift at the
- * 11:00 / 14:00 / 18:00 boundaries.
- *
- * Default arg is `Date.now()`, which the visual-smoke renderer
- * replaces with `state.now`. Tests pass an explicit timestamp.
- * Exported so the day-period boundary contract is reachable from
- * `apps/desktop/src/main/__tests__/empty-hero-day-period.test.ts`.
- */
-export function detectDayPeriod(nowMs: number = Date.now()): DayPeriod {
-  const hour = new Date(nowMs).getHours();
-  if (hour < 5) return 'evening';
-  if (hour < 11) return 'morning';
-  if (hour < 14) return 'noon';
-  if (hour < 18) return 'afternoon';
-  return 'evening';
-}
-
-const EMPTY_HERO_COPY_BY_LOCALE: Record<PromptSuggestionLocale, {
-  ariaLabel: string;
-  /** Time-of-day prefix: "早上好" / "Good morning" etc. */
-  greeting: Record<DayPeriod, string>;
-  /** Soft contextual phrase appended when no userLabel is set
-   *  (e.g. "安静的夜晚适合深度思考"). */
-  greetingTail: Record<DayPeriod, string>;
-  /** Compose the headline when the user has a display name. */
-  headlineWithLabel: (greeting: string, label: string) => string;
-  /** Compose the headline when no name (greeting + tail). */
-  headlineFallback: (greeting: string, tail: string) => string;
-  intro: string;
-}> = {
-  zh: {
-    ariaLabel: '开始对话',
-    greeting: {
-      morning: '早上好',
-      noon: '中午好',
-      afternoon: '下午好',
-      evening: '晚上好',
-    },
-    greetingTail: {
-      morning: '清醒的早晨适合理清思路',
-      noon: '专注的午间适合一鼓作气',
-      afternoon: '舒缓的下午适合慢慢推进',
-      evening: '安静的夜晚适合深度思考',
-    },
-    headlineWithLabel: (greeting, label) => `${greeting} ${label}，今天想做点什么？`,
-    headlineFallback: (greeting, tail) => `${greeting}，${tail}。`,
-    intro: '自主规划，陪你把事做完的智能个人助手。',
-  },
-  en: {
-    ariaLabel: 'Start a conversation',
-    greeting: {
-      morning: 'Good morning',
-      noon: 'Good afternoon',
-      afternoon: 'Good afternoon',
-      evening: 'Good evening',
-    },
-    greetingTail: {
-      morning: 'A clear morning is good for untangling ideas',
-      noon: 'A focused midday is good for a single big push',
-      afternoon: 'A calm afternoon is good for steady progress',
-      evening: 'A quiet evening is good for deep thinking',
-    },
-    headlineWithLabel: (greeting, label) => `${greeting} ${label} — what shall we tackle today?`,
-    headlineFallback: (greeting, tail) => `${greeting} — ${tail}.`,
-    intro: 'Describe what you want to change, ask, or look up. Type it in the composer below and Maka will start from there.',
-  },
-};
-
-function EmptyChatHero(props: { onPromptSuggestion?(prompt: string): void; userLabel?: string }) {
-  // Greet the user by name when they've set one in Personalization Settings.
-  // Falls back to a neutral title so first-run users don't see "Hi 你, …".
-  //
-  // PR-REFERENCE_APP-HERO-0: the normal empty chat page now follows the
-  // reference implementation single-card pattern: calm copy above the one real composer
-  // card, without a grid of starter chips competing for the first
-  // viewport. `onPromptSuggestion` stays in the signature for callers
-  // that still pass it, but the generic empty-chat surface no longer
-  // renders suggestions; Deep Research keeps its specialized starters.
-  const label = props.userLabel?.trim();
-  const locale = detectPromptSuggestionLocale();
-  const copy = EMPTY_HERO_COPY_BY_LOCALE[locale];
-  // PR-UI-LAYOUT-4: time-of-day greeting prefix. `detectDayPeriod`
-  // reads the user's local clock at render time; we don't memo
-  // because the hero is short-lived and React will re-render when
-  // the user navigates back into it.
-  const period = detectDayPeriod();
-  const greeting = copy.greeting[period];
-  const greetingTail = copy.greetingTail[period];
-  return (
-    <section className="maka-hero maka-hero-empty-chat" aria-label={copy.ariaLabel}>
-      <div className="maka-hero-visual" aria-hidden="true">
-        <span className="maka-hero-bubble maka-hero-bubble-primary">Sure. I can organize that.</span>
-        <span className="maka-hero-avatar maka-hero-avatar-maka">
-          <Sparkles size={18} strokeWidth={1.8} />
-        </span>
-        <span className="maka-hero-avatar maka-hero-avatar-user">
-          {label ? label.slice(0, 1).toUpperCase() : 'M'}
-        </span>
-        <span className="maka-hero-bubble maka-hero-bubble-secondary">Draft a plan for this task</span>
-      </div>
-      <header>
-        <h1>
-          {label ? copy.headlineWithLabel(greeting, label) : copy.headlineFallback(greeting, greetingTail)}
-        </h1>
-        <p>{copy.intro}</p>
-      </header>
-    </section>
-  );
-}
-
-function DeepResearchEmptyHero(props: { onPromptSuggestion?(prompt: string): void }) {
-  return (
-    <section className="maka-hero maka-hero-empty-chat maka-hero-deep-research" aria-label="深度研究空会话">
-      <header>
-        <span className="maka-hero-eyebrow">
-          <Sparkles size={12} strokeWidth={2} aria-hidden="true" />
-          <span>深度研究 · 只读探索</span>
-        </span>
-        <h1>先把项目读透，再决定怎么改。</h1>
-        <p>
-          这个会话固定在只读权限：优先阅读、搜索和分析代码；需要动手实现时，先输出文件、风险和验证命令。
-        </p>
-      </header>
-      <ol className="maka-deep-research-workflow" aria-label="深度研究流程">
-        {DEEP_RESEARCH_WORKFLOW_STEPS.map((step) => (
-          <li key={step.title}>
-            <span className="maka-deep-research-workflow-title">{step.title}</span>
-            <span className="maka-deep-research-workflow-body">{step.body}</span>
-          </li>
-        ))}
-      </ol>
-      <section className="maka-deep-research-report" aria-label="深度研究输出结构">
-        <h2>输出必须能直接落地</h2>
-        <ul>
-          {DEEP_RESEARCH_REPORT_SECTIONS.map((section) => (
-            <li key={section.title}>
-              <span className="maka-deep-research-report-title">{section.title}</span>
-              <span className="maka-deep-research-report-body">{section.body}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-      <section className="maka-deep-research-scope" aria-label="深度研究范围">
-        <h2>默认按标准深度研究</h2>
-        <ul>
-          {DEEP_RESEARCH_SCOPE_OPTIONS.map((option) => (
-            <li key={option.label}>
-              <span className="maka-deep-research-scope-label">{option.label}</span>
-              <span className="maka-deep-research-scope-body">{option.body}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-      <section className="maka-deep-research-evidence" aria-label="深度研究证据清单">
-        <h2>每次研究都要留证据</h2>
-        <ul>
-          {DEEP_RESEARCH_EVIDENCE_CHECKLIST.map((item) => (
-            <li key={item.title}>
-              <span className="maka-deep-research-evidence-title">{item.title}</span>
-              <span className="maka-deep-research-evidence-body">{item.body}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-      <section className="maka-deep-research-progress" aria-label="深度研究检查点">
-        <h2>多步研究要按检查点推进</h2>
-        <ul>
-          {DEEP_RESEARCH_PROGRESS_CHECKPOINTS.map((item) => (
-            <li key={item.title}>
-              <span className="maka-deep-research-progress-title">{item.title}</span>
-              <span className="maka-deep-research-progress-body">{item.body}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-      {props.onPromptSuggestion && (
-        <ul className="maka-prompt-suggestions" aria-label="深度研究起手式">
-          {DEEP_RESEARCH_STARTER_PROMPTS.map((suggestion) => (
-            <li key={suggestion.label}>
-              <UiButton
-                type="button"
-                className="maka-prompt-chip h-auto"
-                variant="quiet"
-                onClick={() => props.onPromptSuggestion?.(suggestion.prompt)}
-              >
-                <span className="maka-prompt-chip-label">{suggestion.label}</span>
-                <span className="maka-prompt-chip-hint">{suggestion.prompt.slice(0, 60)}…</span>
-              </UiButton>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
 
 /**
  * Small actionable pill that surfaces a credential / readiness issue
@@ -5332,20 +4643,6 @@ function ChatHeaderAlertBadge(props: { alert: ChatHeaderAlert }) {
 // reference product. The `radiogroup` keyboard contract was traded for
 // base-ui Menu's built-in arrow/Home/End handling.
 
-function createAbsoluteTimeFormat(): Intl.DateTimeFormat {
-  if (typeof Intl === 'undefined' || typeof Intl.DateTimeFormat !== 'function') {
-    return { format: (d: Date) => d.toISOString() } as unknown as Intl.DateTimeFormat;
-  }
-  return new Intl.DateTimeFormat(
-    detectUiLocale() === 'en' ? 'en' : 'zh-CN',
-    { dateStyle: 'medium', timeStyle: 'short' },
-  );
-}
-
-function formatAbsoluteTimestamp(ts: number): string {
-  return createAbsoluteTimeFormat().format(new Date(ts));
-}
-
 /**
  * PR-RELATIVE-TIME-0: a self-refreshing relative-time label. Sidebar +
  * message rows stay correct even when the window has been open for
@@ -5371,28 +4668,6 @@ export function RelativeTime(props: { ts: number; className?: string; suppressTi
       {formatRelativeTimestamp(props.ts)}
     </small>
   );
-}
-
-function messageRoleLabel(role: string, userLabel?: string): string {
-  if (role === 'user') {
-    const trimmed = userLabel?.trim();
-    return trimmed && trimmed.length > 0 ? trimmed : '你';
-  }
-  if (role === 'assistant') return 'Maka';
-  return role;
-}
-
-/**
- * Initial-glyph derivation for the message avatar. Uses the first non-ASCII
- * codepoint or first ASCII letter so a userLabel like "JK" → "J", a Chinese
- * Chinese userLabel like "用户" → "用", an emoji name like "🦊 fox" → "🦊".
- */
-function avatarInitial(label: string): string {
-  const trimmed = label.trim();
-  if (trimmed.length === 0) return '你';
-  // Pull the first codepoint so we don't slice an emoji surrogate pair.
-  const [first] = trimmed;
-  return first ?? '?';
 }
 
 /**
@@ -5474,13 +4749,6 @@ function TurnSummary(props: { turn: TurnViewModel; previousModelId?: string }) {
   );
 }
 
-function formatTurnDuration(ms: number): string {
-  if (ms < 1000) return `${ms} ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
-  const m = Math.floor(ms / 60_000);
-  const s = Math.round((ms % 60_000) / 1000);
-  return `${m} m ${s} s`;
-}
 
 /**
  * Renders one conversational turn: user message → tools used → assistant
@@ -5748,67 +5016,6 @@ export interface TurnLineageBadge {
    * in different positions (forward at top, reverse at bottom).
    */
   direction: 'forward' | 'reverse';
-}
-
-function turnAbortMarkerLabel(abortSource: string | undefined) {
-  switch (abortSource) {
-    case 'renderer.stop_button': return '(已中断 · 由停止按钮触发)';
-    default: return '(已中断)';
-  }
-}
-
-type ClipboardCopyPhase = 'pending' | 'copied' | 'failed';
-
-function useClipboardCopyFeedback(resetDelay = 1400, options: { redact?: boolean } = {}) {
-  const [copyState, setCopyState] = useState<{ key: string; phase: ClipboardCopyPhase } | null>(null);
-  const pendingCopyRef = useRef<string | null>(null);
-  const copyMountedRef = useRef(true);
-  const resetTimerRef = useRef<number | null>(null);
-
-  function clearResetTimer() {
-    if (resetTimerRef.current === null) return;
-    window.clearTimeout(resetTimerRef.current);
-    resetTimerRef.current = null;
-  }
-
-  useEffect(() => {
-    copyMountedRef.current = true;
-    return () => {
-      copyMountedRef.current = false;
-      clearResetTimer();
-    };
-  }, []);
-
-  function settle(key: string, phase: Exclude<ClipboardCopyPhase, 'pending'>) {
-    if (!copyMountedRef.current) return;
-    setCopyState({ key, phase });
-    resetTimerRef.current = window.setTimeout(() => {
-      if (!copyMountedRef.current) return;
-      setCopyState((current) => current?.key === key ? null : current);
-      resetTimerRef.current = null;
-    }, resetDelay);
-  }
-
-  async function copy(key: string, text: string) {
-    if (text.length === 0 || pendingCopyRef.current) return;
-    pendingCopyRef.current = key;
-    clearResetTimer();
-    setCopyState({ key, phase: 'pending' });
-    try {
-      await navigator.clipboard.writeText(options.redact === false ? text : redactSecrets(text));
-      settle(key, 'copied');
-    } catch {
-      settle(key, 'failed');
-    } finally {
-      pendingCopyRef.current = null;
-    }
-  }
-
-  function phaseFor(key: string): ClipboardCopyPhase | null {
-    return copyState?.key === key ? copyState.phase : null;
-  }
-
-  return { copy, phaseFor, isPending: copyState?.phase === 'pending' };
 }
 
 function TurnFooterActions(props: {
@@ -6217,98 +5424,7 @@ export interface ComposerHandle {
   focus(): void;
 }
 
-export function appendPromptContextDraft(current: string, fragment: string): string {
-  const base = current.trimEnd();
-  const next = fragment.trim();
-  if (!base) return next;
-  if (!next) return base;
-  return `${base}\n\n${next}`;
-}
-
-const COMPOSER_DRAFT_MAX_CHARS = 120_000;
-const COMPOSER_DRAFT_MAX_ENTRIES = 32;
-const COMPOSER_HISTORY_MAX_ENTRIES = 50;
-
-export function rememberComposerDraft(store: Map<string, string>, key: string | undefined, value: string): void {
-  if (!key) return;
-  const trimmed = value.trim();
-  if (!trimmed) {
-    store.delete(key);
-    return;
-  }
-
-  const bounded = value.length > COMPOSER_DRAFT_MAX_CHARS
-    ? value.slice(value.length - COMPOSER_DRAFT_MAX_CHARS)
-    : value;
-  store.delete(key);
-  store.set(key, bounded);
-
-  while (store.size > COMPOSER_DRAFT_MAX_ENTRIES) {
-    const oldest = store.keys().next().value;
-    if (typeof oldest !== 'string') break;
-    if (oldest === key && store.size === 1) break;
-    store.delete(oldest);
-  }
-}
-
-export function readComposerDraft(store: Map<string, string>, key: string | undefined): string {
-  if (!key) return '';
-  return store.get(key) ?? '';
-}
-
-export interface ComposerHistoryState {
-  entries: string[];
-  index: number;
-  savedDraft: string;
-}
-
 type ComposerImportActionId = 'file' | 'folder' | 'drop' | 'paste';
-
-export function rememberComposerHistoryEntry(entries: string[], text: string): string[] {
-  const trimmed = text.trim();
-  if (!trimmed) return entries;
-  const next = entries.filter((entry) => entry !== trimmed);
-  next.push(trimmed);
-  if (next.length > COMPOSER_HISTORY_MAX_ENTRIES) {
-    return next.slice(next.length - COMPOSER_HISTORY_MAX_ENTRIES);
-  }
-  return next;
-}
-
-export function navigateComposerHistory(
-  state: ComposerHistoryState,
-  direction: 'previous' | 'next',
-  currentValue: string,
-): { state: ComposerHistoryState; value: string; changed: boolean } {
-  if (state.entries.length === 0) return { state, value: currentValue, changed: false };
-
-  if (direction === 'previous') {
-    const savedDraft = state.index < 0 ? currentValue : state.savedDraft;
-    const index = state.index < 0
-      ? state.entries.length - 1
-      : Math.max(0, state.index - 1);
-    return {
-      state: { entries: state.entries, index, savedDraft },
-      value: state.entries[index] ?? currentValue,
-      changed: true,
-    };
-  }
-
-  if (state.index < 0) return { state, value: currentValue, changed: false };
-  const index = state.index + 1;
-  if (index >= state.entries.length) {
-    return {
-      state: { entries: state.entries, index: -1, savedDraft: '' },
-      value: state.savedDraft,
-      changed: true,
-    };
-  }
-  return {
-    state: { entries: state.entries, index, savedDraft: state.savedDraft },
-    value: state.entries[index] ?? currentValue,
-    changed: true,
-  };
-}
 
 export const Composer = forwardRef<
   ComposerHandle,
@@ -6735,10 +5851,23 @@ export const Composer = forwardRef<
               const triggerDisabled = props.permissionModePending === true || Boolean(props.permissionModeDisabledReason);
               return (
                 <Menu>
+                  {/* PR-COMPOSER-MODE-CHIP-PRIMITIVE-0 (round 15/30):
+                      LAST raw <button> in `components.tsx`. The
+                      permission mode chip (自动执行 ▾) is wrapped in
+                      a MenuTrigger render-prop. Kept the callback
+                      form (the menu library wants explicit
+                      triggerProps spread) but the button now flows
+                      through UiButton variant="quiet" size="nav" —
+                      the bespoke `.maka-composer-mode-chip` class
+                      still owns the chip's accent-tinted background,
+                      data-mode + data-tone state visuals, and tight
+                      composer-chrome density. */}
                   <MenuTrigger
                     render={(triggerProps) => (
-                      <button
+                      <UiButton
                         {...triggerProps}
+                        variant="quiet"
+                        size="nav"
                         type="button"
                         className="maka-composer-mode-chip"
                         data-mode={displayMode}
@@ -6750,7 +5879,7 @@ export const Composer = forwardRef<
                       >
                         <span className="maka-composer-mode-chip-label">{meta.label}</span>
                         <ChevronDown size={12} strokeWidth={1.8} aria-hidden="true" />
-                      </button>
+                      </UiButton>
                     )}
                   />
                   <MenuPopup className="maka-composer-mode-menu" align="start">
@@ -6783,7 +5912,17 @@ export const Composer = forwardRef<
           </div>
           <span className="maka-composer-status-slot">
             {props.disabled ? (
-              copy.awaitingPermission
+              // PR-COMPOSER-PERMISSION-PULSE-0 (WAWQAQ msg `ed67a267`,
+              // skills round task #116): wrap the "等待权限确认" text
+              // in a styled hint with a pulsing accent dot. Plain text
+              // was easy to miss — the dot signals "system is waiting
+              // on YOU" with the same visual weight as the streaming
+              // 3-dot bounce on the other side of the disabled/active
+              // boundary.
+              <span className="maka-composer-permission-hint">
+                <span className="maka-composer-permission-dot" aria-hidden="true" />
+                {copy.awaitingPermission}
+              </span>
             ) : sendPending ? (
               copy.sending
             ) : importActionBusy ? (
@@ -6866,8 +6005,15 @@ export const Composer = forwardRef<
       </div>
       {props.workspacePicker && (
         <div className="maka-composer-workspace-row">
-          <button
+          {/* PR-COMPOSER-WORKSPACE-PICKER-PRIMITIVE-0 (round 9/30):
+              the workspace picker badge was a raw `<button>`.
+              Routed through UiButton variant="quiet"; custom class
+              still owns the picker's inline-flex shape (icon +
+              label + chevron) and the bespoke 3px accent
+              focus-visible ring. */}
+          <UiButton
             type="button"
+            variant="quiet"
             className="maka-composer-workspace-picker"
             onClick={props.workspacePicker.onOpen}
             title={props.workspacePicker.branch ? `选择工作目录 · ${props.workspacePicker.branch}` : '选择工作目录'}
@@ -6884,7 +6030,7 @@ export const Composer = forwardRef<
               ? <span className="maka-composer-workspace-current">{props.workspacePicker.label}</span>
               : <span>选择工作目录</span>}
             <ChevronDown size={12} strokeWidth={1.8} aria-hidden="true" />
-          </button>
+          </UiButton>
         </div>
       )}
     </form>
@@ -8409,11 +7555,18 @@ function presentExploreAgentCandidateReasons(reasons: string[]): string {
   }).join(', ');
 }
 
-function formatBytes(bytes: number): string {
+/* PR-FORMAT-BYTES-DEDUP-0 (round 21/30): made exported so
+   `apps/desktop/src/renderer/artifact-pane.tsx` can drop its
+   local duplicate. Standardized on KB/MB labels (artifact-pane
+   was already user-visible with KB/MB) plus the robust
+   non-finite/<=0 guard from the previous components.tsx form.
+   Both consumers now produce identical output for the same
+   `bytes` input. */
+export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
   if (bytes < 1024) return `${Math.round(bytes)} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KiB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function OfficeDocumentPreview(props: {
@@ -8546,7 +7699,7 @@ function WebSearchPreview(props: {
       <ul>
         {rows.map((row, idx) => (
           <li key={`${row.url}-${idx}`}>
-            <a href={row.url} target="_blank" rel="noreferrer">
+            <a href={row.url} target="_blank" rel="noreferrer noopener">
               {redactSecrets(row.title)}
             </a>
             <small>{redactSecrets(row.source)}</small>

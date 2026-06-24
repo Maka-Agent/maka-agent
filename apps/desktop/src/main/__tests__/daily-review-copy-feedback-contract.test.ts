@@ -128,16 +128,21 @@ describe('Daily Review copy feedback contract', () => {
 
   it('scrubs Daily Review load and action failures before rendering them', async () => {
     const ui = await readFile(resolve(REPO_ROOT, 'packages/ui/src/components.tsx'), 'utf8');
+    // PR-UI-LIB-EXTRACT-2 (round 3/10): `dailyReviewPanelErrorMessage`
+    // moved out of `components.tsx` into a sibling helper module so
+    // pure logic isn't tangled with the panel JSX. The assertion
+    // shape stays — we just read the file the helper now lives in.
+    const uiHelpers = await readFile(resolve(REPO_ROOT, 'packages/ui/src/daily-review-helpers.ts'), 'utf8');
     const main = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/renderer/main.tsx'), 'utf8');
-    const panelBlock = ui.match(/function DailyReviewPanel[\s\S]*?function dailyReviewPanelErrorMessage/)?.[0] ?? '';
+    const panelBlock = ui.match(/function DailyReviewPanel[\s\S]*?setError\(dailyReviewPanelErrorMessage\(err\)\)/)?.[0] ?? '';
     const helperBlock = main.match(/function dailyReviewActionErrorMessage\(error: unknown, fallback: string\): string \{[\s\S]*?\n\}/)?.[0] ?? '';
     const saveBlock = main.match(/async function saveDailyReviewMarkdown\([\s\S]*?const activePermission/)?.[0] ?? '';
     const saveTodayBlock = main.match(/onSaveTodayDailyReviewToFile: async \(\) => \{[\s\S]*?onCopyEnvSummary/)?.[0] ?? '';
 
-    assert.match(ui, /generalizedErrorMessageChinese/);
+    assert.match(uiHelpers, /generalizedErrorMessageChinese/);
     assert.match(panelBlock, /setError\(dailyReviewPanelErrorMessage\(err\)\)/);
     assert.doesNotMatch(panelBlock, /err instanceof Error \? err\.message : ['"]加载失败['"]/);
-    assert.match(ui, /function dailyReviewPanelErrorMessage\(error: unknown\): string \{[\s\S]*generalizedErrorMessageChinese\(error, '每日回顾暂时不可用，请稍后重试。'\)/);
+    assert.match(uiHelpers, /function dailyReviewPanelErrorMessage\(error: unknown\): string \{[\s\S]*generalizedErrorMessageChinese\(error, '每日回顾暂时不可用，请稍后重试。'\)/);
 
     assert.match(helperBlock, /generalizedErrorMessageChinese\(error, fallback\)/);
     assert.match(saveBlock, /const shouldShowFeedback = options\.shouldShowFeedback \?\? \(\(\) => true\)/);

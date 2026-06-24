@@ -9,7 +9,7 @@ import { useRender } from "@base-ui/react/use-render";
 import { Button } from "./button.js";
 import { ScrollArea } from "./scroll-area.js";
 import { cn } from "../utils.js";
-import { ChevronRightIcon, XIcon } from "lucide-react";
+import { ChevronRightIcon, XIcon } from "../icons.js";
 import type React from "react";
 import { createContext, useContext } from "react";
 
@@ -175,25 +175,25 @@ export function DrawerPopup({
               cn(
                 position === "bottom" && "rounded-t-2xl",
                 position === "top" &&
-                  "rounded-b-2xl **:data-[slot=drawer-footer]:rounded-b-[calc(var(--radius-2xl)-1px)]",
+                  "rounded-b-xl **:data-[slot=drawer-footer]:rounded-b-[calc(var(--radius-xl)-1px)]",
                 position === "left" &&
-                  "rounded-e-2xl **:data-[slot=drawer-footer]:rounded-ee-[calc(var(--radius-2xl)-1px)]",
+                  "rounded-e-xl **:data-[slot=drawer-footer]:rounded-ee-[calc(var(--radius-xl)-1px)]",
                 position === "right" &&
-                  "rounded-s-2xl **:data-[slot=drawer-footer]:rounded-es-[calc(var(--radius-2xl)-1px)]",
+                  "rounded-s-xl **:data-[slot=drawer-footer]:rounded-es-[calc(var(--radius-xl)-1px)]",
               ),
             variant === "default" &&
               cn(
                 position === "bottom" &&
-                  "before:rounded-t-[calc(var(--radius-2xl)-1px)]",
+                  "before:rounded-t-[calc(var(--radius-xl)-1px)]",
                 position === "top" &&
-                  "before:rounded-b-[calc(var(--radius-2xl)-1px)]",
+                  "before:rounded-b-[calc(var(--radius-xl)-1px)]",
                 position === "left" &&
-                  "before:rounded-e-[calc(var(--radius-2xl)-1px)]",
+                  "before:rounded-e-[calc(var(--radius-xl)-1px)]",
                 position === "right" &&
-                  "before:rounded-s-[calc(var(--radius-2xl)-1px)]",
+                  "before:rounded-s-[calc(var(--radius-xl)-1px)]",
               ),
             variant === "inset" &&
-              "before:hidden sm:rounded-2xl sm:border sm:after:bg-transparent sm:before:rounded-[calc(var(--radius-2xl)-1px)] sm:**:data-[slot=drawer-footer]:rounded-b-[calc(var(--radius-2xl)-1px)]",
+              "before:hidden sm:rounded-xl sm:border sm:after:bg-transparent sm:before:rounded-[calc(var(--radius-xl)-1px)] sm:**:data-[slot=drawer-footer]:rounded-b-[calc(var(--radius-xl)-1px)]",
             variant === "straight" && "[--stack-step:0]",
             (position === "bottom" || position === "top") &&
               "h-(--drawer-height,auto) [--height:max(0px,calc(var(--drawer-frontmost-height,var(--drawer-height))))] data-nested-drawer-open:h-(--height)",
@@ -213,7 +213,7 @@ export function DrawerPopup({
           {children}
           {showCloseButton && (
             <DrawerPrimitive.Close
-              aria-label="Close"
+              aria-label="关闭抽屉"
               className="absolute end-2 top-2"
               render={<Button size="icon" variant="ghost" />}
             >
