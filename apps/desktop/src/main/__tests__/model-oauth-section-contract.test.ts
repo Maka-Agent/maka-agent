@@ -1165,8 +1165,38 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
     );
     assert.match(
       claudeCard,
+      /const claudeAuthRequestIdRef = useRef<string \| null>\(null\)/,
+      'Claude OAuth must keep the active auth request in a ref so unmount cleanup can cancel it',
+    );
+    assert.match(
+      claudeCard,
+      /return \(\) => \{[\s\S]*claudeCardMountedRef\.current = false;[\s\S]*const pendingAuthRequestId = claudeAuthRequestIdRef\.current;[\s\S]*claudeAuthRequestIdRef\.current = null;[\s\S]*if \(pendingAuthRequestId\) void window\.maka\.claudeSubscription\.cancelAuthorization\(pendingAuthRequestId\);[\s\S]*\};/,
+      'closing the Claude OAuth modal mid-login must cancel the pending auth request',
+    );
+    assert.match(
+      claudeCard,
       /function beginPendingAction\(action: ClaudeSubscriptionPendingAction\): boolean \{[\s\S]*if \(pendingActionRef\.current !== null\) return false;[\s\S]*pendingActionRef\.current = action;[\s\S]*setPendingAction\(action\);[\s\S]*return true;/,
       'Claude OAuth duplicate clicks must be rejected before React re-renders disabled buttons',
+    );
+    assert.match(
+      claudeCard,
+      /claudeAuthRequestIdRef\.current = payload\.authRequestId;[\s\S]*if \(!claudeCardMountedRef\.current\) \{[\s\S]*claudeAuthRequestIdRef\.current = null;[\s\S]*void window\.maka\.claudeSubscription\.cancelAuthorization\(payload\.authRequestId\);[\s\S]*return;[\s\S]*\}/,
+      'Claude OAuth must cancel auth requests created after the component was already closed',
+    );
+    assert.match(
+      claudeCard,
+      /if \(!opened\.ok\) \{[\s\S]*claudeAuthRequestIdRef\.current = null;[\s\S]*void window\.maka\.claudeSubscription\.cancelAuthorization\(payload\.authRequestId\);[\s\S]*setAuthRequestId\(null\);/,
+      'Claude OAuth must cancel a pending request when opening the browser fails',
+    );
+    assert.match(
+      claudeCard,
+      /if \(result\.ok\) \{[\s\S]*claudeAuthRequestIdRef\.current = null;[\s\S]*setAuthRequestId\(null\);/,
+      'successful Claude paste-code completion must clear the pending auth request ref',
+    );
+    assert.match(
+      claudeCard,
+      /await window\.maka\.claudeSubscription\.cancelAuthorization\(authRequestId\);[\s\S]*claudeAuthRequestIdRef\.current = null;[\s\S]*setAuthRequestId\(null\);/,
+      'explicit Claude OAuth cancellation must clear the pending auth request ref',
     );
     assert.match(claudeCard, /if \(!beginPendingAction\('login'\)\) return;/, 'starting login must use the ref-backed action guard');
     assert.match(claudeCard, /if \(!beginPendingAction\('submit'\)\) return;/, 'submitting an authorization code must use the ref-backed action guard');

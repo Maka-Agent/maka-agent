@@ -2051,6 +2051,7 @@ function ClaudeSubscriptionCard() {
   const [pendingAction, setPendingAction] = useState<ClaudeSubscriptionPendingAction | null>(null);
   const pendingActionRef = useRef<ClaudeSubscriptionPendingAction | null>(null);
   const [authRequestId, setAuthRequestId] = useState<string | null>(null);
+  const claudeAuthRequestIdRef = useRef<string | null>(null);
   const [stateHint, setStateHint] = useState<string | null>(null);
   const [pasteValue, setPasteValue] = useState('');
   const [pasteError, setPasteError] = useState<string | null>(null);
@@ -2067,6 +2068,9 @@ function ClaudeSubscriptionCard() {
     claudeCardMountedRef.current = true;
     return () => {
       claudeCardMountedRef.current = false;
+      const pendingAuthRequestId = claudeAuthRequestIdRef.current;
+      claudeAuthRequestIdRef.current = null;
+      if (pendingAuthRequestId) void window.maka.claudeSubscription.cancelAuthorization(pendingAuthRequestId);
     };
   }, []);
 
@@ -2180,12 +2184,18 @@ function ClaudeSubscriptionCard() {
       // mounted). Discriminate by checking for the `ok` field; the
       // envelope variant has it, the success payload does not.
       const payload = await window.maka.claudeSubscription.getAuthUrl();
-      if (!claudeCardMountedRef.current) return;
       if ('ok' in payload) {
+        if (!claudeCardMountedRef.current) return;
         // Envelope variant. `ok: true` shouldn't happen for
         // getAuthUrl (success returns the payload, not an envelope),
         // so this branch is the failure case in practice.
         toast.error('无法开始登录', payload.ok ? '请稍后再试。' : subscriptionResultMessage(payload.message, '无法开始登录，请稍后再试。'));
+        return;
+      }
+      claudeAuthRequestIdRef.current = payload.authRequestId;
+      if (!claudeCardMountedRef.current) {
+        claudeAuthRequestIdRef.current = null;
+        void window.maka.claudeSubscription.cancelAuthorization(payload.authRequestId);
         return;
       }
       setAuthRequestId(payload.authRequestId);
@@ -2198,13 +2208,20 @@ function ClaudeSubscriptionCard() {
       if (!claudeCardMountedRef.current) return;
       if (!opened.ok) {
         toast.error('无法打开浏览器', subscriptionResultMessage(opened.message, '无法打开浏览器，请稍后重试。'));
+        claudeAuthRequestIdRef.current = null;
+        void window.maka.claudeSubscription.cancelAuthorization(payload.authRequestId);
         setAuthRequestId(null);
         setStateHint(null);
       }
       await refresh();
     } catch (error) {
+      const pendingAuthRequestId = claudeAuthRequestIdRef.current;
+      claudeAuthRequestIdRef.current = null;
+      if (pendingAuthRequestId) void window.maka.claudeSubscription.cancelAuthorization(pendingAuthRequestId);
       const message = subscriptionActionErrorMessage(error);
       if (!claudeCardMountedRef.current) return;
+      setAuthRequestId(null);
+      setStateHint(null);
       toast.error('无法开始登录', message);
       setPasteError(message);
     } finally {
@@ -2224,6 +2241,7 @@ function ClaudeSubscriptionCard() {
       if (!claudeCardMountedRef.current) return;
       if (result.ok) {
         toast.success('登录成功', '已绑定 Claude 订阅。');
+        claudeAuthRequestIdRef.current = null;
         setAuthRequestId(null);
         setStateHint(null);
         setPasteValue('');
@@ -2247,6 +2265,7 @@ function ClaudeSubscriptionCard() {
     try {
       await window.maka.claudeSubscription.cancelAuthorization(authRequestId);
       if (!claudeCardMountedRef.current) return;
+      claudeAuthRequestIdRef.current = null;
       setAuthRequestId(null);
       setStateHint(null);
       setPasteValue('');
