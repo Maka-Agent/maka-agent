@@ -37,7 +37,12 @@ describe('PR-MOTION-TOKEN-CONVERGE-0 contract', () => {
     const RAW_CURVE = /cubic-bezier\(0\.16,\s*1,\s*0\.3,\s*1\)/g;
     const TOKEN_DECL = /--ease-out-strong:\s*cubic-bezier\(0\.16,\s*1,\s*0\.3,\s*1\)\s*;?/g;
 
-    const styles = stripCssComments(await readAllRendererCss());
+    // `readAllRendererCss()` expands `@import` chains, so the styles
+    // blob now includes maka-tokens.css — including the legitimate
+    // `--ease-out-strong: cubic-bezier(0.16, 1, 0.3, 1);` declaration
+    // line. Strip that one declaration before counting so the token
+    // file's own definition doesn't trip the bare-curve assertion.
+    const styles = stripCssComments(await readAllRendererCss()).replace(TOKEN_DECL, '');
     const stylesMatches = styles.match(RAW_CURVE) ?? [];
     assert.equal(
       stylesMatches.length,
