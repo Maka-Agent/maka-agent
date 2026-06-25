@@ -1476,13 +1476,10 @@ function buildDailyReviewModelOptions(
     ? connections.find((connection) => connection.slug === defaultConnectionSlug)
     : null;
   const options: Array<readonly [string, string]> = [
-    [
-      DAILY_REVIEW_DEFAULT_MODEL_VALUE,
-      defaultConnection?.defaultModel
-        ? `对话默认（${defaultConnection.defaultModel}）`
-        : '对话默认',
-    ],
+    [DAILY_REVIEW_DEFAULT_MODEL_VALUE, '跟随对话默认'],
   ];
+  type Entry = { key: string; model: string; connectionName: string };
+  const entries: Entry[] = [];
   const seenKeys = new Set<string>();
   for (const connection of connections) {
     if (!connection.enabled) continue;
@@ -1501,8 +1498,23 @@ function buildDailyReviewModelOptions(
       const key = `${connection.slug}::${model}`;
       if (seenKeys.has(key)) continue;
       seenKeys.add(key);
-      options.push([key, model]);
+      entries.push({ key, model, connectionName: connection.name });
     }
+  }
+  // Finding #4 (kenji audit 2026-06-25): when two connections both expose
+  // the same model id, the flat-label list becomes "gpt-5.5 / gpt-5.5" and
+  // looks unselectable. Only disambiguate the entries that actually collide;
+  // the common case (unique model ids) stays terse per WAWQAQ's
+  // 「只用模型名就行了」 directive.
+  const modelCounts = new Map<string, number>();
+  for (const entry of entries) {
+    modelCounts.set(entry.model, (modelCounts.get(entry.model) ?? 0) + 1);
+  }
+  for (const entry of entries) {
+    const label = (modelCounts.get(entry.model) ?? 0) > 1
+      ? `${entry.model} · ${entry.connectionName}`
+      : entry.model;
+    options.push([entry.key, label]);
   }
   const trimmedCurrent = currentModelKey.trim();
   if (
@@ -1700,7 +1712,7 @@ function DailyReviewSettingsPage(props: { onOpenDailyReview?: () => void }) {
             aria-label="每日回顾执行时间"
             className="settingsTimeInput"
             value={effectiveConfig?.executeTime ?? '08:00'}
-            disabled={formDisabled || savingKey === 'executeTime' || !(effectiveConfig?.enabled ?? false)}
+            disabled={formDisabled || savingKey === 'executeTime'}
             onChange={(event) => {
               const value = event.target.value;
               if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return;
@@ -1804,7 +1816,7 @@ function DailyReviewSettingsPage(props: { onOpenDailyReview?: () => void }) {
               <h3>想先看看效果？</h3>
             </div>
             <p>无需开启自动执行，基于当前工作区的对话记录立即生成一份报告。</p>
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <div className="settingsFeatureStatusHeroActions">
               <Button
                 type="button"
                 onClick={() => void triggerRun('daily')}
