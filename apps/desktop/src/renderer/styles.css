@@ -8957,12 +8957,13 @@ button:active {
   color: var(--foreground);
 }
 
-.settingsRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
+/* `.settingsRow` had a duplicate older flex-only declaration here.
+   The grouped-card grid version at the bottom of this file (line ~9300+)
+   overrides every property except `justify-content: space-between`,
+   which is a no-op once the layout flips to a 2-fr grid that fills the
+   container. Drop the dead first rule; the grouped-card rule is the
+   one source of truth for the settings row chrome. PR yuejing/
+   switch-primitive-and-css-cleanup. */
 
 .settingsBadge {
   display: inline-flex;
