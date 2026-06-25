@@ -341,7 +341,7 @@ describe('permission response IPC boundary', () => {
       'initial mount should call bootstrapSessions(), not raw refreshSessions(), for boot-only selection',
     );
     const quickChatHandler = renderer.match(
-      /async function handleQuickChatSubmit\(prompt: string, mode\?: QuickChatMode\): Promise<boolean> \{[\s\S]*?\n  \}/,
+      /async function handleQuickChatSubmit\(prompt: string, mode\?: QuickChatMode\): Promise<boolean> \{[\s\S]*?\n  function showModelSetupToast/,
     );
     assert.ok(quickChatHandler, 'handleQuickChatSubmit() must exist');
     assert.match(
@@ -354,12 +354,17 @@ describe('permission response IPC boundary', () => {
       /if \(quickChatPendingRef\.current\) return false;[\s\S]*?quickChatPendingRef\.current = true/,
       'quick chat submit must synchronously reject while another start call is in flight',
     );
-    const quickChat = quickChatHandler[0].match(/if \(result\.ok\) \{[\s\S]*?if \(!prompt\.trim\(\)\) \{/);
+    assert.match(
+      quickChatHandler[0],
+      /const owner = captureComposerImportOwner\(\);[\s\S]*quickChatPendingRef\.current = true/,
+      'quick chat must capture the current shell surface before async session creation',
+    );
+    const quickChat = quickChatHandler[0].match(/if \(result\.ok\) \{[\s\S]*?if \(!prompt\.trim\(\) && activeIdRef\.current === result\.sessionId\) \{/);
     assert.ok(quickChat, 'quick chat success branch must exist');
     assert.match(
       quickChat[0],
-      /openSessionInChat\(result\.sessionId\)[\s\S]*?await refreshSessions\(\)/,
-      'quick chat must open the new session on the chat surface before refreshing the list so onboarding cannot bounce to an older chat',
+      /if \(isShellSurfaceOwnerActive\(owner\)\) \{[\s\S]*openSessionInChat\(result\.sessionId\);[\s\S]*\}[\s\S]*await refreshSessions\(\)/,
+      'quick chat must only open the new session if the launching shell surface is still active',
     );
     assert.doesNotMatch(
       quickChat[0],
@@ -383,13 +388,13 @@ describe('permission response IPC boundary', () => {
     );
     assert.match(
       quickChatHandler[0],
-      /toastApi\.error\('开始对话失败', result\.message\);[\s\S]*?return false;/,
-      'send failures must return false so the first-run composer keeps the user draft',
+      /if \(isShellSurfaceOwnerActive\(owner\)\) \{[\s\S]*toastApi\.error\('开始对话失败', result\.message\);[\s\S]*\}[\s\S]*?return false;/,
+      'send failures must return false and only toast while the launching surface is still active',
     );
     assert.match(
       quickChatHandler[0],
-      /toastApi\.error\('开始对话失败', generalizedErrorMessageChinese\(error, '对话暂时无法开始，请稍后重试。'\)\);[\s\S]*?return false;/,
-      'quick chat thrown failures should use a generalized fallback instead of raw backend/path details',
+      /if \(isShellSurfaceOwnerActive\(owner\)\) \{[\s\S]*toastApi\.error\('开始对话失败', generalizedErrorMessageChinese\(error, '对话暂时无法开始，请稍后重试。'\)\);[\s\S]*\}[\s\S]*?return false;/,
+      'quick chat thrown failures should use a generalized fallback only while the launching surface is still active',
     );
     assert.doesNotMatch(quickChatHandler[0], /toastApi\.error\('开始对话失败', cleanErrorMessage\(error\)\)/);
     assert.match(
@@ -420,8 +425,8 @@ describe('permission response IPC boundary', () => {
     assert.match(sendBlock, /const turnId = crypto\.randomUUID\(\)/);
     assert.match(
       newSessionBranch,
-      /setNavSelection\(\{ section: 'sessions', filter: 'chats' \}\)[\s\S]*setActiveId\(session\.id\)[\s\S]*upsertSessionSummary\(session\)[\s\S]*showOptimisticUserMessage\(session\.id, turnId, text, \{ replaceCurrentMessages: true \}\)[\s\S]*window\.maka\.sessions\.send\(session\.id, \{ type: 'send', turnId, text \}\)[\s\S]*refreshMessagesUntilTurn\(session\.id, turnId\)[\s\S]*refreshSessions\(\)/,
-      'normal Composer first-send must switch the current view to the created session and show the user turn immediately',
+      /upsertSessionSummary\(session\)[\s\S]*if \(newChatOwner && isNewChatSendSurfaceActive\(newChatOwner\)\) \{[\s\S]*setNavSelection\(\{ section: 'sessions', filter: 'chats' \}\)[\s\S]*setActiveId\(session\.id\)[\s\S]*showOptimisticUserMessage\(session\.id, turnId, text, \{ replaceCurrentMessages: true \}\)[\s\S]*\}[\s\S]*window\.maka\.sessions\.send\(session\.id, \{ type: 'send', turnId, text \}\)[\s\S]*if \(activeIdRef\.current === session\.id\) \{[\s\S]*refreshMessagesUntilTurn\(session\.id, turnId\)[\s\S]*\}[\s\S]*refreshSessions\(\)/,
+      'normal Composer first-send must switch/show the new user turn only while the empty-chat surface still owns the async continuation',
     );
     assert.doesNotMatch(
       newSessionBranch,
@@ -445,8 +450,8 @@ describe('permission response IPC boundary', () => {
     );
     assert.match(
       sendBlock,
-      /const feedbackSessionId = optimisticSessionId \?\? initialSessionId;[\s\S]*const sendStillOwnsCurrentSurface = feedbackSessionId[\s\S]*activeIdRef\.current === feedbackSessionId[\s\S]*activeIdRef\.current === initialSessionId;[\s\S]*if \(!sendStillOwnsCurrentSurface\) return false;/,
-      'send failure feedback must not toast or open setup from a stale session after the user switches chats',
+      /const feedbackSessionId = optimisticSessionId \?\? initialSessionId;[\s\S]*const sendStillOwnsCurrentSurface = feedbackSessionId[\s\S]*activeIdRef\.current === feedbackSessionId[\s\S]*newChatOwner[\s\S]*isNewChatSendSurfaceActive\(newChatOwner\)[\s\S]*activeIdRef\.current === initialSessionId;[\s\S]*if \(!sendStillOwnsCurrentSurface\) return false;/,
+      'send failure feedback must not toast or open setup from a stale session/new-chat surface after the user switches chats',
     );
     assert.match(
       sendBlock,

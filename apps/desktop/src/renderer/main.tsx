@@ -972,6 +972,11 @@ function AppShell() {
       && activeIdRef.current === undefined;
   }
 
+  function isShellSurfaceOwnerActive(owner: ComposerImportOwner): boolean {
+    return navSelectionRef.current.section === owner.navSection
+      && activeIdRef.current === owner.sessionId;
+  }
+
   useEffect(() => {
     activeIdRef.current = activeId;
   }, [activeId]);
@@ -2477,18 +2482,21 @@ function AppShell() {
    */
   async function handleQuickChatSubmit(prompt: string, mode?: QuickChatMode): Promise<boolean> {
     if (quickChatPendingRef.current) return false;
+    const owner = captureComposerImportOwner();
     quickChatPendingRef.current = true;
     setQuickChatPending(true);
     try {
       const result = await window.maka.quickChat.start({ prompt, mode });
       if (result.ok) {
-        openSessionInChat(result.sessionId);
+        if (isShellSurfaceOwnerActive(owner)) {
+          openSessionInChat(result.sessionId);
+        }
         await refreshSessions();
         // If the prompt was non-empty, the main process has already
         // started the send via the existing send path. If empty, we
         // just opened a fresh session; focus the composer so the
         // user can type without an extra click.
-        if (!prompt.trim()) {
+        if (!prompt.trim() && activeIdRef.current === result.sessionId) {
           composerRef.current?.focus();
         }
         return true;
@@ -2499,11 +2507,15 @@ function AppShell() {
       } else {
         // send_failed — main already generalized the message.
         await refreshSessions();
-        toastApi.error('开始对话失败', result.message);
+        if (isShellSurfaceOwnerActive(owner)) {
+          toastApi.error('开始对话失败', result.message);
+        }
         return false;
       }
     } catch (error) {
-      toastApi.error('开始对话失败', generalizedErrorMessageChinese(error, '对话暂时无法开始，请稍后重试。'));
+      if (isShellSurfaceOwnerActive(owner)) {
+        toastApi.error('开始对话失败', generalizedErrorMessageChinese(error, '对话暂时无法开始，请稍后重试。'));
+      }
       return false;
     } finally {
       quickChatPendingRef.current = false;
