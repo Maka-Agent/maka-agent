@@ -2875,6 +2875,7 @@ function WebSearchSettingsPage(props: {
   const credentialSource = tavily.credentialSource;
   const usingEnvKey = credentialSource === 'env';
   const [draftKey, setDraftKey] = useState('');
+  const [pendingWebSearchEnabled, setPendingWebSearchEnabled] = useState(false);
   const [pendingCredentialAction, setPendingCredentialAction] = useState<'save' | 'clear' | null>(null);
   const [testing, setTesting] = useState(false);
   const [liveQuery, setLiveQuery] = useState('');
@@ -2882,6 +2883,7 @@ function WebSearchSettingsPage(props: {
   const [liveQueryResults, setLiveQueryResults] = useState<readonly { title: string; url: string; snippet: string; source: string }[] | null>(null);
   const [liveQueryError, setLiveQueryError] = useState<string | null>(null);
   const webSearchMountedRef = useRef(true);
+  const pendingWebSearchEnabledRef = useRef(false);
   const pendingCredentialActionRef = useRef<'save' | 'clear' | null>(null);
   const testingRef = useRef(false);
   const liveQueryRunningRef = useRef(false);
@@ -2892,6 +2894,7 @@ function WebSearchSettingsPage(props: {
     webSearchMountedRef.current = true;
     return () => {
       webSearchMountedRef.current = false;
+      pendingWebSearchEnabledRef.current = false;
       pendingCredentialActionRef.current = null;
       testingRef.current = false;
       liveQueryRunningRef.current = false;
@@ -2939,7 +2942,17 @@ function WebSearchSettingsPage(props: {
   }
 
   async function setEnabled(enabled: boolean) {
-    await updateWebSearch({ enabled });
+    if (pendingWebSearchEnabledRef.current) return;
+    pendingWebSearchEnabledRef.current = true;
+    setPendingWebSearchEnabled(true);
+    try {
+      await updateWebSearch({ enabled });
+    } finally {
+      pendingWebSearchEnabledRef.current = false;
+      if (webSearchMountedRef.current) {
+        setPendingWebSearchEnabled(false);
+      }
+    }
   }
 
   async function persistCredentialStatus(status: WebSearchCredentialStatus, credentialVersion: number): Promise<boolean> {
@@ -3091,7 +3104,7 @@ function WebSearchSettingsPage(props: {
             <Switch
               ariaLabel="启用联网搜索"
               checked={webSearch.enabled}
-              disabled={!hasUsableKey}
+              disabled={!hasUsableKey || pendingWebSearchEnabled}
               onChange={(enabled) => void setEnabled(enabled)}
             />
           </div>

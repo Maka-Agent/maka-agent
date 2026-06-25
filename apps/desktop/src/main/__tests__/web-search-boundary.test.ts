@@ -161,6 +161,8 @@ describe('web-search renderer boundary (PR-WEB-SEARCH-TAVILY-0)', () => {
     const page = settings.match(/function WebSearchSettingsPage[\s\S]*?function webSearchQueryDisabledReason/);
 
     assert.ok(page, 'Web search settings page block must exist');
+    assert.match(page![0], /const \[pendingWebSearchEnabled, setPendingWebSearchEnabled\] = useState\(false\)/);
+    assert.match(page![0], /const pendingWebSearchEnabledRef = useRef\(false\)/);
     assert.match(page![0], /const \[pendingCredentialAction, setPendingCredentialAction\] = useState<'save' \| 'clear' \| null>\(null\)/);
     assert.match(page![0], /const pendingCredentialActionRef = useRef<'save' \| 'clear' \| null>\(null\)/);
     assert.match(page![0], /const testingRef = useRef\(false\)/);
@@ -181,6 +183,11 @@ describe('web-search renderer boundary (PR-WEB-SEARCH-TAVILY-0)', () => {
       /async function runCredentialAction\([\s\S]*if \(pendingCredentialActionRef\.current !== null \|\| testingRef\.current\) return;[\s\S]*pendingCredentialActionRef\.current = action;[\s\S]*setPendingCredentialAction\(action\);[\s\S]*await run\(\);[\s\S]*pendingCredentialActionRef\.current = null;[\s\S]*setPendingCredentialAction\(null\);/,
       'Saving or clearing Tavily credentials must reject duplicate clicks synchronously and expose pending state.',
     );
+    assert.match(
+      page![0],
+      /async function setEnabled\(enabled: boolean\) \{[\s\S]*if \(pendingWebSearchEnabledRef\.current\) return;[\s\S]*pendingWebSearchEnabledRef\.current = true;[\s\S]*setPendingWebSearchEnabled\(true\);[\s\S]*await updateWebSearch\(\{ enabled \}\);[\s\S]*pendingWebSearchEnabledRef\.current = false;[\s\S]*setPendingWebSearchEnabled\(false\);/,
+      'The web-search enable switch must reject duplicate same-frame toggles and expose local pending state.',
+    );
     assert.match(page![0], /runCredentialAction\('save', async \(\) => \{/);
     assert.match(page![0], /runCredentialAction\('clear', async \(\) => \{/);
     assert.match(
@@ -200,6 +207,7 @@ describe('web-search renderer boundary (PR-WEB-SEARCH-TAVILY-0)', () => {
     assert.match(page![0], /disabled=\{credentialActionBusy \|\| \(draftKey\.length === 0 && !hasUsableKey\)\}/);
     assert.match(page![0], /disabled=\{credentialActionBusy\}[\s\S]*pendingCredentialAction === 'clear' \? '清空中…' : '清空密钥'/);
     assert.match(page![0], /onChange=\{\(event\) => updateLiveQuery\(event\.currentTarget\.value\)\}/);
+    assert.match(page![0], /disabled=\{!hasUsableKey \|\| pendingWebSearchEnabled\}/);
   });
 
   it('Settings web-search async actions stop writing component state after unmount', async () => {
@@ -214,8 +222,13 @@ describe('web-search renderer boundary (PR-WEB-SEARCH-TAVILY-0)', () => {
     );
     assert.match(
       page![0],
-      /useEffect\(\(\) => \{[\s\S]*webSearchMountedRef\.current = true;[\s\S]*return \(\) => \{[\s\S]*webSearchMountedRef\.current = false;[\s\S]*pendingCredentialActionRef\.current = null;[\s\S]*testingRef\.current = false;[\s\S]*liveQueryRunningRef\.current = false;[\s\S]*\};[\s\S]*\}, \[\]\)/,
+      /useEffect\(\(\) => \{[\s\S]*webSearchMountedRef\.current = true;[\s\S]*return \(\) => \{[\s\S]*webSearchMountedRef\.current = false;[\s\S]*pendingWebSearchEnabledRef\.current = false;[\s\S]*pendingCredentialActionRef\.current = null;[\s\S]*testingRef\.current = false;[\s\S]*liveQueryRunningRef\.current = false;[\s\S]*\};[\s\S]*\}, \[\]\)/,
       'Unmount must mark the page inactive and release synchronous pending owners',
+    );
+    assert.match(
+      page![0],
+      /finally \{[\s\S]*pendingWebSearchEnabledRef\.current = false;[\s\S]*if \(webSearchMountedRef\.current\) \{[\s\S]*setPendingWebSearchEnabled\(false\);[\s\S]*\}/,
+      'Web-search enable completion must not set pending switch state after unmount',
     );
     assert.match(
       page![0],
