@@ -299,7 +299,18 @@ function AppShell() {
     phase: 'streaming' | 'draining';
     messageId?: string;
   };
-  const [streamingBySession, setStreamingBySession] = useState<Record<string, AssistantStreamSlot>>({});
+  const [streamingBySession, setStreamingBySessionState] = useState<Record<string, AssistantStreamSlot>>({});
+  // Session event handlers are subscribed per activeId; read live stream slots from this ref to avoid stale render closures.
+  const streamingBySessionRef = useRef<Record<string, AssistantStreamSlot>>({});
+  function setStreamingBySession(
+    updater: (current: Record<string, AssistantStreamSlot>) => Record<string, AssistantStreamSlot>,
+  ) {
+    const current = streamingBySessionRef.current;
+    const next = updater(current);
+    if (next === current) return;
+    streamingBySessionRef.current = next;
+    setStreamingBySessionState(next);
+  }
   /**
    * PR-UI-LAYOUT-42 (@kenji reference renderer audit, external docs/12-renderer.md §15.3):
    * The reference design displays Anthropic-style `reasoning_content`
@@ -2142,7 +2153,7 @@ function AppShell() {
     }
   }
 
-  async function refreshMessages(sessionId: string) {
+  async function refreshMessages(sessionId: string): Promise<boolean> {
     try {
       const next = await window.maka.sessions.readMessages(sessionId);
       if (activeIdRef.current === sessionId) {
@@ -2155,12 +2166,14 @@ function AppShell() {
           return updated;
         });
       }
+      return true;
     } catch (error) {
       if (activeIdRef.current === sessionId) {
         const message = generalizedErrorMessageChinese(error, '对话内容暂时无法刷新，请稍后重试。');
         setMessageLoadErrorBySession((current) => ({ ...current, [sessionId]: message }));
         toastApi.error('刷新对话失败', message);
       }
+      return false;
     }
   }
   async function retryMessages(sessionId: string) {
@@ -2263,17 +2276,18 @@ function AppShell() {
     clearThinking(sessionId);
   }
 
-  function settleAssistantStreaming(sessionId: string, messageId?: string) {
-    const currentSlot = streamingBySession[sessionId];
+  async function settleAssistantStreaming(sessionId: string, messageId?: string) {
+    const currentSlot = streamingBySessionRef.current[sessionId];
     if (!currentSlot || currentSlot.phase !== 'draining') return;
     if (messageId && currentSlot.messageId && currentSlot.messageId !== messageId) return;
+    const refreshed = await refreshMessages(sessionId);
+    if (!refreshed) return;
     setStreamingBySession((current) => {
       const prev = current[sessionId];
       if (!prev || prev.phase !== 'draining') return current;
       if (messageId && prev.messageId && prev.messageId !== messageId) return current;
       return { ...current, [sessionId]: { text: '', truncated: false, phase: 'streaming' } };
     });
-    void refreshMessages(sessionId);
   }
 
   function handleEvent(sessionId: string, event: SessionEvent) {
@@ -2464,7 +2478,7 @@ function AppShell() {
       case 'complete':
         let deferMessageRefresh = false;
         if (event.stopReason !== 'permission_handoff') {
-          const slot = streamingBySession[sessionId];
+          const slot = streamingBySessionRef.current[sessionId];
           if (slot?.text) {
             markAssistantStreamingComplete(sessionId);
             deferMessageRefresh = true;
