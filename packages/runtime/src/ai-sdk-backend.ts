@@ -1187,7 +1187,13 @@ export class AiSdkBackend implements AgentBackend {
     if (policy.staleToolResultPrune?.enabled === true) {
       const candidates = collectStaleToolResultArchiveCandidates(runtimeContext, policy);
       if (candidates.length > 0) {
-        const archiveRefs: ToolResultArchiveRef[] = [];
+        const archiveRefs = new Map<string, ToolResultArchiveRef>();
+        const existingArchiveRefs = nextPolicy.staleToolResultPrune?.archiveRefs;
+        if (Array.isArray(existingArchiveRefs)) {
+          for (const ref of existingArchiveRefs) archiveRefs.set(ref.runtimeEventId, ref);
+        } else if (existingArchiveRefs) {
+          for (const ref of Object.values(existingArchiveRefs)) archiveRefs.set(ref.runtimeEventId, ref);
+        }
         for (const candidate of candidates) {
           const bodySha256 = sha256(candidate.serializedResult);
           const archived = await Promise.resolve(this.input.archiveToolResult?.({
@@ -1196,7 +1202,7 @@ export class AiSdkBackend implements AgentBackend {
             bodySha256,
           })).catch(() => undefined);
           if (!archived?.artifactId) continue;
-          archiveRefs.push({
+          archiveRefs.set(candidate.runtimeEventId, {
             runtimeEventId: candidate.runtimeEventId,
             toolCallId: candidate.toolCallId,
             toolName: candidate.toolName,
@@ -1213,7 +1219,7 @@ export class AiSdkBackend implements AgentBackend {
           ...nextPolicy,
           staleToolResultPrune: {
             ...nextPolicy.staleToolResultPrune!,
-            archiveRefs,
+            archiveRefs: [...archiveRefs.values()],
           },
         };
       }

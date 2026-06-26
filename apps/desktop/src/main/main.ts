@@ -80,6 +80,7 @@ import { buildWebSearchAgentTool, WEB_SEARCH_TOOL_NAME } from './web-search/agen
 import { buildRiveWorkflowTool } from './rive-workflow-tool.js';
 import { resolveTavilyApiKey } from './web-search/credentials.js';
 import { runThreadSearch } from './search/thread-search.js';
+import { persistArchivedToolResultToArtifacts } from './tool-result-archive-artifacts.js';
 import {
   normalizeBranchFromTurnInput,
   normalizePermissionResponse,
@@ -769,17 +770,7 @@ async function persistToolArtifacts(cwd: string, event: ToolArtifactRecorderInpu
 async function persistArchivedToolResult(
   event: ToolResultArchiveRecorderInput,
 ): Promise<{ artifactId: string }> {
-  const artifact = await artifactStore.create({
-    sessionId: event.sessionId,
-    turnId: event.turnId,
-    name: `tool-result-${event.runtimeEventId}.json`,
-    kind: 'file',
-    content: event.serializedResult,
-    mimeType: 'application/json',
-    source: 'tool_result_archive',
-    summary: `Archived ${event.toolName} tool result for context budget replay`,
-  });
-  return { artifactId: artifact.id };
+  return persistArchivedToolResultToArtifacts(artifactStore, event);
 }
 
 async function readArchivedToolResult(

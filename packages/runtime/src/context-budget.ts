@@ -1634,6 +1634,7 @@ function pruneStaleToolResultsBeforeCompact(
       runtimeEventId: event.id,
       toolCallId: content.id,
       toolName: content.name,
+      bodySha256: sha256(serializedResult),
       originalBytes: resultBytes,
       originalEstimatedTokens: resultEstimatedTokens,
     })) {
@@ -1775,6 +1776,7 @@ function archiveRefMatches(
     runtimeEventId: string;
     toolCallId: string;
     toolName: string;
+    bodySha256: string;
     originalEstimatedTokens: number;
     originalBytes: number;
   },
@@ -1788,6 +1790,7 @@ function archiveRefMatches(
     && ref.artifactId.length > 0
     && typeof ref.bodySha256 === 'string'
     && ref.bodySha256.length > 0
+    && ref.bodySha256 === candidate.bodySha256
     && ref.originalEstimatedTokens === candidate.originalEstimatedTokens
     && ref.originalBytes === candidate.originalBytes;
 }
