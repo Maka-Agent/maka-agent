@@ -340,6 +340,12 @@ describe('applyAssistantDelta — monotonic truncated propagation', () => {
 });
 
 describe('applyAssistantComplete — final payload replace path', () => {
+  it('returns an empty result for an empty complete payload', () => {
+    const result = applyAssistantComplete('');
+
+    assert.deepEqual(result, { text: '', redacted: false, truncated: false });
+  });
+
   it('does not apply the per-delta cap to a complete payload under the total cap', () => {
     const finalText = 'word '.repeat(Math.ceil(ASSISTANT_MAX_DELTA_CHARS / 5) + 20);
     assert.ok(finalText.length > ASSISTANT_MAX_DELTA_CHARS);

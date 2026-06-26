@@ -228,10 +228,9 @@ export function applyAssistantComplete(
 export function drainAssistantStreamSlot(
   current: AssistantStreamSlots,
   sessionId: string,
-  text: string,
+  applied: ApplyAssistantResult,
   messageId?: string,
 ): AssistantStreamSlots {
-  const applied = applyAssistantComplete(text);
   return {
     ...current,
     [sessionId]: {
@@ -255,24 +254,30 @@ export function markAssistantStreamSlotDraining(
   };
 }
 
-export async function settleAssistantStreamSlot(input: {
-  sessionId: string;
-  messageId?: string;
-  getCurrent: () => AssistantStreamSlots;
-  refreshMessages: () => Promise<boolean>;
-  setCurrent: (updater: (current: AssistantStreamSlots) => AssistantStreamSlots) => void;
-}): Promise<void> {
-  const currentSlot = input.getCurrent()[input.sessionId];
-  if (!isMatchingDrainingSlot(currentSlot, input.messageId)) return;
-  await input.refreshMessages().catch(() => false);
-  input.setCurrent((current) => {
-    const prev = current[input.sessionId];
-    if (prev !== currentSlot) return current;
-    return { ...current, [input.sessionId]: { text: '', truncated: false, phase: 'streaming' } };
-  });
+export function clearSettledAssistantStreamSlot(
+  current: AssistantStreamSlots,
+  sessionId: string,
+  settledSlot: AssistantStreamSlot,
+  messageId?: string,
+): AssistantStreamSlots {
+  const currentSlot = current[sessionId];
+  if (!isEquivalentSettledSlot(currentSlot, settledSlot, messageId)) return current;
+  return { ...current, [sessionId]: { text: '', truncated: false, phase: 'streaming' } };
 }
 
-function isMatchingDrainingSlot(slot: AssistantStreamSlot | undefined, messageId?: string): slot is AssistantStreamSlot {
-  if (!slot || slot.phase !== 'draining') return false;
-  return !(messageId && slot.messageId && slot.messageId !== messageId);
+function isEquivalentSettledSlot(
+  slot: AssistantStreamSlot | undefined,
+  settledSlot: AssistantStreamSlot,
+  messageId?: string,
+): slot is AssistantStreamSlot {
+  if (!slot || slot.phase !== 'draining' || settledSlot.phase !== 'draining') return false;
+  if (slot === settledSlot) return true;
+
+  const expectedMessageId = messageId ?? settledSlot.messageId;
+  if (!expectedMessageId) return false;
+
+  return slot.messageId === expectedMessageId &&
+    settledSlot.messageId === expectedMessageId &&
+    slot.text === settledSlot.text &&
+    slot.truncated === settledSlot.truncated;
 }

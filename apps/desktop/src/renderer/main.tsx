@@ -35,9 +35,9 @@ import { PROVIDER_DEFAULTS } from '@maka/core';
 import {
   applyAssistantComplete,
   applyAssistantDelta,
+  clearSettledAssistantStreamSlot,
   drainAssistantStreamSlot,
   markAssistantStreamSlotDraining,
-  settleAssistantStreamSlot,
   type AssistantStreamSlot,
   applyThinkingComplete,
   applyThinkingDelta,
@@ -2250,23 +2250,16 @@ function AppShell() {
       void refreshMessages(sessionId);
       return;
     }
-    setStreamingBySession((current) => drainAssistantStreamSlot(current, sessionId, text, messageId));
-    clearThinking(sessionId);
-  }
-
-  function markAssistantStreamingComplete(sessionId: string) {
-    setStreamingBySession((current) => markAssistantStreamSlotDraining(current, sessionId));
+    setStreamingBySession((current) => drainAssistantStreamSlot(current, sessionId, applied, messageId));
     clearThinking(sessionId);
   }
 
   async function settleAssistantStreaming(sessionId: string, messageId?: string) {
-    await settleAssistantStreamSlot({
-      sessionId,
-      messageId,
-      getCurrent: () => streamingBySessionRef.current,
-      refreshMessages: () => refreshMessages(sessionId),
-      setCurrent: setStreamingBySession,
-    });
+    const settledSlot = streamingBySessionRef.current[sessionId];
+    if (!settledSlot || settledSlot.phase !== 'draining') return;
+    if (messageId && settledSlot.messageId && settledSlot.messageId !== messageId) return;
+    await refreshMessages(sessionId).catch(() => false);
+    setStreamingBySession((current) => clearSettledAssistantStreamSlot(current, sessionId, settledSlot, messageId));
   }
 
   function handleEvent(sessionId: string, event: SessionEvent) {
@@ -2459,7 +2452,8 @@ function AppShell() {
         if (event.stopReason !== 'permission_handoff') {
           const slot = streamingBySessionRef.current[sessionId];
           if (slot?.text) {
-            markAssistantStreamingComplete(sessionId);
+            setStreamingBySession((current) => markAssistantStreamSlotDraining(current, sessionId));
+            clearThinking(sessionId);
             deferMessageRefresh = true;
           } else {
             clearStreaming(sessionId);

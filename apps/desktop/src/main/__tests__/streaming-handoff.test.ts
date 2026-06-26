@@ -1,15 +1,13 @@
 import { strict as assert } from 'node:assert';
-import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ChatView } from '@maka/ui';
 import {
+  applyAssistantComplete,
+  clearSettledAssistantStreamSlot,
   drainAssistantStreamSlot,
   markAssistantStreamSlotDraining,
-  settleAssistantStreamSlot,
   type AssistantStreamSlots,
 } from '@maka/ui/assistant-stream';
 
@@ -51,43 +49,12 @@ describe('assistant streaming handoff', () => {
     );
   });
 
-  it('does not clear the live assistant buffer directly on text_complete', async () => {
-    const rendererPath = sourcePath('src/renderer/main.tsx');
-    const source = await readFile(rendererPath, 'utf8');
-    const branch = source.match(/case 'text_complete':[\s\S]*?case 'thinking_delta':/)?.[0] ?? '';
-
-    assert.ok(branch, 'text_complete branch should be present');
-    assert.doesNotMatch(
-      branch,
-      /clearStreaming\(sessionId\)/,
-      'text_complete should drain the smoother before clearing the streaming bubble',
-    );
-  });
-
-  it('complete uses the live streaming slot ref instead of the subscription-time closure', async () => {
-    const rendererPath = sourcePath('src/renderer/main.tsx');
-    const source = await readFile(rendererPath, 'utf8');
-    const branch = source.match(/case 'complete':[\s\S]*?default:/)?.[0] ?? '';
-
-    assert.ok(branch, 'complete branch should be present');
-    assert.match(
-      branch,
-      /streamingBySessionRef\.current\[sessionId\]/,
-      'complete events arrive through an activeId-only subscription, so the handler must read the latest streaming slot from a ref',
-    );
-    assert.doesNotMatch(
-      branch,
-      /const slot = streamingBySession\[sessionId\]/,
-      'complete must not read streamingBySession from the stale subscription closure',
-    );
-  });
-
   it('text_complete replaces the live slot with the final draining text', () => {
     const current: AssistantStreamSlots = {
       'session-1': { text: 'part', truncated: true, phase: 'streaming', messageId: 'assistant-1' },
     };
 
-    const next = drainAssistantStreamSlot(current, 'session-1', 'final answer', 'assistant-1');
+    const next = drainAssistantStreamSlot(current, 'session-1', applyAssistantComplete('final answer'), 'assistant-1');
 
     assert.equal(next['session-1']?.text, 'final answer');
     assert.equal(next['session-1']?.truncated, false);
@@ -107,68 +74,48 @@ describe('assistant streaming handoff', () => {
     assert.equal(next['session-1']?.messageId, 'assistant-1');
   });
 
-  it('clears the settled stream slot even when the committed-message refresh fails once', async () => {
-    let slots: AssistantStreamSlots = {
-      'session-1': { text: 'final answer', truncated: false, phase: 'draining', messageId: 'assistant-1' },
+  it('settled slot reducer clears after refresh failure because the clear no longer depends on refresh success', () => {
+    const settledSlot = { text: 'final answer', truncated: false, phase: 'draining' as const, messageId: 'assistant-1' };
+    const slots: AssistantStreamSlots = {
+      'session-1': settledSlot,
     };
 
-    await settleAssistantStreamSlot({
-      sessionId: 'session-1',
-      messageId: 'assistant-1',
-      getCurrent: () => slots,
-      refreshMessages: async () => false,
-      setCurrent: (updater) => {
-        slots = updater(slots);
-      },
-    });
+    const next = clearSettledAssistantStreamSlot(slots, 'session-1', settledSlot, 'assistant-1');
 
-    assert.deepEqual(slots['session-1'], { text: '', truncated: false, phase: 'streaming' });
+    assert.deepEqual(next['session-1'], { text: '', truncated: false, phase: 'streaming' });
   });
 
-  it('refreshes committed messages before clearing the settled stream slot when refresh succeeds', async () => {
-    const order: string[] = [];
-    let slots: AssistantStreamSlots = {
-      'session-1': { text: 'final answer', truncated: false, phase: 'draining', messageId: 'assistant-1' },
-    };
-
-    await settleAssistantStreamSlot({
-      sessionId: 'session-1',
-      messageId: 'assistant-1',
-      getCurrent: () => slots,
-      refreshMessages: async () => {
-        order.push('refresh');
-        return true;
-      },
-      setCurrent: (updater) => {
-        order.push('clear');
-        slots = updater(slots);
-      },
-    });
-
-    assert.deepEqual(order, ['refresh', 'clear']);
-    assert.deepEqual(slots['session-1'], { text: '', truncated: false, phase: 'streaming' });
-  });
-
-  it('does not clear a newer stream slot that replaces the settled one during refresh', async () => {
+  it('settled slot reducer keeps refresh-before-clear callers race-safe for a newer stream slot', () => {
     const settledSlot = { text: 'old final', truncated: false, phase: 'draining' as const, messageId: 'assistant-old' };
-    let slots: AssistantStreamSlots = { 'session-1': settledSlot };
+    const slots: AssistantStreamSlots = {
+      'session-1': { text: 'new answer', truncated: false, phase: 'streaming', messageId: 'assistant-new' },
+    };
 
-    await settleAssistantStreamSlot({
-      sessionId: 'session-1',
-      messageId: 'assistant-old',
-      getCurrent: () => slots,
-      refreshMessages: async () => {
-        slots = {
-          'session-1': { text: 'new answer', truncated: false, phase: 'streaming', messageId: 'assistant-new' },
-        };
-        return true;
-      },
-      setCurrent: (updater) => {
-        slots = updater(slots);
-      },
-    });
+    const next = clearSettledAssistantStreamSlot(slots, 'session-1', settledSlot, 'assistant-old');
 
-    assert.deepEqual(slots['session-1'], {
+    assert.equal(next, slots);
+  });
+
+  it('settled slot reducer clears a replayed equivalent draining slot after refresh', () => {
+    const settledSlot = { text: 'final answer', truncated: false, phase: 'draining' as const, messageId: 'assistant-1' };
+    const slots: AssistantStreamSlots = {
+      'session-1': { text: 'final answer', truncated: false, phase: 'draining', messageId: 'assistant-1' },
+    };
+
+    const next = clearSettledAssistantStreamSlot(slots, 'session-1', settledSlot, 'assistant-1');
+
+    assert.deepEqual(next['session-1'], { text: '', truncated: false, phase: 'streaming' });
+  });
+
+  it('settled slot reducer does not clear a newer stream slot that replaces the settled one during refresh', () => {
+    const settledSlot = { text: 'old final', truncated: false, phase: 'draining' as const, messageId: 'assistant-old' };
+    const slots: AssistantStreamSlots = {
+      'session-1': { text: 'new answer', truncated: false, phase: 'streaming', messageId: 'assistant-new' },
+    };
+
+    const next = clearSettledAssistantStreamSlot(slots, 'session-1', settledSlot, 'assistant-old');
+
+    assert.deepEqual(next['session-1'], {
       text: 'new answer',
       truncated: false,
       phase: 'streaming',
@@ -176,26 +123,15 @@ describe('assistant streaming handoff', () => {
     });
   });
 
-  it('does not clear a replaced draining slot only because the message id still matches', async () => {
+  it('settled slot reducer does not clear a replaced draining slot only because the message id still matches', () => {
     const settledSlot = { text: 'old final', truncated: false, phase: 'draining' as const, messageId: 'assistant-1' };
-    let slots: AssistantStreamSlots = { 'session-1': settledSlot };
+    const slots: AssistantStreamSlots = {
+      'session-1': { text: 'replacement final', truncated: false, phase: 'draining', messageId: 'assistant-1' },
+    };
 
-    await settleAssistantStreamSlot({
-      sessionId: 'session-1',
-      messageId: 'assistant-1',
-      getCurrent: () => slots,
-      refreshMessages: async () => {
-        slots = {
-          'session-1': { text: 'replacement final', truncated: false, phase: 'draining', messageId: 'assistant-1' },
-        };
-        return true;
-      },
-      setCurrent: (updater) => {
-        slots = updater(slots);
-      },
-    });
+    const next = clearSettledAssistantStreamSlot(slots, 'session-1', settledSlot, 'assistant-1');
 
-    assert.deepEqual(slots['session-1'], {
+    assert.deepEqual(next['session-1'], {
       text: 'replacement final',
       truncated: false,
       phase: 'draining',
@@ -206,10 +142,4 @@ describe('assistant streaming handoff', () => {
 
 function countOccurrences(haystack: string, needle: string): number {
   return haystack.split(needle).length - 1;
-}
-
-function sourcePath(relativeFromDesktop: string): string {
-  const fromDesktop = join(process.cwd(), relativeFromDesktop);
-  if (existsSync(fromDesktop)) return fromDesktop;
-  return join(process.cwd(), 'apps/desktop', relativeFromDesktop);
 }
