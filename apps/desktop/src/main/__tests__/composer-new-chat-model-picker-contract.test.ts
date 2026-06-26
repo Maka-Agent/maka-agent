@@ -29,7 +29,13 @@ async function readRepo(path: string): Promise<string> {
 
 describe('home composer new-chat model picker', () => {
   it('renders an interactive picker (not a dead chip) on the no-session branch', async () => {
-    const ui = await readRepo('packages/ui/src/components.tsx');
+    // The pickers were extracted out of `components.tsx` into the sibling
+    // `chat-model-switcher.tsx`; the composer still renders them from
+    // `components.tsx`. Search the union so the contract holds across the seam.
+    const ui =
+      (await readRepo('packages/ui/src/components.tsx')) +
+      '\n' +
+      (await readRepo('packages/ui/src/chat-model-switcher.tsx'));
 
     // The no-session branch must route to the interactive picker when a pick
     // handler and choices exist, keeping the static chip only as the
@@ -54,7 +60,13 @@ describe('home composer new-chat model picker', () => {
   });
 
   it('shares one ModelChoiceOptions list between both model pickers', async () => {
-    const ui = await readRepo('packages/ui/src/components.tsx');
+    // The pickers were extracted out of `components.tsx` into the sibling
+    // `chat-model-switcher.tsx`; the composer still renders them from
+    // `components.tsx`. Search the union so the contract holds across the seam.
+    const ui =
+      (await readRepo('packages/ui/src/components.tsx')) +
+      '\n' +
+      (await readRepo('packages/ui/src/chat-model-switcher.tsx'));
     assert.match(ui, /function ModelChoiceOptions\(\{ groups \}/, 'shared ModelChoiceOptions list component must exist');
     const usages = ui.match(/<ModelChoiceOptions groups=\{grouped\} \/>/g) ?? [];
     assert.equal(

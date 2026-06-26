@@ -15,8 +15,9 @@
  *   surface chooses to display it).
  *
  * This test pins:
- *   1. `ChatModelChoice` interface has exactly 4 fields and `label`
- *      is not among them.
+ *   1. `ChatModelChoice` interface has exactly 3 fields
+ *      (connectionSlug, providerType, model); neither `label` nor the
+ *      former `connectionLabel` (also a leak) is among them.
  *   2. `buildChatModelChoices` does not push a `label:` line into
  *      the choice object.
  *   3. The model switcher items map only `choice.model` to `label`,
@@ -58,12 +59,12 @@ describe('PR-CHAT-MODEL-CHOICE-CONTRACT-TEST-0', () => {
 
     assert.deepEqual(
       [...fieldNames].sort(),
-      ['connectionLabel', 'connectionSlug', 'model', 'providerType'],
-      'ChatModelChoice must have exactly 4 fields and no `label`',
+      ['connectionSlug', 'model', 'providerType'],
+      'ChatModelChoice must have exactly 3 fields and no `label`/`connectionLabel`',
     );
     assert.ok(
-      !fieldNames.includes('label'),
-      '`label` field must stay removed (would leak auth method + email)',
+      !fieldNames.includes('label') && !fieldNames.includes('connectionLabel'),
+      '`label`/`connectionLabel` must stay removed (either would leak auth method + email)',
     );
   });
 
@@ -90,8 +91,10 @@ describe('PR-CHAT-MODEL-CHOICE-CONTRACT-TEST-0', () => {
   });
 
   it('model switcher items render only `choice.model`, not a composite label', async () => {
+    // The switcher/picker JSX was extracted out of `components.tsx` into
+    // `chat-model-switcher.tsx`; the SelectItem mapping lives there now.
     const ui = await readFile(
-      resolve(REPO_ROOT, 'packages/ui/src/components.tsx'),
+      resolve(REPO_ROOT, 'packages/ui/src/chat-model-switcher.tsx'),
       'utf8',
     );
 

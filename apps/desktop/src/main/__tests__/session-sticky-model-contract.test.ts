@@ -6,6 +6,17 @@ import { readRendererContractCss } from './contract-css-helpers.js';
 
 const REPO_ROOT = resolve(import.meta.dirname, '../../../../..');
 
+// The model switcher / picker JSX was extracted out of `components.tsx` into the
+// sibling `chat-model-switcher.tsx`. These source-grep contracts assert behavior
+// that now spans both files, so search their union.
+async function readModelSwitcherUiSource(): Promise<string> {
+  const [components, switcher] = await Promise.all([
+    readFile(resolve(REPO_ROOT, 'packages/ui/src/components.tsx'), 'utf8'),
+    readFile(resolve(REPO_ROOT, 'packages/ui/src/chat-model-switcher.tsx'), 'utf8'),
+  ]);
+  return `${components}\n${switcher}`;
+}
+
 describe('PR-SESSION-STICKY-MODEL-0 contract', () => {
   it('captures the ready model when creating a desktop session', async () => {
     const main = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/main/main.ts'), 'utf8');
@@ -43,7 +54,7 @@ describe('PR-SESSION-STICKY-MODEL-0 contract', () => {
 
   it('surfaces the session model in the chat header and explains default-model scope', async () => {
     const renderer = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/renderer/main.tsx'), 'utf8');
-    const ui = await readFile(resolve(REPO_ROOT, 'packages/ui/src/components.tsx'), 'utf8');
+    const ui = await readModelSwitcherUiSource();
     const providers = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/renderer/settings/ProvidersPanel.tsx'), 'utf8');
 
     assert.match(renderer, /normalizeActiveChatModel\(activeSession, activeConnection, chatModelChoices\)/);
@@ -57,7 +68,7 @@ describe('PR-SESSION-STICKY-MODEL-0 contract', () => {
     const preload = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/preload/preload.ts'), 'utf8');
     const globalTypes = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/global.d.ts'), 'utf8');
     const renderer = await readFile(resolve(REPO_ROOT, 'apps/desktop/src/renderer/main.tsx'), 'utf8');
-    const ui = await readFile(resolve(REPO_ROOT, 'packages/ui/src/components.tsx'), 'utf8');
+    const ui = await readModelSwitcherUiSource();
     const uiPrimitives = await readFile(resolve(REPO_ROOT, 'packages/ui/src/ui.tsx'), 'utf8');
     const styles = await readRendererContractCss();
 
@@ -138,7 +149,7 @@ describe('PR-SESSION-STICKY-MODEL-0 contract', () => {
     assert.match(ui, /<SelectRoot<string>[\s\S]*items=\{modelSelectItems\}[\s\S]*value=\{currentValue\}[\s\S]*onValueChange=\{\(value\) => \{/);
     assert.match(ui, /<SelectPositioner alignItemWithTrigger=\{false\} sideOffset=\{8\}/);
     assert.match(ui, /<SelectList>/);
-    assert.match(ui, /<SelectGroup key=\{group\.connectionSlug\}>/);
+    assert.match(ui, /<SelectGroup key=\{group\.connectionSlug\}/);
     assert.match(uiPrimitives, /<span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">[\s\S]*<BaseSelect\.ItemIndicator>/);
     assert.match(uiPrimitives, /<span className="min-w-0">[\s\S]*<BaseSelect\.ItemText>\{children\}<\/BaseSelect\.ItemText>/);
     assert.doesNotMatch(ui, /<select\b[\s\S]*aria-label="切换当前会话模型"/);
@@ -151,7 +162,7 @@ describe('PR-SESSION-STICKY-MODEL-0 contract', () => {
   });
 
   it('flags per-turn model departures against the session sticky model', async () => {
-    const ui = await readFile(resolve(REPO_ROOT, 'packages/ui/src/components.tsx'), 'utf8');
+    const ui = await readModelSwitcherUiSource();
 
     assert.match(ui, /props\.activeSession\?\.model && props\.activeSession\.model\.length > 0/);
     assert.match(ui, /previousModelId=\{expectedModelId\}/);
