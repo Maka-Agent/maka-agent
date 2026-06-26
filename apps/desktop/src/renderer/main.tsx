@@ -1145,7 +1145,10 @@ function AppShell() {
     }));
     void window.maka.sessions.readMessages(activeId)
       .then((next) => {
-        if (!disposed && activeIdRef.current === activeId) setMessages(next);
+        if (!disposed && activeIdRef.current === activeId) {
+          markSessionReadLocally(activeId);
+          setMessages(next);
+        }
       })
       .catch((error) => {
         if (!disposed && activeIdRef.current === activeId) {
@@ -1277,6 +1280,20 @@ function AppShell() {
   function upsertSessionSummary(session: SessionSummary): void {
     setSessions((current) => {
       const next = [session, ...current.filter((entry) => entry.id !== session.id)];
+      sessionsRef.current = next;
+      return next;
+    });
+  }
+
+  function markSessionReadLocally(sessionId: string): void {
+    setSessions((current) => {
+      let changed = false;
+      const next = current.map((session) => {
+        if (session.id !== sessionId || !session.hasUnread) return session;
+        changed = true;
+        return { ...session, hasUnread: false };
+      });
+      if (!changed) return current;
       sessionsRef.current = next;
       return next;
     });
@@ -2118,6 +2135,7 @@ function AppShell() {
     try {
       const next = await window.maka.sessions.readMessages(sessionId);
       if (activeIdRef.current === sessionId) {
+        markSessionReadLocally(sessionId);
         setMessages(next);
         setMessageLoadErrorBySession((current) => {
           if (!current[sessionId]) return current;
@@ -2158,6 +2176,7 @@ function AppShell() {
         if (activeIdRef.current !== sessionId) return;
         const hasSentUserTurn = next.some((message) => message.type === 'user' && message.turnId === turnId);
         if (hasSentUserTurn) {
+          markSessionReadLocally(sessionId);
           setMessages(next);
           return;
         }

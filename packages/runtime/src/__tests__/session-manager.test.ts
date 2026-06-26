@@ -330,6 +330,28 @@ describe('SessionManager permission mode updates', () => {
     await iterator.next();
   });
 
+  test('reading messages clears the session unread marker', async () => {
+    const store = new MemorySessionStore();
+    const runStore = new MemoryAgentRunStore();
+    const backends = new BackendRegistry();
+    backends.register('fake', (ctx) => new TestBackend(ctx));
+    const manager = new SessionManager({
+      store,
+      runStore,
+      runtimeEventStore: runStore,
+      backends,
+      newId: nextId(),
+      now: nextNow(6_630),
+      runtimeSource: 'test',
+    });
+    const session = await manager.createSession(makeInput());
+    await store.updateHeader(session.id, { hasUnread: true });
+
+    await manager.getMessages(session.id);
+
+    expect((await store.readHeader(session.id)).hasUnread).toBe(false);
+  });
+
   test('runtime event ledger write failure does not fail sendMessage', async () => {
     const store = new MemorySessionStore();
     const runStore = new MemoryAgentRunStore();

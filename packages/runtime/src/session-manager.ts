@@ -250,7 +250,9 @@ export class SessionManager {
   }
 
   async getMessages(sessionId: string): Promise<StoredMessage[]> {
-    return (await this.readModel().getSessionView(sessionId)).messages;
+    const view = await this.readModel().getSessionView(sessionId);
+    await this.markSessionRead(sessionId).catch(() => {});
+    return view.messages;
   }
 
   async listTurns(sessionId: string): Promise<TurnRecord[]> {
@@ -352,6 +354,13 @@ export class SessionManager {
     await this.deps.store.setFlagged(sessionId, isFlagged);
     const header = await this.deps.store.readHeader(sessionId).catch(() => undefined);
     if (header) this.runtimeKernel.updateCachedHeader(sessionId, header);
+  }
+
+  private async markSessionRead(sessionId: string): Promise<void> {
+    const header = await this.deps.store.readHeader(sessionId);
+    if (!header.hasUnread) return;
+    const next = await this.deps.store.updateHeader(sessionId, { hasUnread: false });
+    this.runtimeKernel.updateCachedHeader(sessionId, next);
   }
 
   async renameSession(sessionId: string, name: string): Promise<void> {
