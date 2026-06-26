@@ -488,7 +488,7 @@ describe('summarizePromptAbComparison', () => {
     });
 
     assert.equal(result.decision, 'non_inferior');
-    assert.equal(result.reason, 'pass_rate_delta_within_non_inferiority_margin');
+    assert.equal(result.reason, 'non_inferiority_lower_bound_within_margin');
     assert.equal(result.taskCount, 2);
     assert.equal(result.reps, 2);
     assert.equal(result.baseline.passRate, 0.25);
@@ -502,7 +502,7 @@ describe('summarizePromptAbComparison', () => {
     assert.equal(result.candidate.budgetExhausted, 0);
 
     const markdown = renderPromptAbComparisonMarkdown(result);
-    assert.match(markdown, /Decision: B non-inferior \(pass_rate_delta_within_non_inferiority_margin\)/);
+    assert.match(markdown, /Decision: B non-inferior \(non_inferiority_lower_bound_within_margin\)/);
     assert.match(markdown, /Budget: 600s task budget/);
     assert.match(markdown, /Evaluation pass rate: A=1\/4 = 0.25, B=4\/4 = 1/);
     assert.match(markdown, /Task-level delta: mean=0.75/);
@@ -578,6 +578,7 @@ describe('summarizePromptAbComparison', () => {
     assert.deepEqual(result.candidate.contextBudget, {
       diagnosticAttempts: 2,
       activatedAttempts: 1,
+      activatedAttemptIds: ['event-t1-pass'],
       diagnosticEvents: 2,
       prunedToolResults: 2,
       archivePlaceholders: 2,
@@ -595,6 +596,48 @@ describe('summarizePromptAbComparison', () => {
       renderPromptAbComparisonMarkdown(result),
       /Context budget policy: A enabled=0\/2 snapshots=\[{"enabled":false}\], B enabled=2\/2 snapshots=/,
     );
+  });
+
+  test('records activated attempts and investigation refs for follow-up', () => {
+    const activatedSummary = contextBudgetSummary({ prunedToolResults: 1, archivePlaceholders: 1 });
+    const result = summarizePromptAbComparison({
+      runId: 'ab-run',
+      roundId: 'ab-summary',
+      baselinePromptId: 'prune-off',
+      candidatePromptId: 'prune-on',
+      evaluationTaskIds: ['b-loss', 'activated', 'budget'],
+      baselineRuns: [[
+        withTrace(completed('b-loss', true), 'A', 'b-loss'),
+        withTrace(completed('activated', true), 'A', 'activated'),
+        withTrace(completed('budget', true), 'A', 'budget'),
+      ]],
+      candidateRuns: [[
+        withTrace(completed('b-loss', false), 'B', 'b-loss'),
+        {
+          ...withTrace(completed('activated', true), 'B', 'activated'),
+          id: 'event-B-activated-r0',
+          contextBudgetSummary: activatedSummary,
+        },
+        { ...budgetExhausted('budget'), id: 'event-B-budget-r0', roundId: 'ab-prune-on-r0-budget' },
+      ]],
+    });
+
+    assert.deepEqual(result.candidate.contextBudget?.activatedAttemptIds, ['event-B-activated-r0']);
+    assert.equal(result.investigationRefs.activatedAttempts[0]?.taskId, 'activated');
+    assert.equal(result.investigationRefs.activatedAttempts[0]?.rep, 0);
+    assert.equal(result.investigationRefs.activatedAttempts[0]?.runtimeEventsPath, '/logs/B/activated/runtime-events.jsonl');
+    assert.equal(result.investigationRefs.activatedAttempts[0]?.traceEventsPath, '/traces/B/activated/events.jsonl');
+    assert.equal(result.investigationRefs.candidateLosses[0]?.pairId, 'b-loss#r0');
+    assert.equal(result.investigationRefs.candidateLosses[0]?.candidate?.runtimeEventsPath, '/logs/B/b-loss/runtime-events.jsonl');
+    assert.equal(result.investigationRefs.budgetDiscordantPairs[0]?.pairId, 'budget#r0');
+
+    const markdown = renderPromptAbComparisonMarkdown(result);
+    assert.match(markdown, /Activated Attempts/);
+    assert.match(markdown, /event-B-activated-r0.*\/traces\/B\/activated\/events\.jsonl/);
+    assert.match(markdown, /B Loss Refs/);
+    assert.match(markdown, /b-loss#r0.*\/logs\/B\/b-loss\/runtime-events\.jsonl/);
+    assert.match(markdown, /Budget Discordant Refs/);
+    assert.match(markdown, /budget#r0/);
   });
 
   test('keeps sign test auxiliary while using non-inferiority as the decision', () => {
@@ -616,8 +659,9 @@ describe('summarizePromptAbComparison', () => {
     assert.equal(result.taskLevel.wins, 9);
     assert.equal(result.taskLevel.losses, 7);
     assert.equal(result.taskLevel.signTestPValue !== null && result.taskLevel.signTestPValue > 0.05, true);
-    assert.equal(result.decision, 'non_inferior');
-    assert.equal(result.reason, 'pass_rate_delta_within_non_inferiority_margin');
+    assert.equal(result.decision, 'inconclusive');
+    assert.equal(result.reason, 'non_inferiority_confidence_interval_crosses_margin');
+    assert.equal(result.nonInferiority.lowerBound !== null && result.nonInferiority.lowerBound < -0.1, true);
   });
 
   test('keeps an exact task-level sign test as an auxiliary metric', () => {
@@ -640,11 +684,11 @@ describe('summarizePromptAbComparison', () => {
     assert.equal(result.taskLevel.losses, 3);
     assert.equal(result.taskLevel.signTestPValue !== null && result.taskLevel.signTestPValue <= 0.05, true);
     assert.equal(result.decision, 'non_inferior');
-    assert.equal(result.reason, 'pass_rate_delta_within_non_inferiority_margin');
+    assert.equal(result.reason, 'non_inferiority_lower_bound_within_margin');
   });
 
-  test('uses a 10pp non-inferiority margin for prune comparisons', () => {
-    const ninePointLoss = summarizePromptAbComparison({
+  test('requires a 10pp non-inferiority confidence bound for prune comparisons', () => {
+    const underpoweredNinePointLoss = summarizePromptAbComparison({
       runId: 'ab-run',
       roundId: 'ab-summary',
       baselinePromptId: 'prune-off',
@@ -653,11 +697,26 @@ describe('summarizePromptAbComparison', () => {
       baselineRuns: [Array.from({ length: 100 }, (_, index) => completed(`t${index}`, index < 100))],
       candidateRuns: [Array.from({ length: 100 }, (_, index) => completed(`t${index}`, index < 91))],
     });
-    assert.equal(ninePointLoss.nonInferiorityMargin, 0.1);
-    assert.equal(ninePointLoss.passRateDelta, -0.09);
-    assert.equal(ninePointLoss.decision, 'non_inferior');
-    assert.equal(ninePointLoss.reason, 'pass_rate_delta_within_non_inferiority_margin');
-    assert.match(renderPromptAbComparisonMarkdown(ninePointLoss), /Non-inferiority margin: 0.1/);
+    assert.equal(underpoweredNinePointLoss.nonInferiorityMargin, 0.1);
+    assert.equal(underpoweredNinePointLoss.passRateDelta, -0.09);
+    assert.equal(underpoweredNinePointLoss.decision, 'inconclusive');
+    assert.equal(underpoweredNinePointLoss.reason, 'non_inferiority_confidence_interval_crosses_margin');
+    assert.equal(underpoweredNinePointLoss.nonInferiority.lowerBound !== null && underpoweredNinePointLoss.nonInferiority.lowerBound < -0.1, true);
+    assert.match(renderPromptAbComparisonMarkdown(underpoweredNinePointLoss), /Non-inferiority lower bound:/);
+
+    const poweredFivePointLoss = summarizePromptAbComparison({
+      runId: 'ab-run',
+      roundId: 'ab-summary',
+      baselinePromptId: 'prune-off',
+      candidatePromptId: 'prune-on',
+      evaluationTaskIds: Array.from({ length: 1000 }, (_, index) => `t${index}`),
+      baselineRuns: [Array.from({ length: 1000 }, (_, index) => completed(`t${index}`, index < 1000))],
+      candidateRuns: [Array.from({ length: 1000 }, (_, index) => completed(`t${index}`, index < 950))],
+    });
+    assert.equal(poweredFivePointLoss.passRateDelta, -0.05);
+    assert.equal(poweredFivePointLoss.nonInferiority.lowerBound !== null && poweredFivePointLoss.nonInferiority.lowerBound >= -0.1, true);
+    assert.equal(poweredFivePointLoss.decision, 'non_inferior');
+    assert.equal(poweredFivePointLoss.reason, 'non_inferiority_lower_bound_within_margin');
 
     const elevenPointLoss = summarizePromptAbComparison({
       runId: 'ab-run',
@@ -866,6 +925,16 @@ function completed(taskId: string, passed: boolean): FixedPromptTaskCompletedEve
     durationMs: 100,
     runtimeEventsPath: `/logs/${taskId}/runtime-events.jsonl`,
     harbor: { reward: passed ? 1 : 0 },
+  };
+}
+
+function withTrace<T extends FixedPromptTaskCompletedEvent>(event: T, arm: 'A' | 'B', taskId: string): T {
+  return {
+    ...event,
+    id: `event-${arm}-${taskId}-r0`,
+    roundId: `ab-${arm === 'A' ? 'prune-off' : 'prune-on'}-r0-${taskId}`,
+    runtimeEventsPath: `/logs/${arm}/${taskId}/runtime-events.jsonl`,
+    traceEventsPath: `/traces/${arm}/${taskId}/events.jsonl`,
   };
 }
 

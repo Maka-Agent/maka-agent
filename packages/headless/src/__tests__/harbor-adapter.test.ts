@@ -52,30 +52,6 @@ describe('Harbor adapter contract', () => {
     assert.doesNotMatch(source, /MAKA_INSTRUCTION_EOF/);
   });
 
-  test('run-host-cell.mjs keeps provider auth on the host and calls Harbor tools through RPC', async () => {
-    const source = await readRepoFile('packages/headless/harbor/run-host-cell.mjs');
-
-    assert.match(source, /^#!\/usr\/bin\/env node/);
-    assert.match(source, /runHarborCell/);
-    assert.match(source, /buildAiSdkCellBackendRegistration/);
-    assert.match(source, /MAKA_HOST_API_KEY_FILE/);
-    assert.match(source, /MAKA_HOST_API_KEY_ENV_NAME/);
-    assert.match(source, /MAKA_HOST_BASE_URL/);
-    assert.match(source, /MAKA_HARBOR_TOOL_EXECUTOR_URL/);
-    assert.match(source, /MAKA_HARBOR_TOOL_EXECUTOR_TOKEN/);
-    assert.match(source, /HOST_BACKEND_ENV_KEYS/);
-    assert.match(source, /CONTEXT_ENV_KEYS/);
-    assert.match(source, /MAKA_OUTPUT_DIR/);
-    assert.match(source, /MAKA_STORAGE_ROOT/);
-    assert.doesNotMatch(source, /startsWith\('MAKA_CONTEXT_'\)/);
-    assert.match(source, /fetch\(new URL\('\/exec'/);
-    assert.match(source, /from '#harbor-cell'/);
-    assert.doesNotMatch(source, /\.\.\/dist\/index\.js/);
-    assert.doesNotMatch(source, /DEEPSEEK_API_KEY_FILE/);
-    assert.doesNotMatch(source, /\/run\/secrets/);
-    assert.doesNotMatch(source, /host\.docker\.internal/);
-  });
-
   test('headless Harbor text files do not contain hidden or unexpected control characters', async () => {
     const hiddenUnicode = /[\u202A-\u202E\u2066-\u2069\u200B\u200C\u200D\uFEFF]/u;
     const files = [

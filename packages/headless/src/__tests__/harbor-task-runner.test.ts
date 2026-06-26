@@ -413,6 +413,25 @@ describe('buildHarborJobConfig', () => {
     assert.equal(agent.max_timeout_sec, 1800);
   });
 
+  test('merges per-attempt agent env into the Harbor agent config', () => {
+    const config = buildHarborJobConfig(runInput({
+      agentEnv: {
+        MAKA_CONTEXT_BUDGET: 'off',
+        MAKA_CONTEXT_STALE_TOOL_RESULT_PRUNE: 'on',
+      },
+    }), {
+      makaRepoPath: '/repo',
+      jobsDir: '/jobs/x',
+      jobName: 'trial',
+      model: 'deepseek/deepseek-v4-flash',
+      agentEnv: { MAKA_CELL_TIMEOUT_SEC: '1800' },
+    });
+    const env = (config.agents as Array<{ env: Record<string, string> }>)[0]!.env;
+    assert.equal(env.MAKA_CELL_TIMEOUT_SEC, '1800');
+    assert.equal(env.MAKA_CONTEXT_BUDGET, 'off');
+    assert.equal(env.MAKA_CONTEXT_STALE_TOOL_RESULT_PRUNE, 'on');
+  });
+
   test('keeps a gateway-routed slashful model id when the prefix is not the provider', () => {
     const config = buildHarborJobConfig(runInput(), {
       makaRepoPath: '/repo',

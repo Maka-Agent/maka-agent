@@ -46,8 +46,6 @@ export type AbArmRunner = (input: AbArmRunInput) => Promise<FixedPromptTaskWalEv
 export type AbDecision =
   | 'non_inferior'
   | 'inferior'
-  | 'candidate_better'
-  | 'baseline_better'
   | 'inconclusive';
 
 export interface AbArmSummary {
@@ -77,6 +75,7 @@ export interface AbContextBudgetPolicySummary {
 export interface AbContextBudgetSummary {
   diagnosticAttempts: number;
   activatedAttempts: number;
+  activatedAttemptIds: string[];
   diagnosticEvents: number;
   prunedToolResults: number;
   archivePlaceholders: number;
@@ -131,6 +130,36 @@ export interface AbAttemptPairSummary {
   infraOrPlumbingDiscordantPairIds: string[];
 }
 
+export type AbArmLabel = 'A' | 'B';
+
+export interface AbAttemptRef {
+  arm: AbArmLabel;
+  attemptId: string;
+  taskId: string;
+  rep: number;
+  roundId: string;
+  runtimeEventsPath?: string;
+  traceEventsPath?: string;
+}
+
+export interface AbPairInvestigationRef {
+  pairId: string;
+  baseline?: AbAttemptRef;
+  candidate?: AbAttemptRef;
+}
+
+export interface AbInvestigationRefs {
+  activatedAttempts: AbAttemptRef[];
+  candidateLosses: AbPairInvestigationRef[];
+  budgetDiscordantPairs: AbPairInvestigationRef[];
+  infraOrPlumbingDiscordantPairs: AbPairInvestigationRef[];
+}
+
+export interface AbNonInferioritySummary {
+  confidenceLevel: number;
+  lowerBound: number | null;
+}
+
 export interface AbComparisonSummary {
   runId: string;
   roundId: string;
@@ -141,12 +170,14 @@ export interface AbComparisonSummary {
   budgetMs?: number;
   nonInferiorityMargin: number;
   passRateDelta: number | null;
+  nonInferiority: AbNonInferioritySummary;
   decision: AbDecision;
   reason: string;
   baseline: AbArmSummary;
   candidate: AbArmSummary;
   taskLevel: AbTaskLevelSummary;
   pairedAttempts: AbAttemptPairSummary;
+  investigationRefs: AbInvestigationRefs;
 }
 
 export interface AbRunManifestInput {

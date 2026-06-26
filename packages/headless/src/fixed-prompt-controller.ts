@@ -43,6 +43,7 @@ export interface HarborTaskRunInput {
   task: FixedPromptTask;
   config: Config;
   systemPrompt: string;
+  agentEnv?: Record<string, string>;
 }
 
 export type HarborTaskRunner = (input: HarborTaskRunInput) => Promise<HarborTaskRunOutput>;

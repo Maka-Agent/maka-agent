@@ -1,12 +1,15 @@
 import type {
+  AbAttemptRef,
   AbComparisonSummary,
   AbContextBudgetSummary,
   AbDecision,
+  AbPairInvestigationRef,
 } from './ab-types.js';
 
 export function renderAbComparisonMarkdown(summary: AbComparisonSummary): string {
   const contextBudgetLine = renderContextBudgetLine(summary);
   const contextBudgetPolicyLine = renderContextBudgetPolicyLine(summary);
+  const investigationRefLines = renderInvestigationRefLines(summary);
   const lines = [
     '# A/B Comparison',
     '',
@@ -17,6 +20,7 @@ export function renderAbComparisonMarkdown(summary: AbComparisonSummary): string
     `- Decision: ${decisionLabel(summary.decision)} (${summary.reason})`,
     `- Budget: ${summary.budgetMs !== undefined ? `${Math.round(summary.budgetMs / 1000)}s task budget` : 'not recorded'}`,
     `- Non-inferiority margin: ${rate(summary.nonInferiorityMargin)}`,
+    `- Non-inferiority lower bound: ${rate(summary.nonInferiority.lowerBound)} (${rate(summary.nonInferiority.confidenceLevel)} one-sided confidence)`,
     `- Evaluation pass rate: A=${summary.baseline.passed}/${summary.baseline.valid} = ${rate(summary.baseline.passRate)}, B=${summary.candidate.passed}/${summary.candidate.valid} = ${rate(summary.candidate.passRate)}`,
     `- Evaluation pass-rate delta: B-A=${rate(summary.passRateDelta)}`,
     `- Task-level delta: mean=${rate(summary.taskLevel.meanPassRateDelta)}, median=${rate(summary.taskLevel.medianPassRateDelta)}, wins=${summary.taskLevel.wins}, losses=${summary.taskLevel.losses}, ties=${summary.taskLevel.ties}, sign_test_p=${rate(summary.taskLevel.signTestPValue)}, missing=${summary.taskLevel.missingTaskIds.length}`,
@@ -38,7 +42,35 @@ export function renderAbComparisonMarkdown(summary: AbComparisonSummary): string
   if (losses.length > 0) {
     lines.push('## B Losses', '', ...losses.map((task) => `- ${task.taskId}: delta=${rate(task.passRateDelta)}`), '');
   }
+  if (investigationRefLines.length > 0) {
+    lines.push(...investigationRefLines);
+  }
   return `${lines.join('\n')}\n`;
+}
+
+function renderInvestigationRefLines(summary: AbComparisonSummary): string[] {
+  const lines: string[] = [];
+  if (summary.investigationRefs.activatedAttempts.length > 0) {
+    lines.push('## Activated Attempts', '', ...summary.investigationRefs.activatedAttempts.map((ref) => `- ${renderAttemptRef(ref)}`), '');
+  }
+  if (summary.investigationRefs.candidateLosses.length > 0) {
+    lines.push('## B Loss Refs', '', ...summary.investigationRefs.candidateLosses.map((ref) => `- ${renderPairRef(ref)}`), '');
+  }
+  if (summary.investigationRefs.budgetDiscordantPairs.length > 0) {
+    lines.push('## Budget Discordant Refs', '', ...summary.investigationRefs.budgetDiscordantPairs.map((ref) => `- ${renderPairRef(ref)}`), '');
+  }
+  if (summary.investigationRefs.infraOrPlumbingDiscordantPairs.length > 0) {
+    lines.push('## Infra Or Plumbing Discordant Refs', '', ...summary.investigationRefs.infraOrPlumbingDiscordantPairs.map((ref) => `- ${renderPairRef(ref)}`), '');
+  }
+  return lines;
+}
+
+function renderPairRef(ref: AbPairInvestigationRef): string {
+  return `${ref.pairId}: A=${ref.baseline ? renderAttemptRef(ref.baseline) : 'missing'}; B=${ref.candidate ? renderAttemptRef(ref.candidate) : 'missing'}`;
+}
+
+function renderAttemptRef(ref: AbAttemptRef): string {
+  return `${ref.arm} task=${ref.taskId} rep=${ref.rep} id=${ref.attemptId} round=${ref.roundId}${ref.runtimeEventsPath ? ` runtime=${ref.runtimeEventsPath}` : ''}${ref.traceEventsPath ? ` trace=${ref.traceEventsPath}` : ''}`;
 }
 
 function renderContextBudgetPolicyLine(summary: AbComparisonSummary): string | undefined {
@@ -54,10 +86,6 @@ function decisionLabel(decision: AbDecision): string {
       return 'B non-inferior';
     case 'inferior':
       return 'B inferior';
-    case 'candidate_better':
-      return 'B better';
-    case 'baseline_better':
-      return 'A better';
     case 'inconclusive':
       return 'inconclusive';
   }
@@ -79,6 +107,7 @@ function contextBudgetOrZero(summary: AbContextBudgetSummary | undefined): AbCon
   return summary ?? {
     diagnosticAttempts: 0,
     activatedAttempts: 0,
+    activatedAttemptIds: [],
     diagnosticEvents: 0,
     prunedToolResults: 0,
     archivePlaceholders: 0,

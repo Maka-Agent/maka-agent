@@ -127,14 +127,19 @@ export function createHarborTaskRunner(options: HarborTaskRunnerOptions): Harbor
     await rm(jobsDir, { recursive: true, force: true });
     await mkdir(jobsDir, { recursive: true });
 
-    assertNoProviderSecretsInAgentEnv(options.agentEnv);
-    const hostProviderEnv = hostSideProviderEnv(options);
-    const configPath = join(jobsDir, 'job-config.json');
-    const config = buildHarborJobConfig(input, {
+    const runnerOptions = {
       ...options,
+      agentEnv: mergeAgentEnv(options.agentEnv, input.agentEnv),
+    };
+    assertNoProviderSecretsInAgentEnv(runnerOptions.agentEnv);
+    const hostProviderEnv = hostSideProviderEnv(runnerOptions);
+    const configPath = join(jobsDir, 'job-config.json');
+    const { agentEnv: _attemptAgentEnv, ...inputWithoutAttemptEnv } = input;
+    const config = buildHarborJobConfig(inputWithoutAttemptEnv, {
+      ...runnerOptions,
       jobsDir,
       jobName,
-      ...(hostProviderEnv ? { agentEnv: taskAgentEnvWithoutProviderSecrets(options) } : {}),
+      ...(hostProviderEnv ? { agentEnv: taskAgentEnvWithoutProviderSecrets(runnerOptions) } : {}),
     });
     await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
 
@@ -204,11 +209,20 @@ export function createHarborTaskRunner(options: HarborTaskRunnerOptions): Harbor
   };
 }
 
+function mergeAgentEnv(
+  base: Record<string, string> | undefined,
+  attempt: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!base && !attempt) return undefined;
+  return { ...(base ?? {}), ...(attempt ?? {}) };
+}
+
 export function buildHarborJobConfig(
   input: HarborTaskRunInput,
   options: HarborTaskRunnerOptions & { jobsDir: string; jobName: string },
 ): Record<string, unknown> {
-  assertNoProviderSecretsInAgentEnv(options.agentEnv);
+  const attemptAgentEnv = mergeAgentEnv(options.agentEnv, input.agentEnv);
+  assertNoProviderSecretsInAgentEnv(attemptAgentEnv);
   const provider = options.provider ?? 'deepseek';
   const model = modelIdForProvider(options.model, provider);
   const mounts: Array<Record<string, unknown>> = [
@@ -237,7 +251,7 @@ export function buildHarborJobConfig(
     }
   }
 
-  Object.assign(agentEnv, options.agentEnv ?? {});
+  Object.assign(agentEnv, attemptAgentEnv ?? {});
   const cellTimeoutSec = positiveIntEnv(agentEnv.MAKA_CELL_TIMEOUT_SEC);
 
   return {

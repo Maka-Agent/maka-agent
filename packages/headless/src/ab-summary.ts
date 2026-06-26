@@ -2,11 +2,16 @@ import type { FixedPromptTaskWalEvent } from './fixed-prompt-controller.js';
 import { assertRatio } from './numeric-guards.js';
 import type {
   AbArmSummary,
+  AbArmLabel,
+  AbAttemptRef,
   AbAttemptPairSummary,
   AbComparisonSummary,
   AbContextBudgetSummary,
   AbContextBudgetPolicySummary,
   AbDecision,
+  AbInvestigationRefs,
+  AbPairInvestigationRef,
+  AbNonInferioritySummary,
   AbTaskArmSummary,
   AbTaskComparison,
   AbTaskLevelSummary,
@@ -14,6 +19,8 @@ import type {
 } from './ab-types.js';
 
 const DEFAULT_NON_INFERIORITY_MARGIN = 0.10;
+const NON_INFERIORITY_CONFIDENCE_LEVEL = 0.95;
+const ONE_SIDED_95_Z = 1.6448536269514722;
 
 export function summarizeAbComparison(input: SummarizeAbComparisonInput): AbComparisonSummary {
   assertSameRunCount(input.baselineRuns, input.candidateRuns);
@@ -22,14 +29,16 @@ export function summarizeAbComparison(input: SummarizeAbComparisonInput): AbComp
     : DEFAULT_NON_INFERIORITY_MARGIN;
   const reps = input.baselineRuns.length;
   const taskIds = [...input.evaluationTaskIds];
-  const baseline = summarizeArm(input.baselineRuns, taskIds, reps);
-  const candidate = summarizeArm(input.candidateRuns, taskIds, reps);
+  const baseline = summarizeArm(input.baselineRuns, taskIds, reps, 'A');
+  const candidate = summarizeArm(input.candidateRuns, taskIds, reps, 'B');
   const taskLevel = summarizeTasks(input.baselineRuns, input.candidateRuns, taskIds, reps);
   const pairedAttempts = summarizeAttemptPairs(input.baselineRuns, input.candidateRuns, taskIds);
+  const investigationRefs = summarizeInvestigationRefs(input.baselineRuns, input.candidateRuns, taskIds);
   const passRateDelta = baseline.passRate !== null && candidate.passRate !== null
     ? roundRateDelta(candidate.passRate - baseline.passRate)
     : null;
-  const { decision, reason } = decide(baseline, candidate, pairedAttempts, passRateDelta, nonInferiorityMargin);
+  const nonInferiority = summarizeNonInferiority(baseline, candidate, passRateDelta);
+  const { decision, reason } = decide(baseline, candidate, pairedAttempts, passRateDelta, nonInferiority, nonInferiorityMargin);
 
   return {
     runId: input.runId,
@@ -41,29 +50,39 @@ export function summarizeAbComparison(input: SummarizeAbComparisonInput): AbComp
     ...(input.budgetMs !== undefined ? { budgetMs: input.budgetMs } : {}),
     nonInferiorityMargin,
     passRateDelta,
+    nonInferiority,
     decision,
     reason,
     baseline,
     candidate,
     taskLevel,
     pairedAttempts,
+    investigationRefs,
   };
+}
+
+interface ObservedAttempt {
+  arm: AbArmLabel;
+  rep: number;
+  taskId: string;
+  event: FixedPromptTaskWalEvent;
 }
 
 function summarizeArm(
   runs: readonly (readonly FixedPromptTaskWalEvent[])[],
   taskIds: readonly string[],
   reps: number,
+  arm: AbArmLabel,
 ): AbArmSummary {
   const attempts = taskIds.length * reps;
-  const events = taskIds.flatMap((taskId) => runs.map((run) => run.find((event) => event.taskId === taskId)));
-  const observed = events.filter((event): event is FixedPromptTaskWalEvent => event !== undefined);
+  const observedAttempts = observedArmAttempts(runs, taskIds, arm);
+  const observed = observedAttempts.map((attempt) => attempt.event);
   const valid = observed.filter(isValidBudgetedOutcome);
   const passed = valid.filter((event) => event.passed).length;
   const durations = valid
     .filter((event) => event.type !== 'task_budget_exhausted')
     .map((event) => event.durationMs);
-  const contextBudget = summarizeContextBudget(observed);
+  const contextBudget = summarizeContextBudget(observedAttempts);
   const contextBudgetPolicy = summarizeContextBudgetPolicy(observed);
   return {
     attempts,
@@ -84,6 +103,21 @@ function summarizeArm(
   };
 }
 
+function observedArmAttempts(
+  runs: readonly (readonly FixedPromptTaskWalEvent[])[],
+  taskIds: readonly string[],
+  arm: AbArmLabel,
+): ObservedAttempt[] {
+  const attempts: ObservedAttempt[] = [];
+  for (const taskId of taskIds) {
+    for (let rep = 0; rep < runs.length; rep += 1) {
+      const event = runs[rep]?.find((candidate) => candidate.taskId === taskId);
+      if (event) attempts.push({ arm, rep, taskId, event });
+    }
+  }
+  return attempts;
+}
+
 function summarizeContextBudgetPolicy(events: readonly FixedPromptTaskWalEvent[]): AbContextBudgetPolicySummary | undefined {
   const snapshots = events
     .map((event) => ('contextBudgetPolicy' in event ? event.contextBudgetPolicy : undefined))
@@ -100,14 +134,18 @@ function summarizeContextBudgetPolicy(events: readonly FixedPromptTaskWalEvent[]
   };
 }
 
-function summarizeContextBudget(events: readonly FixedPromptTaskWalEvent[]): AbContextBudgetSummary | undefined {
-  const summaries = events
-    .map((event) => ('contextBudgetSummary' in event ? event.contextBudgetSummary : undefined))
+function summarizeContextBudget(attempts: readonly ObservedAttempt[]): AbContextBudgetSummary | undefined {
+  const summaries = attempts
+    .map((attempt) => ('contextBudgetSummary' in attempt.event ? attempt.event.contextBudgetSummary : undefined))
     .filter((summary): summary is NonNullable<typeof summary> => summary !== undefined);
   if (summaries.length === 0) return undefined;
+  const activatedAttemptIds = attempts
+    .filter((attempt) => ('contextBudgetSummary' in attempt.event && (attempt.event.contextBudgetSummary?.prunedToolResults ?? 0) > 0))
+    .map((attempt) => attempt.event.id);
   return {
     diagnosticAttempts: summaries.length,
     activatedAttempts: summaries.filter((summary) => summary.prunedToolResults > 0).length,
+    activatedAttemptIds,
     diagnosticEvents: sum(summaries.map((summary) => summary.diagnosticEvents)),
     prunedToolResults: sum(summaries.map((summary) => summary.prunedToolResults)),
     archivePlaceholders: sum(summaries.map((summary) => summary.archivePlaceholders)),
@@ -116,6 +154,78 @@ function summarizeContextBudget(events: readonly FixedPromptTaskWalEvent[]): AbC
     retrievedArchiveEstimatedTokens: sum(summaries.map((summary) => summary.retrievedArchiveEstimatedTokens)),
     archiveRetrievalSkipped: sum(summaries.map((summary) => summary.archiveRetrievalSkipped)),
     archiveRetrievalFailures: sum(summaries.map((summary) => summary.archiveRetrievalFailures)),
+  };
+}
+
+function summarizeInvestigationRefs(
+  baselineRuns: readonly (readonly FixedPromptTaskWalEvent[])[],
+  candidateRuns: readonly (readonly FixedPromptTaskWalEvent[])[],
+  taskIds: readonly string[],
+): AbInvestigationRefs {
+  const baselineByPair = attemptMap(observedArmAttempts(baselineRuns, taskIds, 'A'));
+  const candidateByPair = attemptMap(observedArmAttempts(candidateRuns, taskIds, 'B'));
+  const candidateLosses: AbPairInvestigationRef[] = [];
+  const budgetDiscordantPairs: AbPairInvestigationRef[] = [];
+  const infraOrPlumbingDiscordantPairs: AbPairInvestigationRef[] = [];
+  const activatedAttempts = [...baselineByPair.values(), ...candidateByPair.values()]
+    .filter((attempt) => ('contextBudgetSummary' in attempt.event && (attempt.event.contextBudgetSummary?.prunedToolResults ?? 0) > 0))
+    .map(attemptRef);
+
+  for (let rep = 0; rep < baselineRuns.length; rep += 1) {
+    for (const taskId of taskIds) {
+      const pairId = `${taskId}#r${rep}`;
+      const baseline = baselineByPair.get(pairId);
+      const candidate = candidateByPair.get(pairId);
+      const baselineEvent = baseline?.event;
+      const candidateEvent = candidate?.event;
+      if (baselineEvent && candidateEvent) {
+        if (isValidBudgetedOutcome(baselineEvent) && isValidBudgetedOutcome(candidateEvent) && baselineEvent.passed && !candidateEvent.passed) {
+          candidateLosses.push(pairRef(pairId, baseline, candidate));
+        }
+        if (isBudgetExhaustedOutcome(baselineEvent) !== isBudgetExhaustedOutcome(candidateEvent)) {
+          budgetDiscordantPairs.push(pairRef(pairId, baseline, candidate));
+        }
+        if (isInfraOrPlumbingOutcome(baselineEvent) !== isInfraOrPlumbingOutcome(candidateEvent)) {
+          infraOrPlumbingDiscordantPairs.push(pairRef(pairId, baseline, candidate));
+        }
+      }
+    }
+  }
+
+  return {
+    activatedAttempts,
+    candidateLosses,
+    budgetDiscordantPairs,
+    infraOrPlumbingDiscordantPairs,
+  };
+}
+
+function attemptMap(attempts: readonly ObservedAttempt[]): Map<string, ObservedAttempt> {
+  return new Map(attempts.map((attempt) => [`${attempt.taskId}#r${attempt.rep}`, attempt]));
+}
+
+function pairRef(
+  pairId: string,
+  baseline: ObservedAttempt | undefined,
+  candidate: ObservedAttempt | undefined,
+): AbPairInvestigationRef {
+  return {
+    pairId,
+    ...(baseline ? { baseline: attemptRef(baseline) } : {}),
+    ...(candidate ? { candidate: attemptRef(candidate) } : {}),
+  };
+}
+
+function attemptRef(attempt: ObservedAttempt): AbAttemptRef {
+  const event = attempt.event;
+  return {
+    arm: attempt.arm,
+    attemptId: event.id,
+    taskId: attempt.taskId,
+    rep: attempt.rep,
+    roundId: event.roundId,
+    ...('runtimeEventsPath' in event ? { runtimeEventsPath: event.runtimeEventsPath } : {}),
+    ...('traceEventsPath' in event && event.traceEventsPath ? { traceEventsPath: event.traceEventsPath } : {}),
   };
 }
 
@@ -247,6 +357,7 @@ function decide(
   candidate: AbArmSummary,
   pairedAttempts: AbAttemptPairSummary,
   passRateDelta: number | null,
+  nonInferiority: AbNonInferioritySummary,
   nonInferiorityMargin: number,
 ): { decision: AbDecision; reason: string } {
   const coverage = Math.min(baseline.coverageRate, candidate.coverageRate);
@@ -258,10 +369,29 @@ function decide(
     return { decision: 'inconclusive', reason: 'asymmetric_infra_or_plumbing' };
   }
   if (passRateDelta === null) return { decision: 'inconclusive', reason: 'missing_pass_rate_delta' };
-  if (passRateDelta >= -nonInferiorityMargin) {
-    return { decision: 'non_inferior', reason: 'pass_rate_delta_within_non_inferiority_margin' };
+  if (passRateDelta < -nonInferiorityMargin) return { decision: 'inferior', reason: 'pass_rate_delta_below_non_inferiority_margin' };
+  if (nonInferiority.lowerBound !== null && nonInferiority.lowerBound >= -nonInferiorityMargin) {
+    return { decision: 'non_inferior', reason: 'non_inferiority_lower_bound_within_margin' };
   }
-  return { decision: 'inferior', reason: 'pass_rate_delta_below_non_inferiority_margin' };
+  return { decision: 'inconclusive', reason: 'non_inferiority_confidence_interval_crosses_margin' };
+}
+
+function summarizeNonInferiority(
+  baseline: AbArmSummary,
+  candidate: AbArmSummary,
+  passRateDelta: number | null,
+): AbNonInferioritySummary {
+  if (passRateDelta === null || baseline.passRate === null || candidate.passRate === null || baseline.valid === 0 || candidate.valid === 0) {
+    return { confidenceLevel: NON_INFERIORITY_CONFIDENCE_LEVEL, lowerBound: null };
+  }
+  const standardError = Math.sqrt(
+    (baseline.passRate * (1 - baseline.passRate)) / baseline.valid
+    + (candidate.passRate * (1 - candidate.passRate)) / candidate.valid,
+  );
+  return {
+    confidenceLevel: NON_INFERIORITY_CONFIDENCE_LEVEL,
+    lowerBound: roundRateDelta(clampRateDelta(passRateDelta - ONE_SIDED_95_Z * standardError)),
+  };
 }
 
 function isValidBudgetedOutcome(
@@ -310,6 +440,10 @@ function sum(values: readonly number[]): number {
 
 function roundRateDelta(value: number): number {
   return Math.round(value * 1_000_000_000_000) / 1_000_000_000_000;
+}
+
+function clampRateDelta(value: number): number {
+  return Math.min(1, Math.max(-1, value));
 }
 
 function canonicalJson(value: unknown): string {
