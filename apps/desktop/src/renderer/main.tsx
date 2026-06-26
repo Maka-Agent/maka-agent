@@ -99,6 +99,7 @@ import {
   recordSessionEventStreamEvent,
 } from './session-event-health';
 import { safeLocalStorageGet, safeLocalStorageSet } from './browser-storage';
+import { applySessionReadOverrides, rememberSessionReadBoundary, type SessionReadBoundaries } from './session-read-state';
 import './styles.css';
 
 const NO_REAL_CONNECTION_CODE = 'NO_REAL_CONNECTION';
@@ -255,6 +256,7 @@ function AppShell() {
   const toastApi = useToast();
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const sessionsRef = useRef<SessionSummary[]>([]);
+  const sessionReadBoundariesRef = useRef<SessionReadBoundaries>({});
   const [activeId, setActiveIdState] = useState<string | undefined>();
   // P3: session ids with a live embedded-browser view. The right-side
   // BrowserPanel mounts only for these, so ordinary chats reserve no space.
@@ -1146,7 +1148,7 @@ function AppShell() {
     void window.maka.sessions.readMessages(activeId)
       .then((next) => {
         if (!disposed && activeIdRef.current === activeId) {
-          markSessionReadLocally(activeId);
+          markSessionReadLocally(activeId, next);
           setMessages(next);
         }
       })
@@ -1244,7 +1246,8 @@ function AppShell() {
 
   async function refreshSessions(): Promise<SessionSummary[]> {
     try {
-      const next = await window.maka.sessions.list();
+      const listed = await window.maka.sessions.list();
+      const next = applySessionReadOverrides(listed, sessionReadBoundariesRef.current);
       sessionsRef.current = next;
       setSessions(next);
       return next;
@@ -1285,7 +1288,13 @@ function AppShell() {
     });
   }
 
-  function markSessionReadLocally(sessionId: string): void {
+  function markSessionReadLocally(sessionId: string, readMessages: readonly StoredMessage[]): void {
+    rememberSessionReadBoundary(
+      sessionReadBoundariesRef.current,
+      sessionId,
+      readMessages,
+      sessionsRef.current.find((session) => session.id === sessionId)?.lastMessageAt,
+    );
     setSessions((current) => {
       let changed = false;
       const next = current.map((session) => {
@@ -2135,7 +2144,7 @@ function AppShell() {
     try {
       const next = await window.maka.sessions.readMessages(sessionId);
       if (activeIdRef.current === sessionId) {
-        markSessionReadLocally(sessionId);
+        markSessionReadLocally(sessionId, next);
         setMessages(next);
         setMessageLoadErrorBySession((current) => {
           if (!current[sessionId]) return current;
@@ -2176,7 +2185,7 @@ function AppShell() {
         if (activeIdRef.current !== sessionId) return;
         const hasSentUserTurn = next.some((message) => message.type === 'user' && message.turnId === turnId);
         if (hasSentUserTurn) {
-          markSessionReadLocally(sessionId);
+          markSessionReadLocally(sessionId, next);
           setMessages(next);
           return;
         }

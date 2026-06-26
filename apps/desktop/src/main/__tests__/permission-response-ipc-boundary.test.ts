@@ -265,20 +265,10 @@ describe('permission response IPC boundary', () => {
     const collectBotReply = main.match(/async function collectBotReply\([\s\S]*?\n\}/)?.[0] ?? '';
 
     assert.match(streamEvents, /for await \(const event of iterator\) \{[\s\S]*safeSendToRenderer\(`sessions:event:\$\{sessionId\}`, event\);/);
-    assert.doesNotMatch(
-      streamEvents,
-      /isFinalSessionEvent\(event\)[\s\S]*emitSessionsChanged\('message-appended', sessionId\)/,
-      'final message refresh must not race ahead of AgentRun.finalize() header writes',
-    );
     assert.match(
       streamEvents,
       /for await \(const event of iterator\) \{[\s\S]*\n    \}\n    if \(!finalAppendBroadcasted\) \{\n      emitSessionsChanged\('message-appended', sessionId\);\n      finalAppendBroadcasted = true;\n    \}/,
       'post-drain refresh lets active renderer reads clear the hasUnread=true written by finalize()',
-    );
-    assert.doesNotMatch(
-      collectBotReply,
-      /isFinalSessionEvent\(event\)[\s\S]*emitSessionsChanged\('message-appended', sessionId\)/,
-      'bot reply final refresh must not race ahead of AgentRun.finalize() header writes',
     );
     assert.doesNotMatch(
       collectBotReply,

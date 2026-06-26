@@ -2625,7 +2625,7 @@ function registerIpc(): void {
   ipcMain.handle('sessions:readMessages', async (_event, sessionId: string) => {
     if (visualSmokeFixture) return store.readMessages(sessionId);
     const messages = await runtime.getMessages(sessionId);
-    await runtime.markSessionRead(sessionId).catch(() => {});
+    await runtime.markSessionRead(sessionId);
     return messages;
   });
   ipcMain.handle('sessions:listTurns', (_event, sessionId: string) => runtime.listTurns(sessionId));
@@ -4047,10 +4047,6 @@ async function collectBotReply(
     return `Maka 处理失败：${errorMessage(error)}`;
   }
   return earlyReply ?? latestText;
-}
-
-function isFinalSessionEvent(event: SessionEvent): boolean {
-  return event.type === 'text_complete' || event.type === 'complete' || event.type === 'abort' || event.type === 'error';
 }
 
 function isStatusChangingSessionEvent(event: SessionEvent): boolean {

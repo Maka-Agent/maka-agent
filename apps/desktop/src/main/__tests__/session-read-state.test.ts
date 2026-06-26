@@ -1,0 +1,73 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import type { SessionSummary, StoredMessage } from '@maka/core';
+import {
+  applySessionReadOverrides,
+  rememberSessionReadBoundary,
+  type SessionReadBoundaries,
+} from '../../renderer/session-read-state.js';
+
+describe('renderer session read state', () => {
+  it('keeps a late stale list response from restoring unread on a locally read session', async () => {
+    const readBoundaries: SessionReadBoundaries = {};
+    const staleList = deferred<SessionSummary[]>();
+
+    const listAfterLocalRead = staleList.promise.then((sessions) => applySessionReadOverrides(sessions, readBoundaries));
+    rememberSessionReadBoundary(readBoundaries, 's1', [messageAt(200)]);
+    staleList.resolve([session({ id: 's1', hasUnread: true, lastMessageAt: 200 })]);
+
+    assert.equal((await listAfterLocalRead)[0]?.hasUnread, false);
+  });
+
+  it('allows a newer message to restore unread after the local read boundary', () => {
+    const readBoundaries: SessionReadBoundaries = {};
+    rememberSessionReadBoundary(readBoundaries, 's1', [messageAt(200)]);
+
+    const [next] = applySessionReadOverrides([
+      session({ id: 's1', hasUnread: true, lastMessageAt: 250 }),
+    ], readBoundaries);
+
+    assert.equal(next?.hasUnread, true);
+  });
+});
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
+}
+
+function session(overrides: Partial<SessionSummary> & { id: string }): SessionSummary {
+  return {
+    id: overrides.id,
+    name: overrides.name ?? 'Session',
+    isFlagged: overrides.isFlagged ?? false,
+    isArchived: overrides.isArchived ?? false,
+    labels: overrides.labels ?? [],
+    hasUnread: overrides.hasUnread ?? false,
+    lastMessageAt: overrides.lastMessageAt,
+    lastMessagePreview: overrides.lastMessagePreview,
+    status: overrides.status ?? 'active',
+    blockedReason: overrides.blockedReason,
+    statusUpdatedAt: overrides.statusUpdatedAt,
+    parentSessionId: overrides.parentSessionId,
+    branchOfTurnId: overrides.branchOfTurnId,
+    backend: overrides.backend ?? 'ai-sdk',
+    llmConnectionSlug: overrides.llmConnectionSlug ?? 'default',
+    model: overrides.model ?? 'default',
+    permissionMode: overrides.permissionMode ?? 'ask',
+  };
+}
+
+function messageAt(ts: number): StoredMessage {
+  return {
+    type: 'assistant',
+    id: `m-${ts}`,
+    turnId: `t-${ts}`,
+    ts,
+    text: 'ok',
+    modelId: 'test-model',
+  };
+}

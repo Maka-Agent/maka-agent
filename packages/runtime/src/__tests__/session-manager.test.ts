@@ -365,6 +365,21 @@ describe('SessionManager permission mode updates', () => {
     expect((await store.readHeader(session.id)).hasUnread).toBe(false);
   });
 
+  test('markSessionRead rejects when the unread header write fails', async () => {
+    const store = new MemorySessionStore();
+    const backends = new BackendRegistry();
+    backends.register('fake', (ctx) => new TestBackend(ctx));
+    const manager = new SessionManager({ store, backends, newId: nextId(), now: nextNow(6_632) });
+    const session = await manager.createSession(makeInput());
+    await store.updateHeader(session.id, { hasUnread: true });
+    store.failUpdateHeaderFor.add(session.id);
+
+    await expectRejects(manager.markSessionRead(session.id), /Cannot update header/);
+
+    store.failUpdateHeaderFor.delete(session.id);
+    expect((await store.readHeader(session.id)).hasUnread).toBe(true);
+  });
+
   test('runtime event ledger write failure does not fail sendMessage', async () => {
     const store = new MemorySessionStore();
     const runStore = new MemoryAgentRunStore();
@@ -3016,6 +3031,7 @@ class MemorySessionStore implements SessionStore {
   readonly failReadMessagesFor = new Set<string>();
   readonly failNextReadMessagesFor = new Map<string, number>();
   readonly failListTurnsFor = new Set<string>();
+  readonly failUpdateHeaderFor = new Set<string>();
   disposeCount = 0;
 
   async create(input: CreateSessionInput): Promise<SessionHeader> {
@@ -3082,6 +3098,7 @@ class MemorySessionStore implements SessionStore {
   }
 
   async updateHeader(sessionId: string, patch: Partial<SessionHeader>): Promise<SessionHeader> {
+    if (this.failUpdateHeaderFor.has(sessionId)) throw new Error(`Cannot update header for ${sessionId}`);
     const current = await this.readHeader(sessionId);
     const next = { ...current, ...patch };
     this.headers.set(sessionId, next);
