@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { describe, test } from 'node:test';
-import { readFixedPromptWal, type FixedPromptTaskWalEvent, type PromptCandidateRationale } from '../fixed-prompt-controller.js';
-import { appendRsiControllerAttribution, buildRsiControllerAttribution, projectRsiPromptAttribution } from '../rsi-controller-attribution.js';
+import { type FixedPromptTaskWalEvent, type PromptCandidateRationale } from '../fixed-prompt-controller.js';
+import { buildRsiControllerAttribution, projectRsiPromptAttribution } from '../rsi-controller-attribution.js';
 import type { RsiRoundAnalysis } from '../rsi-round-analysis.js';
 import type { PromptAcceptanceResult } from '../prompt-acceptance-policy.js';
 import { tokenSummary } from './helpers/cell-output-fixtures.js';
@@ -75,56 +72,6 @@ describe('RSI controller attribution', () => {
     assert.equal(JSON.stringify(attribution).includes('held-out-secret'), false);
   });
 
-  test('persists controller attribution as a WAL event', async () => {
-    await withDir(async (dir) => {
-      const resultsJsonlPath = join(dir, 'results.jsonl');
-      const attribution = buildRsiControllerAttribution({
-        runId: 'run-1',
-        roundId: 'round-0',
-        candidateCommitSha: 'commit-1',
-        candidateRationaleHash: 'sha256:rationale',
-        candidateRationale: {
-          failurePattern: 'other',
-          evidenceRefs: [],
-          hypothesis: 'unknown held-in behavior changed',
-          targetedFix: 'make prompt wording simpler',
-          predictedFixes: [],
-          riskTasks: [],
-        },
-        analysis: {
-          heldInTaskSetHash: 'sha256:held-in',
-          transitionVsLastKept: [],
-          transitionVsPreviousCandidate: [],
-          coverageRegressionTaskIds: [],
-          errorClassDistribution: [],
-          toolFailureClusters: [],
-          signals: [],
-        },
-        heldInTaskIds: ['task-a'],
-        lastKeptEvents: [completed({ taskId: 'task-a', passed: true })],
-        candidateEvents: [completed({ taskId: 'task-a', passed: true })],
-        decision: acceptanceResult({ decision: 'keep', reason: 'held_in_improved' }),
-      });
-
-      const event = await appendRsiControllerAttribution({
-        resultsJsonlPath,
-        id: 'attr-event-1',
-        ts: 2,
-        attribution,
-      });
-      const events = await readFixedPromptWal(resultsJsonlPath);
-
-      assert.equal(event.type, 'rsi_controller_attribution');
-      assert.deepEqual(events, [event]);
-      assert.equal(events[0]?.type, 'rsi_controller_attribution');
-      if (events[0]?.type === 'rsi_controller_attribution') {
-        assert.equal(events[0].candidateCommitSha, 'commit-1');
-        assert.equal(events[0].heldInTaskSetHash, 'sha256:held-in');
-        assert.equal(events[0].rootCauseSignalMatch, 'unknown');
-      }
-    });
-  });
-
   test('projects prompt attribution without controller decision reasons', () => {
     const attribution = buildRsiControllerAttribution({
       runId: 'run-1',
@@ -191,6 +138,64 @@ describe('RSI controller attribution', () => {
     });
 
     assert.equal(attribution.rootCauseSignalMatch, 'unknown');
+  });
+
+  test('matches root cause only against cited analysis signals', () => {
+    const analysis: RsiRoundAnalysis = {
+      heldInTaskSetHash: 'sha256:held-in',
+      transitionVsLastKept: [],
+      transitionVsPreviousCandidate: [],
+      coverageRegressionTaskIds: ['task-a'],
+      errorClassDistribution: [],
+      toolFailureClusters: [],
+      signals: [
+        { id: 'rsi-sig:coverage', kind: 'coverage_regression', taskIds: ['task-a'] },
+        { id: 'rsi-sig:tool', kind: 'tool_failure_cluster', taskIds: ['task-b'], cluster: { name: 'shell', count: 1, taskIds: ['task-b'] } },
+      ],
+    };
+
+    const matched = buildRsiControllerAttribution({
+      runId: 'run-1',
+      roundId: 'round-0',
+      candidateCommitSha: 'commit-1',
+      candidateRationaleHash: 'sha256:rationale',
+      candidateRationale: {
+        failurePattern: 'coverage_regression',
+        evidenceRefs: ['rsi-sig:coverage'],
+        hypothesis: 'coverage fell after the previous prompt change',
+        targetedFix: 'restore the missing artifact instruction',
+        predictedFixes: [],
+        riskTasks: [],
+      },
+      analysis,
+      heldInTaskIds: ['task-a'],
+      lastKeptEvents: [completed({ taskId: 'task-a', passed: true })],
+      candidateEvents: [completed({ taskId: 'task-a', passed: false, scored: false })],
+      decision: acceptanceResult({ decision: 'discard', reason: 'coverage_regressed' }),
+    });
+
+    const contradicted = buildRsiControllerAttribution({
+      runId: 'run-1',
+      roundId: 'round-0',
+      candidateCommitSha: 'commit-1',
+      candidateRationaleHash: 'sha256:rationale',
+      candidateRationale: {
+        failurePattern: 'coverage_regression',
+        evidenceRefs: ['rsi-sig:tool'],
+        hypothesis: 'coverage fell after the previous prompt change',
+        targetedFix: 'restore the missing artifact instruction',
+        predictedFixes: [],
+        riskTasks: [],
+      },
+      analysis,
+      heldInTaskIds: ['task-a'],
+      lastKeptEvents: [completed({ taskId: 'task-a', passed: true })],
+      candidateEvents: [completed({ taskId: 'task-a', passed: false, scored: false })],
+      decision: acceptanceResult({ decision: 'discard', reason: 'coverage_regressed' }),
+    });
+
+    assert.equal(matched.rootCauseSignalMatch, 'matched');
+    assert.equal(contradicted.rootCauseSignalMatch, 'contradicted');
   });
 });
 
@@ -263,13 +268,4 @@ function partitionSummary(): PromptAcceptanceResult['metrics']['candidate']['hel
     plumbingFailedTaskIds: [],
     missingTaskIds: [],
   };
-}
-
-async function withDir(fn: (dir: string) => Promise<void>): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), 'maka-rsi-attribution-'));
-  try {
-    await fn(dir);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
 }

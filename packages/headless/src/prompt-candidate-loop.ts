@@ -391,7 +391,7 @@ export function renderMetaAgentPrompt(input: MetaAgentPromptInput): string {
   return [
     'You are improving one system prompt for benchmark tasks.',
     'Return JSON only: {"systemPrompt":"...","summary":"...","candidateRationale":{"failurePattern":"coverage_regression|tool_failed|max_tokens|runtime_error|verification_failed|other","evidenceRefs":["rsi-sig:id"],"hypothesis":"short plain text","targetedFix":"short plain text","predictedFixes":["held-in-task-id"],"riskTasks":["held-in-task-id"]}}.',
-    'candidateRationale.evidenceRefs may only reference RSI R2 Held-In Analysis signal ids from the prompt. candidateRationale.predictedFixes and riskTasks may only reference held-in task ids from the prompt.',
+    'candidateRationale.evidenceRefs may only reference RSI R2 Held-In Analysis signal ids from the prompt; when signals exist and failurePattern is not "other", cite at least one signal. candidateRationale.predictedFixes and riskTasks may only reference held-in task ids from the prompt.',
     'Do not include held-out tasks, verifier internals, expected outputs, raw traces, file paths, code fences, or multiline text in candidateRationale.',
     '',
     '# Program',
@@ -470,7 +470,7 @@ function validateCandidateRationale(
   rsiAnalysis: RsiRoundAnalysis | undefined,
 ): CandidateRationale {
   const candidateRationale = parseCandidateRationaleShape(value);
-  validateEvidenceRefs(candidateRationale.evidenceRefs, rsiAnalysis);
+  validateEvidenceRefs(candidateRationale, rsiAnalysis);
   validateHeldInTaskIds(candidateRationale.predictedFixes, 'predictedFixes', heldInTaskIds);
   validateHeldInTaskIds(candidateRationale.riskTasks, 'riskTasks', heldInTaskIds);
   return candidateRationale;
@@ -502,12 +502,16 @@ function parseCandidateRationaleShape(value: unknown): CandidateRationale {
   };
 }
 
-function validateEvidenceRefs(evidenceRefs: readonly string[], rsiAnalysis: RsiRoundAnalysis | undefined): void {
+function validateEvidenceRefs(candidateRationale: CandidateRationale, rsiAnalysis: RsiRoundAnalysis | undefined): void {
+  const { evidenceRefs } = candidateRationale;
   if (!rsiAnalysis) {
     if (evidenceRefs.length > 0) {
       throw new Error('candidateRationale.evidenceRefs require current RSI analysis signals');
     }
     return;
+  }
+  if (rsiAnalysis.signals.length > 0 && candidateRationale.failurePattern !== 'other' && evidenceRefs.length === 0) {
+    throw new Error('candidateRationale.evidenceRefs must cite at least one current analysis signal');
   }
   const known = new Set(rsiAnalysis.signals.map((signal) => signal.id));
   for (const ref of evidenceRefs) {

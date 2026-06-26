@@ -321,6 +321,68 @@ describe('prompt candidate loop', () => {
     });
   });
 
+  test('requires evidence refs when current RSI analysis has signals for a typed failure pattern', async () => {
+    await withDir(async (dir) => {
+      const programPath = join(dir, 'program.md');
+      const systemPromptPath = join(dir, 'system_prompt.md');
+      const resultsTsvPath = join(dir, 'results.tsv');
+      await writeFile(programPath, 'Improve the prompt conservatively.\n', 'utf8');
+      await writeFile(systemPromptPath, 'original prompt\n', 'utf8');
+      await writeFile(resultsTsvPath, 'task_id\tpassed\ntask-a\tfalse\n', 'utf8');
+
+      const baseInput = {
+        runId: 'run-1',
+        roundId: 'round-1',
+        agentCwdPath: await testAgentCwd(dir),
+        programPath,
+        systemPromptPath,
+        resultsTsvPath,
+        resultsJsonlPath: join(dir, 'results.jsonl'),
+        heldInTaskIds: ['task-a'],
+        heldInDigests: [{ taskId: 'task-a', summary: 'failed held-in task' }],
+        git: gitNoop(dir),
+        now: () => 100,
+        newId: idFactory(),
+      };
+
+      await assert.rejects(
+        runPromptCandidateRound({
+          ...baseInput,
+          rsiAnalysis: {
+            heldInTaskSetHash: 'sha256:held-in',
+            transitionVsLastKept: [],
+            transitionVsPreviousCandidate: [],
+            coverageRegressionTaskIds: [],
+            errorClassDistribution: [],
+            toolFailureClusters: [],
+            signals: [{ id: 'rsi-sig:known', kind: 'coverage_regression', taskIds: ['task-a'] }],
+          },
+          metaAgent: async () => candidatePromptResult({
+            candidateRationale: validCandidateRationale({ evidenceRefs: [] }),
+          }),
+        }),
+        /candidateRationale.evidenceRefs must cite at least one current analysis signal/,
+      );
+
+      await runPromptCandidateRound({
+        ...baseInput,
+        resultsJsonlPath: join(dir, 'allowed-empty-refs.jsonl'),
+        rsiAnalysis: {
+          heldInTaskSetHash: 'sha256:held-in',
+          transitionVsLastKept: [],
+          transitionVsPreviousCandidate: [],
+          coverageRegressionTaskIds: [],
+          errorClassDistribution: [],
+          toolFailureClusters: [],
+          signals: [],
+        },
+        metaAgent: async () => candidatePromptResult({
+          candidateRationale: validCandidateRationale({ evidenceRefs: [] }),
+        }),
+      });
+    });
+  });
+
   test('rejects unsafe or oversized candidateRationale text before writing', async () => {
     await assertRejectsCandidateRationale(
       validCandidateRationale({ hypothesis: 'held-out regressed after reading tests/test.sh' }),

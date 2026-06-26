@@ -1,11 +1,6 @@
 import type {
   FixedPromptTaskWalEvent,
   PromptCandidateRationale,
-  RsiControllerAttributionEvent,
-} from './fixed-prompt-controller.js';
-import {
-  appendFixedPromptWalEvent,
-  FIXED_PROMPT_WAL_SCHEMA_VERSION,
 } from './fixed-prompt-controller.js';
 import type { PromptAcceptanceResult } from './prompt-acceptance-policy.js';
 import type { RsiRoundAnalysis, RsiTaskOutcome, RsiTaskTransition } from './rsi-round-analysis.js';
@@ -52,13 +47,6 @@ export interface BuildRsiControllerAttributionInput {
   decision: PromptAcceptanceResult;
 }
 
-export interface AppendRsiControllerAttributionInput {
-  resultsJsonlPath: string;
-  id: string;
-  ts: number;
-  attribution: RsiControllerAttribution;
-}
-
 export function buildRsiControllerAttribution(
   input: BuildRsiControllerAttributionInput,
 ): RsiControllerAttribution {
@@ -94,20 +82,6 @@ export function buildRsiControllerAttribution(
     },
     rootCauseSignalMatch: rootCauseSignalMatch(input.candidateRationale, input.analysis),
   };
-}
-
-export async function appendRsiControllerAttribution(
-  input: AppendRsiControllerAttributionInput,
-): Promise<RsiControllerAttributionEvent> {
-  const event: RsiControllerAttributionEvent = {
-    schemaVersion: FIXED_PROMPT_WAL_SCHEMA_VERSION,
-    type: 'rsi_controller_attribution',
-    id: input.id,
-    ts: input.ts,
-    ...input.attribution,
-  };
-  await appendFixedPromptWalEvent(input.resultsJsonlPath, event);
-  return event;
 }
 
 export function projectRsiPromptAttribution(attribution: RsiControllerAttribution): RsiPromptAttribution {

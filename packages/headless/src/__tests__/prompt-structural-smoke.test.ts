@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import type { FixedPromptWalEvent, PromptCandidateRewardHackScan } from '../fixed-prompt-controller.js';
+import type { FixedPromptWalEvent, PromptCandidateRationale, PromptCandidateRewardHackScan } from '../fixed-prompt-controller.js';
 import {
   promptStructuralSmokeReport,
   renderPromptStructuralSmokeMarkdown,
@@ -489,8 +489,76 @@ describe('prompt structural smoke report', () => {
     });
 
     assert.equal(taskScopeReport.status, 'fail');
-    assert.deepEqual(taskScopeReport.failures, ['rsi_attribution_task_scope_invalid']);
+    assert.deepEqual(taskScopeReport.failures, ['rsi_attribution_malformed', 'rsi_attribution_task_scope_invalid']);
     assert.deepEqual(taskScopeReport.roundsWithOutOfScopeRsiAttribution, ['round-1']);
+  });
+
+  test('fails R2 smoke when attribution disagrees with committed candidate rationale', () => {
+    const committedRationale = candidateRationale({
+      evidenceRefs: ['rsi-sig:coverage'],
+      predictedFixes: ['task-1'],
+      riskTasks: ['task-2'],
+    });
+
+    const evidenceMismatch = [
+      committedEvent('round-1', 'run-1', promptHashForRound('round-1'), ['task-1', 'task-2'], committedRationale),
+      completedEvent('round-1', 'task-1', 0.1),
+      decisionEvent('round-1', 'discard', 'held_in_within_noise', 'run-1', { decision: 'clean' }),
+      attributionEvent('round-1', {
+        evidenceRefs: ['rsi-sig:other'],
+        predictedFixes: [{ taskId: 'task-1', outcome: 'improved' }],
+        riskTasks: [{ taskId: 'task-2', outcome: 'safe' }],
+      }),
+    ];
+
+    const evidenceReport = promptStructuralSmokeReport({
+      events: evidenceMismatch,
+      minimumRounds: 1,
+      requireRsiR2Evidence: true,
+    });
+
+    assert.equal(evidenceReport.status, 'fail');
+    assert.deepEqual(evidenceReport.failures, ['rsi_attribution_malformed']);
+    assert.deepEqual(evidenceReport.roundsWithMalformedRsiAttribution, ['round-1']);
+
+    const taskListMismatch = [
+      committedEvent('round-1', 'run-1', promptHashForRound('round-1'), ['task-1', 'task-2'], committedRationale),
+      completedEvent('round-1', 'task-1', 0.1),
+      decisionEvent('round-1', 'discard', 'held_in_within_noise', 'run-1', { decision: 'clean' }),
+      attributionEvent('round-1', {
+        evidenceRefs: ['rsi-sig:coverage'],
+        predictedFixes: [{ taskId: 'task-2', outcome: 'improved' }],
+        riskTasks: [{ taskId: 'task-1', outcome: 'safe' }],
+      }),
+    ];
+    const taskListReport = promptStructuralSmokeReport({
+      events: taskListMismatch,
+      minimumRounds: 1,
+      requireRsiR2Evidence: true,
+    });
+
+    assert.equal(taskListReport.status, 'fail');
+    assert.deepEqual(taskListReport.failures, ['rsi_attribution_malformed']);
+    assert.deepEqual(taskListReport.roundsWithMalformedRsiAttribution, ['round-1']);
+  });
+
+  test('fails R2 smoke when attribution decision disagrees with the preceding decision event', () => {
+    const events = [
+      committedEvent('round-1'),
+      completedEvent('round-1', 'task-1', 0.1),
+      decisionEvent('round-1', 'discard', 'held_in_within_noise', 'run-1', { decision: 'clean' }),
+      attributionEvent('round-1', { decision: { decision: 'keep', reason: 'held_in_improved' } }),
+    ];
+
+    const report = promptStructuralSmokeReport({
+      events,
+      minimumRounds: 1,
+      requireRsiR2Evidence: true,
+    });
+
+    assert.equal(report.status, 'fail');
+    assert.deepEqual(report.failures, ['rsi_attribution_malformed']);
+    assert.deepEqual(report.roundsWithMalformedRsiAttribution, ['round-1']);
   });
 });
 
@@ -499,6 +567,7 @@ function committedEvent(
   runId = 'run-1',
   promptHash = promptHashForRound(roundId),
   heldInTaskIds: readonly string[] = [`task-${roundId.slice('round-'.length)}`],
+  rationale = candidateRationale(),
 ): FixedPromptWalEvent {
   return {
     schemaVersion: 1,
@@ -513,11 +582,11 @@ function committedEvent(
     heldInTaskSetHash: 'sha256:held-in-task-set',
     heldInTaskIds,
     candidateRationaleHash: 'sha256:candidate-rationale',
-    candidateRationale: candidateRationale(),
+    candidateRationale: rationale,
   };
 }
 
-function candidateRationale() {
+function candidateRationale(overrides: Partial<PromptCandidateRationale> = {}): PromptCandidateRationale {
   return {
     failurePattern: 'coverage_regression' as const,
     evidenceRefs: [],
@@ -525,6 +594,7 @@ function candidateRationale() {
     targetedFix: 'make success criteria explicit without task-specific answers',
     predictedFixes: [],
     riskTasks: [],
+    ...overrides,
   };
 }
 

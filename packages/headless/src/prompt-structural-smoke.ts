@@ -205,19 +205,36 @@ function roundsWithoutPostDecisionRsiAttribution(events: readonly FixedPromptWal
 
 function malformedRsiAttributionRounds(events: readonly FixedPromptWalEvent[]): string[] {
   const commits = promptCandidateCommitsByCandidateKey(events);
+  const decisions = promptCandidateDecisionsByCandidateKey(events);
   const rounds = new Map<string, string>();
   for (const event of events) {
     if (event.type !== 'rsi_controller_attribution') continue;
-    const commit = commits.get(attributionCandidateEvidenceKey(event));
+    const candidateKey = attributionCandidateEvidenceKey(event);
+    const commit = commits.get(candidateKey);
+    const decision = decisions.get(candidateKey);
     if (
       !commit
+      || !decision
       || event.heldInTaskSetHash !== commit.heldInTaskSetHash
       || event.candidateRationaleHash !== commit.candidateRationaleHash
+      || !sameStringSet(event.evidenceRefs, commit.candidateRationale.evidenceRefs)
+      || !sameStringSet(event.predictedFixes.map((item) => item.taskId), commit.candidateRationale.predictedFixes)
+      || !sameStringSet(event.riskTasks.map((item) => item.taskId), commit.candidateRationale.riskTasks)
+      || event.decision.decision !== decision.decision
+      || event.decision.reason !== decision.reason
     ) {
       rounds.set(roundEvidenceKey(event), event.roundId);
     }
   }
   return [...rounds.values()];
+}
+
+function promptCandidateDecisionsByCandidateKey(events: readonly FixedPromptWalEvent[]): Map<string, Extract<FixedPromptWalEvent, { type: 'prompt_candidate_decided' }>> {
+  const decisions = new Map<string, Extract<FixedPromptWalEvent, { type: 'prompt_candidate_decided' }>>();
+  for (const event of events) {
+    if (event.type === 'prompt_candidate_decided') decisions.set(decisionCandidateEvidenceKey(event), event);
+  }
+  return decisions;
 }
 
 function outOfScopeRsiAttributionRounds(events: readonly FixedPromptWalEvent[]): string[] {
@@ -254,6 +271,17 @@ function attributionCandidateEvidenceKey(event: { runId: string; roundId: string
 
 function roundPromptHashEvidenceKey(event: { runId: string; roundId: string }, promptHash: string): string {
   return `${roundEvidenceKey(event)}\0${promptHash}`;
+}
+
+function sameStringSet(left: readonly string[], right: readonly string[]): boolean {
+  const sortedLeft = sortedUnique(left);
+  const sortedRight = sortedUnique(right);
+  return sortedLeft.length === sortedRight.length
+    && sortedLeft.every((value, index) => value === sortedRight[index]);
+}
+
+function sortedUnique(values: readonly string[]): string[] {
+  return [...new Set(values)].sort((a, b) => a.localeCompare(b));
 }
 
 function isQuarantineDecision(event: { reason: string; rewardHackScan?: unknown }): boolean {

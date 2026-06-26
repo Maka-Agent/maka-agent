@@ -86,7 +86,7 @@ describe('runPromptOptimizationLoop', () => {
             summary: `tuned for ${promptInput.roundId}`,
             candidateRationale: {
               failurePattern: 'coverage_regression',
-              evidenceRefs: [],
+              evidenceRefs: evidenceRefsFor(promptInput),
               hypothesis: 'avoid losing held-in scored artifacts',
               targetedFix: 'state artifact completion constraints plainly',
               predictedFixes: ['hin-1'],
@@ -150,7 +150,7 @@ describe('runPromptOptimizationLoop', () => {
             summary: `tuned for ${promptInput.roundId}`,
             candidateRationale: {
               failurePattern: 'coverage_regression',
-              evidenceRefs: [],
+              evidenceRefs: evidenceRefsFor(promptInput),
               hypothesis: 'avoid losing held-in scored artifacts',
               targetedFix: 'state artifact completion constraints plainly',
               predictedFixes: ['hin-19'],
@@ -601,13 +601,18 @@ function fakeMetaAgent(): MetaAgent {
     summary: `tuned for ${promptInput.roundId}`,
     candidateRationale: {
       failurePattern: 'coverage_regression',
-      evidenceRefs: [],
+      evidenceRefs: evidenceRefsFor(promptInput),
       hypothesis: 'stable held-in coverage can improve with a clearer prompt',
       targetedFix: 'make the success criteria explicit without adding task-specific answers',
       predictedFixes: [],
       riskTasks: [],
     },
   });
+}
+
+function evidenceRefsFor(promptInput: MetaAgentPromptInput): string[] {
+  const firstSignal = promptInput.rsiAnalysis?.signals[0];
+  return firstSignal ? [firstSignal.id] : [];
 }
 
 /** A Harbor runner that fabricates a completed, correctly-hashed cell per task

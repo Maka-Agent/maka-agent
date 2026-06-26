@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Config } from './contracts.js';
 import {
+  appendFixedPromptWalEvent,
+  FIXED_PROMPT_WAL_SCHEMA_VERSION,
   runFixedPromptController,
   readFixedPromptWal,
   type FixedPromptControllerResult,
@@ -9,6 +11,7 @@ import {
   type FixedPromptTaskWalEvent,
   type HarborTaskRunner,
   type PromptCandidateRewardHackScan,
+  type RsiControllerAttributionEvent,
 } from './fixed-prompt-controller.js';
 import {
   extractTrajectoryDigest,
@@ -35,7 +38,6 @@ import {
 import { assertFinitePositive, assertPositiveInt, assertRatio } from './numeric-guards.js';
 import { analyzeRsiRound } from './rsi-round-analysis.js';
 import {
-  appendRsiControllerAttribution,
   buildRsiControllerAttribution,
   projectRsiPromptAttribution,
   type RsiPromptAttribution,
@@ -468,12 +470,14 @@ export async function runPromptOptimizationLoop(
       candidateEvents: heldIn.events,
       decision: result,
     });
-    await appendRsiControllerAttribution({
-      resultsJsonlPath: input.resultsJsonlPath,
+    const attributionEvent: RsiControllerAttributionEvent = {
+      schemaVersion: FIXED_PROMPT_WAL_SCHEMA_VERSION,
+      type: 'rsi_controller_attribution',
       id: newId(),
       ts: now(),
-      attribution: controllerAttribution,
-    });
+      ...controllerAttribution,
+    };
+    await appendFixedPromptWalEvent(input.resultsJsonlPath, attributionEvent);
     nextPromptAttribution = projectRsiPromptAttribution(controllerAttribution);
     decisions.push(result);
 
