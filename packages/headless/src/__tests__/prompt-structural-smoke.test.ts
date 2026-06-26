@@ -425,6 +425,39 @@ describe('prompt structural smoke report', () => {
     ]);
     assert.deepEqual(report.failures, ['task_evidence_missing']);
   });
+
+  test('fails R2 smoke when controller attribution is missing or appended before decision', () => {
+    const missingAttribution = [
+      committedEvent('round-1'),
+      completedEvent('round-1', 'task-1', 0.1),
+      decisionEvent('round-1', 'discard', 'held_in_within_noise', 'run-1', { decision: 'clean' }),
+    ];
+    const missingReport = promptStructuralSmokeReport({
+      events: missingAttribution,
+      minimumRounds: 1,
+      requireRsiR2Evidence: true,
+    });
+
+    assert.equal(missingReport.status, 'fail');
+    assert.deepEqual(missingReport.failures, ['rsi_attribution_missing']);
+    assert.deepEqual(missingReport.roundsWithoutRsiAttribution, ['round-1']);
+
+    const wrongOrder = [
+      committedEvent('round-1'),
+      completedEvent('round-1', 'task-1', 0.1),
+      attributionEvent('round-1'),
+      decisionEvent('round-1', 'discard', 'held_in_within_noise', 'run-1', { decision: 'clean' }),
+    ];
+    const wrongOrderReport = promptStructuralSmokeReport({
+      events: wrongOrder,
+      minimumRounds: 1,
+      requireRsiR2Evidence: true,
+    });
+
+    assert.equal(wrongOrderReport.status, 'fail');
+    assert.deepEqual(wrongOrderReport.failures, ['rsi_attribution_missing']);
+    assert.deepEqual(wrongOrderReport.roundsWithoutRsiAttribution, ['round-1']);
+  });
 });
 
 function committedEvent(
@@ -513,6 +546,25 @@ function completedEvent(
     durationMs: 10,
     runtimeEventsPath: `/logs/${roundId}/${taskId}.jsonl`,
     harbor: { reward: 0 },
+  };
+}
+
+function attributionEvent(roundId: string): FixedPromptWalEvent {
+  return {
+    schemaVersion: 1,
+    type: 'rsi_controller_attribution',
+    id: `attribution-${roundId}`,
+    ts: 1,
+    runId: 'run-1',
+    roundId,
+    candidateCommitSha: `candidate-${roundId}`,
+    heldInTaskSetHash: 'sha256:held-in-task-set',
+    candidateRationaleHash: 'sha256:candidate-rationale',
+    predictedFixes: [],
+    riskTasks: [],
+    unexpectedHeldInFlips: [],
+    decision: { decision: 'discard', reason: 'held_in_within_noise' },
+    rootCauseSignalMatch: 'unknown',
   };
 }
 

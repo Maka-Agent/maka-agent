@@ -30,6 +30,15 @@ export interface RsiControllerAttribution {
   rootCauseSignalMatch: RsiRootCauseSignalMatch;
 }
 
+export interface RsiPromptAttribution {
+  candidateCommitSha: string;
+  decisionReason: PromptAcceptanceResult['reason'] | 'discarded_by_controller_safety_gate';
+  predictedFixes: Array<{ taskId: string; outcome: RsiPredictedFixOutcome }>;
+  riskTasks: Array<{ taskId: string; outcome: RsiRiskTaskOutcome }>;
+  unexpectedHeldInFlips: RsiTaskTransition[];
+  rootCauseSignalMatch: RsiRootCauseSignalMatch;
+}
+
 export interface BuildRsiControllerAttributionInput {
   runId: string;
   roundId: string;
@@ -98,6 +107,23 @@ export async function appendRsiControllerAttribution(
   };
   await appendFixedPromptWalEvent(input.resultsJsonlPath, event);
   return event;
+}
+
+export function projectRsiPromptAttribution(attribution: RsiControllerAttribution): RsiPromptAttribution {
+  return {
+    candidateCommitSha: attribution.candidateCommitSha,
+    decisionReason: promptSafeDecisionReason(attribution.decision.reason),
+    predictedFixes: attribution.predictedFixes,
+    riskTasks: attribution.riskTasks,
+    unexpectedHeldInFlips: attribution.unexpectedHeldInFlips,
+    rootCauseSignalMatch: attribution.rootCauseSignalMatch,
+  };
+}
+
+function promptSafeDecisionReason(
+  reason: PromptAcceptanceResult['reason'],
+): RsiPromptAttribution['decisionReason'] {
+  return reason === 'held_out_regressed' ? 'discarded_by_controller_safety_gate' : reason;
 }
 
 function eventsByTask(

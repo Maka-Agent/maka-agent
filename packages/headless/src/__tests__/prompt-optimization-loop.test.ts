@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { describe, test } from 'node:test';
-import { hashSystemPrompt, type HarborTaskRunInput, type HarborTaskRunOutput } from '../fixed-prompt-controller.js';
-import { createCliPromptCandidateGit, type MetaAgent } from '../prompt-candidate-loop.js';
+import { hashSystemPrompt, readFixedPromptWal, type HarborTaskRunInput, type HarborTaskRunOutput } from '../fixed-prompt-controller.js';
+import { createCliPromptCandidateGit, type MetaAgent, type MetaAgentPromptInput } from '../prompt-candidate-loop.js';
 import { runPromptOptimizationLoop, type PromptOptimizationLoopInput } from '../prompt-optimization-loop.js';
 import type { Config } from '../contracts.js';
 import { tokenSummary } from './helpers/cell-output-fixtures.js';
@@ -59,6 +59,67 @@ describe('runPromptOptimizationLoop', () => {
       assert.equal(result.smoke.quarantineCount, 0);
       assert.equal(result.smoke.taskEvents.infraFailed, 0);
       assert.equal(result.smoke.taskEvents.plumbingFailed, 0);
+    });
+  });
+
+  test('persists attribution and feeds held-in-only R2 feedback into the next prompt', async () => {
+    await withHarness(async (harness) => {
+      const promptInputs: MetaAgentPromptInput[] = [];
+      const heldInTasks = makeTasks('hin', 2);
+      const heldOutTasks = makeTasks('hout', 1);
+      const rewardFor = (roundId: string, taskId: string): number => {
+        if (taskId.startsWith('hout-')) return 1;
+        if (roundId.startsWith('baseline-')) return taskIndex(taskId) === 0 ? 1 : 0;
+        return roundId === 'round-0' ? 0 : taskIndex(taskId) === 0 ? 1 : 0;
+      };
+
+      await runLoop(harness, {
+        heldInTasks,
+        heldOutTasks,
+        rewardFor,
+        rounds: 2,
+        baselineRuns: 2,
+        metaAgent: async (promptInput) => {
+          promptInputs.push(promptInput);
+          return {
+            systemPrompt: `candidate prompt ${promptInput.roundId}\n`,
+            summary: `tuned for ${promptInput.roundId}`,
+            candidateRationale: {
+              failurePattern: 'coverage_regression',
+              hypothesis: 'avoid losing held-in scored artifacts',
+              targetedFix: 'state artifact completion constraints plainly',
+              predictedFixes: ['hin-1'],
+              riskTasks: ['hin-0'],
+            },
+          };
+        },
+      });
+
+      assert.equal(promptInputs.length, 2);
+      assert.ok(promptInputs[0]?.rsiAnalysis);
+      assert.equal(promptInputs[0]?.promptAttribution, undefined);
+      assert.ok(promptInputs[1]?.rsiAnalysis);
+      assert.deepEqual(promptInputs[1]?.promptAttribution?.predictedFixes, [
+        { taskId: 'hin-1', outcome: 'unchanged' },
+      ]);
+      assert.deepEqual(promptInputs[1]?.promptAttribution?.riskTasks, [
+        { taskId: 'hin-0', outcome: 'regressed' },
+      ]);
+      assert.equal(JSON.stringify(promptInputs[1]?.promptAttribution).includes('hout-'), false);
+      assert.equal(JSON.stringify(promptInputs[1]?.promptAttribution).includes('held_out'), false);
+
+      const events = await readFixedPromptWal(harness.resultsJsonlPath);
+      assert.equal(events.filter((event) => event.type === 'rsi_controller_attribution').length, 2);
+      for (const decision of events.filter((event) => event.type === 'prompt_candidate_decided')) {
+        const decisionIndex = events.indexOf(decision);
+        const attributionIndex = events.findIndex((event) => (
+          event.type === 'rsi_controller_attribution'
+          && event.runId === decision.runId
+          && event.roundId === decision.roundId
+          && event.candidateCommitSha === decision.candidateCommitSha
+        ));
+        assert.ok(attributionIndex > decisionIndex);
+      }
     });
   });
 
@@ -450,6 +511,7 @@ interface RunLoopOptions {
   /** Per-task baseline duration (ms); defaults to 10. Exercises the too-slow cap. */
   durationMsFor?: (roundId: string, taskId: string) => number;
   onTaskRun?: (roundId: string, taskId: string) => void;
+  metaAgent?: MetaAgent;
 }
 
 async function runLoop(harness: Harness, options: RunLoopOptions) {
@@ -472,7 +534,7 @@ async function runLoop(harness: Harness, options: RunLoopOptions) {
     heldOutTasks: options.heldOutTasks,
     config: CONFIG,
     harborRunner: fakeHarborRunner(harness.eventsDir, options.rewardFor, options.shouldFail, options.durationMsFor, options.onTaskRun),
-    metaAgent: fakeMetaAgent(),
+    metaAgent: options.metaAgent ?? fakeMetaAgent(),
     git: createCliPromptCandidateGit({ cwd: harness.repoDir, systemPromptPath: harness.systemPromptPath }),
     originalCommitSha: harness.originalCommitSha,
     rewardHackVerifierPatternsByTaskId,

@@ -13,6 +13,8 @@ import {
   type PromptCandidateFailurePattern,
   type PromptCandidateRationale,
 } from './fixed-prompt-controller.js';
+import type { RsiPromptAttribution } from './rsi-controller-attribution.js';
+import type { RsiRoundAnalysis } from './rsi-round-analysis.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -73,6 +75,8 @@ export interface MetaAgentPromptInput {
   currentSystemPrompt: string;
   resultsTsv: string;
   heldInDigests: readonly TrajectoryDigest[];
+  rsiAnalysis?: RsiRoundAnalysis;
+  promptAttribution?: RsiPromptAttribution;
 }
 
 export interface MetaAgentPromptResult {
@@ -118,6 +122,8 @@ export interface RunPromptCandidateRoundInput {
   resultsJsonlPath: string;
   heldInTaskIds: readonly string[];
   heldInDigests: readonly TrajectoryDigest[];
+  rsiAnalysis?: RsiRoundAnalysis;
+  promptAttribution?: RsiPromptAttribution;
   heldOutDigests?: readonly TrajectoryDigest[];
   heldOutArtifactPaths?: readonly string[];
   metaAgent: MetaAgent;
@@ -135,6 +141,9 @@ export interface PromptCandidateRoundResult {
   systemPrompt: string;
   summary: string;
   commitSha: string;
+  candidateRationale: CandidateRationale;
+  candidateRationaleHash: string;
+  heldInTaskSetHash: string;
 }
 
 export async function runPromptCandidateRound(
@@ -168,6 +177,8 @@ export async function runPromptCandidateRound(
     currentSystemPrompt,
     resultsTsv,
     heldInDigests: input.heldInDigests,
+    ...(input.rsiAnalysis ? { rsiAnalysis: input.rsiAnalysis } : {}),
+    ...(input.promptAttribution ? { promptAttribution: input.promptAttribution } : {}),
   });
   const candidateRationale = validateCandidateRationale(result.candidateRationale, input.heldInTaskIds);
 
@@ -200,6 +211,9 @@ export async function runPromptCandidateRound(
     systemPrompt: result.systemPrompt,
     summary: result.summary,
     commitSha,
+    candidateRationale,
+    candidateRationaleHash: hashCandidateRationale(candidateRationale),
+    heldInTaskSetHash: hashHeldInTaskSet(input.heldInTaskIds),
   };
 }
 
@@ -387,10 +401,26 @@ export function renderMetaAgentPrompt(input: MetaAgentPromptInput): string {
     '# Results TSV',
     input.resultsTsv,
     ...renderToolFailureSummary(input.heldInDigests),
+    ...renderRsiAnalysis(input.rsiAnalysis),
+    ...renderPromptAttribution(input.promptAttribution),
     '# Held-In Digests',
     JSON.stringify(stripPromptOnlyToolFailures(input.heldInDigests), null, 2),
     '',
   ].join('\n');
+}
+
+function renderRsiAnalysis(analysis: RsiRoundAnalysis | undefined): string[] {
+  return analysis ? [
+    '# RSI R2 Held-In Analysis',
+    JSON.stringify(analysis, null, 2),
+  ] : [];
+}
+
+function renderPromptAttribution(attribution: RsiPromptAttribution | undefined): string[] {
+  return attribution ? [
+    '# RSI R2 Previous Prompt Attribution',
+    JSON.stringify(attribution, null, 2),
+  ] : [];
 }
 
 export function filterResultsTsvForHeldIn(

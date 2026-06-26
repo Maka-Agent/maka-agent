@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { readFixedPromptWal, type FixedPromptTaskWalEvent, type PromptCandidateRationale } from '../fixed-prompt-controller.js';
-import { appendRsiControllerAttribution, buildRsiControllerAttribution } from '../rsi-controller-attribution.js';
+import { appendRsiControllerAttribution, buildRsiControllerAttribution, projectRsiPromptAttribution } from '../rsi-controller-attribution.js';
 import type { RsiRoundAnalysis } from '../rsi-round-analysis.js';
 import type { PromptAcceptanceResult } from '../prompt-acceptance-policy.js';
 import { tokenSummary } from './helpers/cell-output-fixtures.js';
@@ -120,6 +120,40 @@ describe('RSI controller attribution', () => {
         assert.equal(events[0].rootCauseSignalMatch, 'unknown');
       }
     });
+  });
+
+  test('projects held-out safety decisions as generic prompt feedback', () => {
+    const attribution = buildRsiControllerAttribution({
+      runId: 'run-1',
+      roundId: 'round-0',
+      candidateCommitSha: 'commit-1',
+      candidateRationaleHash: 'sha256:rationale',
+      candidateRationale: {
+        failurePattern: 'other',
+        hypothesis: 'unknown held-in behavior changed',
+        targetedFix: 'make prompt wording simpler',
+        predictedFixes: [],
+        riskTasks: [],
+      },
+      analysis: {
+        heldInTaskSetHash: 'sha256:held-in',
+        transitionVsLastKept: [],
+        transitionVsPreviousCandidate: [],
+        coverageRegressionTaskIds: [],
+        errorClassDistribution: [],
+        toolFailureClusters: [],
+        signals: [],
+      },
+      heldInTaskIds: ['task-a'],
+      lastKeptEvents: [completed({ taskId: 'task-a', passed: true })],
+      candidateEvents: [completed({ taskId: 'task-a', passed: true })],
+      decision: acceptanceResult({ decision: 'discard', reason: 'held_out_regressed' }),
+    });
+
+    const promptAttribution = projectRsiPromptAttribution(attribution);
+
+    assert.equal(promptAttribution.decisionReason, 'discarded_by_controller_safety_gate');
+    assert.equal(JSON.stringify(promptAttribution).includes('held_out_regressed'), false);
   });
 });
 

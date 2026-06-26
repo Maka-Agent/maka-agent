@@ -8,12 +8,14 @@ export type PromptStructuralSmokeFailure =
   | 'cost_ceiling_exceeded'
   | 'plumbing_failures_present'
   | 'reward_hack_scan_missing'
-  | 'reward_hack_quarantine_present';
+  | 'reward_hack_quarantine_present'
+  | 'rsi_attribution_missing';
 
 export interface PromptStructuralSmokeReportInput {
   events: readonly FixedPromptWalEvent[];
   minimumRounds?: number;
   costCeilingUsd?: number;
+  requireRsiR2Evidence?: boolean;
 }
 
 export interface PromptStructuralSmokeReport {
@@ -32,6 +34,7 @@ export interface PromptStructuralSmokeReport {
   };
   quarantineCount: number;
   roundsWithoutTaskEvidence: string[];
+  roundsWithoutRsiAttribution: string[];
   totalCostUsd: number;
   costCeilingUsd?: number;
   failures: PromptStructuralSmokeFailure[];
@@ -48,6 +51,10 @@ export function promptStructuralSmokeReport(
   const observedRunCount = new Set(decisionEvents.map((event) => event.runId)).size;
   const roundsWithoutTaskEvidence = roundsWithoutPriorTaskEvidence(input.events)
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const roundsWithoutRsiAttribution = input.requireRsiR2Evidence
+    ? roundsWithoutPostDecisionRsiAttribution(input.events)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    : [];
   const quarantineCount = decisionEvents.filter((event) => isQuarantineDecision(event)).length;
   const missingRewardHackScanCount = decisionEvents.filter((event) => event.rewardHackScan === undefined).length;
   const totalCostUsd = roundCost(sum(taskEvents.map((event) => (
@@ -65,6 +72,7 @@ export function promptStructuralSmokeReport(
   }
   if (missingRewardHackScanCount > 0) failures.push('reward_hack_scan_missing');
   if (quarantineCount > 0) failures.push('reward_hack_quarantine_present');
+  if (roundsWithoutRsiAttribution.length > 0) failures.push('rsi_attribution_missing');
 
   return {
     schemaVersion: 'maka.prompt_structural_smoke.v1',
@@ -82,6 +90,7 @@ export function promptStructuralSmokeReport(
     },
     quarantineCount,
     roundsWithoutTaskEvidence,
+    roundsWithoutRsiAttribution,
     totalCostUsd,
     ...(input.costCeilingUsd !== undefined ? { costCeilingUsd: input.costCeilingUsd } : {}),
     failures,
@@ -149,11 +158,36 @@ function roundsWithoutPriorTaskEvidence(events: readonly FixedPromptWalEvent[]):
   return [...missingRounds.values()];
 }
 
+function roundsWithoutPostDecisionRsiAttribution(events: readonly FixedPromptWalEvent[]): string[] {
+  const attributedCandidates = new Set<string>();
+  const missingRounds = new Map<string, string>();
+  events.forEach((event, index) => {
+    if (event.type === 'rsi_controller_attribution') {
+      attributedCandidates.add(attributionCandidateEvidenceKey(event));
+    }
+    if (event.type === 'prompt_candidate_decided') {
+      const candidateKey = decisionCandidateEvidenceKey(event);
+      const hasLaterAttribution = events.slice(index + 1).some((later) => (
+        later.type === 'rsi_controller_attribution'
+        && attributionCandidateEvidenceKey(later) === candidateKey
+      ));
+      if (!hasLaterAttribution || attributedCandidates.has(candidateKey)) {
+        missingRounds.set(roundEvidenceKey(event), event.roundId);
+      }
+    }
+  });
+  return [...missingRounds.values()];
+}
+
 function candidateEvidenceKey(event: { runId: string; roundId: string; commitSha: string }): string {
   return `${event.runId}\0${event.roundId}\0${event.commitSha}`;
 }
 
 function decisionCandidateEvidenceKey(event: { runId: string; roundId: string; candidateCommitSha: string }): string {
+  return `${event.runId}\0${event.roundId}\0${event.candidateCommitSha}`;
+}
+
+function attributionCandidateEvidenceKey(event: { runId: string; roundId: string; candidateCommitSha: string }): string {
   return `${event.runId}\0${event.roundId}\0${event.candidateCommitSha}`;
 }
 
