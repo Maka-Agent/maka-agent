@@ -1582,6 +1582,10 @@ function DailyReviewPanel(props: {
     }
   }
 
+  function isDailyReviewActionCurrent(actionKey: string): boolean {
+    return dailyReviewMountedRef.current && pendingDailyReviewActionRef.current === actionKey;
+  }
+
   const dailyReviewActionBusy = pendingDailyReviewAction !== null;
   const hasDailyReviewActions = Boolean(props.onCopyMarkdown || props.onAppendMarkdown || props.onSaveMarkdown);
   const canManualRun = Boolean(props.bridge.runOnce);
@@ -1589,14 +1593,16 @@ function DailyReviewPanel(props: {
   async function triggerManualRun(mode: DailyReviewMode) {
     const runOnce = props.bridge.runOnce;
     if (!runOnce) return;
-    await runDailyReviewAction(`run:${mode}`, async () => {
+    const actionKey = `run:${mode}`;
+    await runDailyReviewAction(actionKey, async () => {
       try {
         const result = await runOnce({ mode });
+        if (!isDailyReviewActionCurrent(actionKey)) return;
         chooseDailyReviewArchive(result.archiveId);
         setArchiveReloadToken((n) => n + 1);
         setReloadToken((n) => n + 1);
       } catch (err) {
-        setError(dailyReviewPanelErrorMessage(err));
+        if (isDailyReviewActionCurrent(actionKey)) setError(dailyReviewPanelErrorMessage(err));
       }
     });
   }

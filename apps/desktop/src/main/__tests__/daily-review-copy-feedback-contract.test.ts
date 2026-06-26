@@ -130,6 +130,36 @@ describe('Daily Review copy feedback contract', () => {
     );
   });
 
+  it('guards Daily Review manual run continuations against closed panels', async () => {
+    const ui = await readFile(resolve(REPO_ROOT, 'packages/ui/src/components.tsx'), 'utf8');
+    const panelBlock = ui.match(/function DailyReviewPanel[\s\S]*?function PlanReminderPanel/)?.[0] ?? '';
+    const manualRunBlock = blockBetween(panelBlock, 'async function triggerManualRun', 'return \\(');
+
+    assert.match(
+      panelBlock,
+      /function isDailyReviewActionCurrent\(actionKey: string\): boolean \{\s*return dailyReviewMountedRef\.current && pendingDailyReviewActionRef\.current === actionKey;\s*\}/,
+      'Daily Review manual run continuations need a mounted/current-owner predicate',
+    );
+    assert.match(
+      manualRunBlock,
+      /const actionKey = `run:\$\{mode\}`;\s*await runDailyReviewAction\(actionKey, async \(\) => \{/,
+      'Manual Daily Review runs should reuse the shared action owner key',
+    );
+    assert.match(
+      manualRunBlock,
+      /const result = await runOnce\(\{ mode \}\);\s*if \(!isDailyReviewActionCurrent\(actionKey\)\) return;\s*chooseDailyReviewArchive\(result\.archiveId\);\s*setArchiveReloadToken\(\(n\) => n \+ 1\);\s*setReloadToken\(\(n\) => n \+ 1\);/,
+      'Late manual-run success must not select archives or reload a closed/superseded panel',
+    );
+    assert.match(
+      manualRunBlock,
+      /catch \(err\) \{\s*if \(isDailyReviewActionCurrent\(actionKey\)\) setError\(dailyReviewPanelErrorMessage\(err\)\);\s*\}/,
+      'Late manual-run failures must not render errors after leaving Daily Review',
+    );
+    assert.match(panelBlock, /disabled=\{dailyReviewActionBusy\}/);
+    assert.match(panelBlock, /pendingDailyReviewAction === 'run:daily' \? '生成中…' : '生成每日回顾'/);
+    assert.match(panelBlock, /pendingDailyReviewAction === 'run:deep' \? '生成中…' : '生成深度分析'/);
+  });
+
   it('guards Daily Review archive body loads against stale async responses', async () => {
     const ui = await readFile(resolve(REPO_ROOT, 'packages/ui/src/components.tsx'), 'utf8');
     const panelBlock = ui.match(/function DailyReviewPanel[\s\S]*?function PlanReminderPanel/)?.[0] ?? '';
