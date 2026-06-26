@@ -25,9 +25,8 @@
  *     hydration (initial mount with non-empty raw) and "the network
  *     dumped 5KB in one chunk" without infinite catch-up.
  *   - **Complete flush budget**: when `streaming` flips to false,
- *     allow at most `completeFlushBudgetMs` of typewriter time to
- *     finish; then snap. This guarantees the user never waits more
- *     than ~600ms after the response actually completes.
+ *     raise the catch-up speed so the remaining tail drains within
+ *     `completeFlushBudgetMs` instead of snapping to the final text.
  *   - **Reduced-motion bypass**: callers pass `snap: true` (typically
  *     derived from `prefers-reduced-motion: reduce` or the
  *     visual-smoke fixture attribute) to skip all smoothing.
@@ -94,8 +93,9 @@ export interface SmoothStreamOptions {
   maxCps?: number;
   /**
    * After `streaming` flips to `false`, the hook allows at most this
-   * many ms to finish flushing the remaining backlog at the smoothed
-   * CPS. Past the budget it snaps. Default 600.
+   * many ms to finish flushing the remaining backlog. The hook may exceed
+   * `maxCps` during this drain so completion stays smooth without waiting
+   * indefinitely. Default 600.
    */
   completeFlushBudgetMs?: number;
 }
@@ -163,6 +163,8 @@ export interface BacklogSnapInputs {
   rawGraphemeCount: number;
   displayedGraphemeCount: number;
   maxBacklogGraphemes: number;
+  /** Backlog snap is only for live network bursts, not completion drain. */
+  streaming?: boolean;
 }
 
 /**
@@ -170,7 +172,28 @@ export interface BacklogSnapInputs {
  * True when (raw - displayed) > threshold.
  */
 export function shouldSnapForBacklog(inputs: BacklogSnapInputs): boolean {
+  if (inputs.streaming === false) return false;
   return inputs.rawGraphemeCount - inputs.displayedGraphemeCount > inputs.maxBacklogGraphemes;
+}
+
+export interface CompletionMaxCpsInputs {
+  rawGraphemeCount: number;
+  displayedGraphemeCount: number;
+  elapsedMs: number;
+  budgetMs: number;
+  maxCps: number;
+}
+
+/**
+ * Pure: while a stream is completing, raise the frame speed enough to drain
+ * the remaining tail inside the completion budget. This keeps the completion
+ * handoff fast without a visible end-of-budget snap.
+ */
+export function resolveCompletionMaxCps(inputs: CompletionMaxCpsInputs): number {
+  const backlog = inputs.rawGraphemeCount - inputs.displayedGraphemeCount;
+  if (backlog <= 0) return inputs.maxCps;
+  const remainingMs = Math.max(1, inputs.budgetMs - inputs.elapsedMs);
+  return Math.max(inputs.maxCps, Math.ceil((backlog * 1000) / remainingMs));
 }
 
 export interface EmaUpdateInputs {
@@ -318,6 +341,7 @@ export function useSmoothStreamContent(
           rawGraphemeCount: rawLength,
           displayedGraphemeCount: displayedCount,
           maxBacklogGraphemes: maxBacklog,
+          streaming: options.streaming,
         })
       ) {
         setDisplayedCount(rawLength);
@@ -325,14 +349,19 @@ export function useSmoothStreamContent(
       }
 
       // Stream-end bounded flush. Once streaming flips false and we
-      // still have backlog, allow at most completeBudget ms to drain.
+      // still have backlog, raise the speed enough to drain inside
+      // completeBudget instead of snapping the tail all at once.
+      let frameMaxCps = maxCps;
       if (!options.streaming) {
         const s = refs.current;
         if (s.completeStartedAt === 0) s.completeStartedAt = now;
-        if (now - s.completeStartedAt > completeBudget) {
-          setDisplayedCount(rawLength);
-          return;
-        }
+        frameMaxCps = resolveCompletionMaxCps({
+          rawGraphemeCount: rawLength,
+          displayedGraphemeCount: displayedCount,
+          elapsedMs: now - s.completeStartedAt,
+          budgetMs: completeBudget,
+          maxCps,
+        });
       }
 
       const dtMs = Math.max(0, now - frameStartedAt);
@@ -342,7 +371,7 @@ export function useSmoothStreamContent(
         emaCps: refs.current.emaCps,
         dtMs,
         minCps,
-        maxCps,
+        maxCps: frameMaxCps,
       });
       if (advance > 0) {
         setDisplayedCount((cur) => Math.min(cur + advance, rawLength));

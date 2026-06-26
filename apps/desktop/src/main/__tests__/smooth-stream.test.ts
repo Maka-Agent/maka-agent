@@ -29,6 +29,7 @@ import { describe, it } from 'node:test';
 import {
   computeFrameAdvance,
   prepareSmoothStreamText,
+  resolveCompletionMaxCps,
   resolveInitialDisplayedCount,
   segmentGraphemes,
   shouldSnapForBacklog,
@@ -270,8 +271,21 @@ describe('shouldSnapForBacklog', () => {
         rawGraphemeCount: 5_200,
         displayedGraphemeCount: 200,
         maxBacklogGraphemes: 800,
+        streaming: true,
       }),
       true,
+    );
+  });
+
+  it('does not snap a completion-drain backlog just because the final text arrived at once', () => {
+    assert.equal(
+      shouldSnapForBacklog({
+        rawGraphemeCount: 5_200,
+        displayedGraphemeCount: 200,
+        maxBacklogGraphemes: 800,
+        streaming: false,
+      }),
+      false,
     );
   });
 });
@@ -293,6 +307,34 @@ describe('updateEma', () => {
   it('ignores non-finite observed (stalled arrival → dt 0 → cps Infinity)', () => {
     assert.equal(updateEma({ prevEma: 50, alpha: 0.3, observedCps: Infinity }), 50);
     assert.equal(updateEma({ prevEma: 50, alpha: 0.3, observedCps: NaN }), 50);
+  });
+});
+
+describe('resolveCompletionMaxCps', () => {
+  it('raises the completion ceiling so a large final tail can drain inside the budget', () => {
+    assert.equal(
+      resolveCompletionMaxCps({
+        rawGraphemeCount: 5_200,
+        displayedGraphemeCount: 200,
+        elapsedMs: 0,
+        budgetMs: 500,
+        maxCps: 400,
+      }),
+      10_000,
+    );
+  });
+
+  it('keeps the normal max when the final tail already fits the budget', () => {
+    assert.equal(
+      resolveCompletionMaxCps({
+        rawGraphemeCount: 260,
+        displayedGraphemeCount: 200,
+        elapsedMs: 0,
+        budgetMs: 500,
+        maxCps: 400,
+      }),
+      400,
+    );
   });
 });
 
