@@ -547,7 +547,46 @@ describe('runHarborCell', () => {
     });
   });
 
-  test('Harbor context budget env ignores malformed positive integers instead of truncating them', async () => {
+  test('Harbor context budget env rejects explicit malformed positive integers', async () => {
+    for (const raw of ['abc', '0', '-1', '1x']) {
+      await withDirs(async ({ workspaceDir }) => {
+        const registry = new BackendRegistry();
+        const toolExecutor = fakeToolExecutor();
+
+        await assert.rejects(
+          async () => {
+            const register = buildAiSdkCellBackendRegistration({
+              provider: 'deepseek',
+              model: 'deepseek-v4-flash',
+              env: {
+                DEEPSEEK_API_KEY: 'test-key',
+                MAKA_CONTEXT_STALE_TOOL_RESULT_PRUNE: 'on',
+                MAKA_CONTEXT_ARCHIVE_RETRIEVAL: 'on',
+                MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MAX_RESULTS: raw,
+              },
+              now: () => 123,
+              newId: () => 'id',
+            });
+            await register(registry, {
+              config: {
+                id: 'harbor-ai-sdk',
+                backend: 'ai-sdk',
+                llmConnectionSlug: 'deepseek',
+                model: 'deepseek-v4-flash',
+              },
+              task: { id: 'harbor-cell', instruction: 'solve', workspaceDir },
+              workspaceDir,
+              realBackendIsolation: { kind: 'external', label: 'Harbor task container', toolExecutor },
+              toolExecutor,
+            });
+          },
+          new RegExp(`MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MAX_RESULTS must be a positive integer, got ${JSON.stringify(raw)}`),
+        );
+      });
+    }
+  });
+
+  test('Harbor context budget env keeps defaults for unset or blank positive integers', async () => {
     await withDirs(async ({ workspaceDir }) => {
       const registry = new BackendRegistry();
       const toolExecutor = fakeToolExecutor();
@@ -556,12 +595,10 @@ describe('runHarborCell', () => {
         model: 'deepseek-v4-flash',
         env: {
           DEEPSEEK_API_KEY: 'test-key',
-          MAKA_CONTEXT_MIN_RECENT_TURNS: '0',
           MAKA_CONTEXT_STALE_TOOL_RESULT_PRUNE: 'on',
-          MAKA_CONTEXT_STALE_TOOL_RESULT_MAX_TOKENS: '123abc',
-          MAKA_CONTEXT_STALE_TOOL_RESULT_MIN_RECENT_TURNS: '-1',
+          MAKA_CONTEXT_STALE_TOOL_RESULT_MAX_TOKENS: '',
           MAKA_CONTEXT_ARCHIVE_RETRIEVAL: 'on',
-          MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MAX_RESULTS: '-1',
+          MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MAX_RESULTS: '',
           MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MAX_TOKENS: '',
         },
         now: () => 123,

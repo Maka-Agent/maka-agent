@@ -459,9 +459,12 @@ function resolveHarborCellPricingOverride(env: RunHarborCellEnv, modelKey: strin
 
 function buildHarborCellContextBudgetPolicy(env: RunHarborCellEnv): ContextBudgetPolicy | undefined {
   if (env.MAKA_CONTEXT_BUDGET === 'off') return undefined;
-  const maxHistoryEstimatedTokens = positiveIntEnv(env.MAKA_CONTEXT_HISTORY_BUDGET_TOKENS);
-  const maxHistoryTurns = positiveIntEnv(env.MAKA_CONTEXT_HISTORY_BUDGET_TURNS);
-  const minRecentTurns = positiveIntEnv(env.MAKA_CONTEXT_MIN_RECENT_TURNS, 2);
+  const maxHistoryEstimatedTokens = positiveIntEnv(
+    env.MAKA_CONTEXT_HISTORY_BUDGET_TOKENS,
+    'MAKA_CONTEXT_HISTORY_BUDGET_TOKENS',
+  );
+  const maxHistoryTurns = positiveIntEnv(env.MAKA_CONTEXT_HISTORY_BUDGET_TURNS, 'MAKA_CONTEXT_HISTORY_BUDGET_TURNS');
+  const minRecentTurns = positiveIntEnv(env.MAKA_CONTEXT_MIN_RECENT_TURNS, 'MAKA_CONTEXT_MIN_RECENT_TURNS', 2);
   const staleToolResultPrune = buildHarborCellStaleToolResultPrunePolicy(env, minRecentTurns);
   const archiveRetrieval = buildHarborCellArchiveRetrievalPolicy(env);
 
@@ -499,8 +502,16 @@ function buildHarborCellStaleToolResultPrunePolicy(
   if (env.MAKA_CONTEXT_STALE_TOOL_RESULT_PRUNE !== 'on') return undefined;
   return {
     enabled: true,
-    maxResultEstimatedTokens: positiveIntEnv(env.MAKA_CONTEXT_STALE_TOOL_RESULT_MAX_TOKENS, 2048),
-    minRecentTurnsFull: positiveIntEnv(env.MAKA_CONTEXT_STALE_TOOL_RESULT_MIN_RECENT_TURNS, minRecentTurns),
+    maxResultEstimatedTokens: positiveIntEnv(
+      env.MAKA_CONTEXT_STALE_TOOL_RESULT_MAX_TOKENS,
+      'MAKA_CONTEXT_STALE_TOOL_RESULT_MAX_TOKENS',
+      2048,
+    ),
+    minRecentTurnsFull: positiveIntEnv(
+      env.MAKA_CONTEXT_STALE_TOOL_RESULT_MIN_RECENT_TURNS,
+      'MAKA_CONTEXT_STALE_TOOL_RESULT_MIN_RECENT_TURNS',
+      minRecentTurns,
+    ),
   };
 }
 
@@ -512,19 +523,24 @@ function buildHarborCellArchiveRetrievalPolicy(
   return {
     enabled: true,
     ...(mode ? { mode } : {}),
-    maxResults: positiveIntEnv(env.MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MAX_RESULTS, 3),
-    maxEstimatedTokens: positiveIntEnv(env.MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MAX_TOKENS, 8192),
-    maxBytes: positiveIntEnv(env.MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MAX_BYTES, 1024 * 1024),
+    maxResults: positiveIntEnv(env.MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MAX_RESULTS, 'MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MAX_RESULTS', 3),
+    maxEstimatedTokens: positiveIntEnv(
+      env.MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MAX_TOKENS,
+      'MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MAX_TOKENS',
+      8192,
+    ),
+    maxBytes: positiveIntEnv(env.MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MAX_BYTES, 'MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MAX_BYTES', 1024 * 1024),
     order: 'newest_first',
   };
 }
 
-function positiveIntEnv(raw: string | undefined): number | undefined;
-function positiveIntEnv(raw: string | undefined, fallback: number): number;
-function positiveIntEnv(raw: string | undefined, fallback?: number): number | undefined {
-  if (raw === undefined || raw.trim() === '') return fallback;
-  if (!/^[1-9]\d*$/.test(raw.trim())) return fallback;
-  return Number(raw);
+function positiveIntEnv(raw: string | undefined, name: string): number | undefined;
+function positiveIntEnv(raw: string | undefined, name: string, fallback: number): number;
+function positiveIntEnv(raw: string | undefined, name: string, fallback?: number): number | undefined {
+  const value = raw?.trim();
+  if (value === undefined || value === '') return fallback;
+  if (!/^[1-9]\d*$/.test(value)) throw new Error(`${name} must be a positive integer, got ${JSON.stringify(raw)}`);
+  return Number(value);
 }
 
 function parseArchiveRetrievalMode(

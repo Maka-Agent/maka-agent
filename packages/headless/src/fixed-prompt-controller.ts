@@ -12,6 +12,7 @@ import type { Config } from './contracts.js';
 import { assertFinitePositive, assertPositiveInt, assertRatio } from './numeric-guards.js';
 
 export const FIXED_PROMPT_WAL_SCHEMA_VERSION = 1;
+export const BUDGET_EXHAUSTED_RUNTIME_UNAVAILABLE_REASON = 'budget_exhausted_before_cell_output';
 
 export interface FixedPromptTask {
   id: string;
@@ -48,8 +49,18 @@ export interface HarborTaskRunInput {
 
 export type HarborTaskRunner = (input: HarborTaskRunInput) => Promise<HarborTaskRunOutput>;
 
+export interface FixedPromptBudgetExhaustedArtifactRefs {
+  runtimeEventsPath?: string;
+  traceEventsPath?: string;
+  runtimeEventsUnavailableReason?: string;
+}
+
 export class FixedPromptBudgetExhaustedError extends Error {
-  constructor(message: string, readonly detail?: string) {
+  constructor(
+    message: string,
+    readonly detail?: string,
+    readonly artifactRefs?: FixedPromptBudgetExhaustedArtifactRefs,
+  ) {
     super(message);
     this.name = 'FixedPromptBudgetExhaustedError';
   }
@@ -120,6 +131,9 @@ export interface FixedPromptTaskBudgetExhaustedEvent {
   errorClass: 'budget_exhausted';
   error: string;
   expectedPromptHash: string;
+  runtimeEventsPath?: string;
+  traceEventsPath?: string;
+  runtimeEventsUnavailableReason?: string;
 }
 
 export interface FixedPromptTaskPlumbingFailedEvent {
@@ -666,6 +680,7 @@ function taskBudgetExhaustedEvent(input: {
   id: string;
   ts: number;
 }): FixedPromptTaskBudgetExhaustedEvent {
+  const artifactRefs = budgetExhaustedArtifactRefs(input.error);
   return {
     schemaVersion: FIXED_PROMPT_WAL_SCHEMA_VERSION,
     type: 'task_budget_exhausted',
@@ -682,7 +697,20 @@ function taskBudgetExhaustedEvent(input: {
     errorClass: 'budget_exhausted',
     error: errorMessage(input.error),
     expectedPromptHash: input.expectedPromptHash,
+    ...(artifactRefs.runtimeEventsPath ? { runtimeEventsPath: artifactRefs.runtimeEventsPath } : {}),
+    ...(artifactRefs.traceEventsPath ? { traceEventsPath: artifactRefs.traceEventsPath } : {}),
+    ...(artifactRefs.runtimeEventsUnavailableReason
+      ? { runtimeEventsUnavailableReason: artifactRefs.runtimeEventsUnavailableReason }
+      : {}),
   };
+}
+
+function budgetExhaustedArtifactRefs(error: unknown): FixedPromptBudgetExhaustedArtifactRefs {
+  if (isBudgetExhaustedError(error)) {
+    const refs = (error as { artifactRefs?: FixedPromptBudgetExhaustedArtifactRefs }).artifactRefs;
+    if (refs && (refs.runtimeEventsPath || refs.traceEventsPath || refs.runtimeEventsUnavailableReason)) return refs;
+  }
+  return { runtimeEventsUnavailableReason: BUDGET_EXHAUSTED_RUNTIME_UNAVAILABLE_REASON };
 }
 
 function terminalTaskEvents(

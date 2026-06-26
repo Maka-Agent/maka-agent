@@ -630,6 +630,7 @@ describe('summarizePromptAbComparison', () => {
     assert.equal(result.investigationRefs.candidateLosses[0]?.pairId, 'b-loss#r0');
     assert.equal(result.investigationRefs.candidateLosses[0]?.candidate?.runtimeEventsPath, '/logs/B/b-loss/runtime-events.jsonl');
     assert.equal(result.investigationRefs.budgetDiscordantPairs[0]?.pairId, 'budget#r0');
+    assert.equal(result.investigationRefs.budgetDiscordantPairs[0]?.candidate?.runtimeEventsUnavailableReason, 'budget_exhausted_before_cell_output');
 
     const markdown = renderPromptAbComparisonMarkdown(result);
     assert.match(markdown, /Activated Attempts/);
@@ -637,7 +638,7 @@ describe('summarizePromptAbComparison', () => {
     assert.match(markdown, /B Loss Refs/);
     assert.match(markdown, /b-loss#r0.*\/logs\/B\/b-loss\/runtime-events\.jsonl/);
     assert.match(markdown, /Budget Discordant Refs/);
-    assert.match(markdown, /budget#r0/);
+    assert.match(markdown, /budget#r0.*runtime_unavailable=budget_exhausted_before_cell_output/);
   });
 
   test('keeps sign test auxiliary while using non-inferiority as the decision', () => {
@@ -732,22 +733,52 @@ describe('summarizePromptAbComparison', () => {
     assert.equal(elevenPointLoss.reason, 'pass_rate_delta_below_non_inferiority_margin');
   });
 
-  test('uses paired risk-difference lower bound for paired non-inferiority boundary cases', () => {
-    const taskIds = Array.from({ length: 100 }, (_, index) => `t${index}`);
+  test('uses Wilson/Newcombe lower bound for non-inferiority boundary cases', () => {
+    const onePairTie = summarizePromptAbComparison({
+      runId: 'ab-run',
+      roundId: 'ab-summary',
+      baselinePromptId: 'prune-off',
+      candidatePromptId: 'prune-on',
+      evaluationTaskIds: ['single'],
+      baselineRuns: [[completed('single', true)]],
+      candidateRuns: [[completed('single', true)]],
+    });
+    assert.equal(onePairTie.passRateDelta, 0);
+    assert.equal(onePairTie.nonInferiority.method, 'newcombe_wilson');
+    assert.equal(onePairTie.nonInferiority.lowerBound !== null && onePairTie.nonInferiority.lowerBound < -0.1, true);
+    assert.equal(onePairTie.decision, 'inconclusive');
+    assert.equal(onePairTie.reason, 'non_inferiority_confidence_interval_crosses_margin');
+
+    const tieTaskIds = Array.from({ length: 10 }, (_, index) => `tie-${index}`);
+    const allTieSmallSample = summarizePromptAbComparison({
+      runId: 'ab-run',
+      roundId: 'ab-summary',
+      baselinePromptId: 'prune-off',
+      candidatePromptId: 'prune-on',
+      evaluationTaskIds: tieTaskIds,
+      baselineRuns: [tieTaskIds.map((taskId) => completed(taskId, true))],
+      candidateRuns: [tieTaskIds.map((taskId) => completed(taskId, true))],
+    });
+    assert.equal(allTieSmallSample.passRateDelta, 0);
+    assert.equal(allTieSmallSample.nonInferiority.method, 'newcombe_wilson');
+    assert.equal(allTieSmallSample.nonInferiority.lowerBound !== null && allTieSmallSample.nonInferiority.lowerBound < -0.1, true);
+    assert.equal(allTieSmallSample.decision, 'inconclusive');
+
+    const poweredTaskIds = Array.from({ length: 1000 }, (_, index) => `powered-${index}`);
     const powered = summarizePromptAbComparison({
       runId: 'ab-run',
       roundId: 'ab-summary',
       baselinePromptId: 'prune-off',
       candidatePromptId: 'prune-on',
-      evaluationTaskIds: taskIds,
-      baselineRuns: [taskIds.map((taskId, index) => completed(taskId, index >= 45))],
-      candidateRuns: [taskIds.map((taskId, index) => completed(taskId, index >= 45 && index < 95))],
+      evaluationTaskIds: poweredTaskIds,
+      baselineRuns: [poweredTaskIds.map((taskId) => completed(taskId, true))],
+      candidateRuns: [poweredTaskIds.map((taskId, index) => completed(taskId, index < 950))],
     });
 
     assert.equal(powered.passRateDelta, -0.05);
-    assert.equal(powered.pairedAttempts.losses, 5);
-    assert.equal(powered.pairedAttempts.ties, 95);
-    assert.equal(powered.nonInferiority.method, 'paired_risk_difference');
+    assert.equal(powered.pairedAttempts.losses, 50);
+    assert.equal(powered.pairedAttempts.ties, 950);
+    assert.equal(powered.nonInferiority.method, 'newcombe_wilson');
     assert.equal(powered.nonInferiority.lowerBound !== null && powered.nonInferiority.lowerBound >= -0.1, true);
     assert.equal(powered.decision, 'non_inferior');
     assert.equal(powered.reason, 'non_inferiority_lower_bound_within_margin');
@@ -763,22 +794,23 @@ describe('summarizePromptAbComparison', () => {
       candidateRuns: [smallTaskIds.map((taskId, index) => completed(taskId, index >= 9 && index < 19))],
     });
     assert.equal(underpowered.passRateDelta, -0.05);
-    assert.equal(underpowered.nonInferiority.method, 'paired_risk_difference');
+    assert.equal(underpowered.nonInferiority.method, 'newcombe_wilson');
     assert.equal(underpowered.nonInferiority.lowerBound !== null && underpowered.nonInferiority.lowerBound < -0.1, true);
     assert.equal(underpowered.decision, 'inconclusive');
     assert.equal(underpowered.reason, 'non_inferiority_confidence_interval_crosses_margin');
 
+    const inferiorTaskIds = Array.from({ length: 100 }, (_, index) => `inferior-${index}`);
     const inferior = summarizePromptAbComparison({
       runId: 'ab-run',
       roundId: 'ab-summary',
       baselinePromptId: 'prune-off',
       candidatePromptId: 'prune-on',
-      evaluationTaskIds: taskIds,
-      baselineRuns: [taskIds.map((taskId, index) => completed(taskId, index >= 44))],
-      candidateRuns: [taskIds.map((taskId, index) => completed(taskId, index >= 44 && index < 89))],
+      evaluationTaskIds: inferiorTaskIds,
+      baselineRuns: [inferiorTaskIds.map((taskId, index) => completed(taskId, index >= 44))],
+      candidateRuns: [inferiorTaskIds.map((taskId, index) => completed(taskId, index >= 44 && index < 89))],
     });
     assert.equal(inferior.passRateDelta, -0.11);
-    assert.equal(inferior.nonInferiority.method, 'paired_risk_difference');
+    assert.equal(inferior.nonInferiority.method, 'newcombe_wilson');
     assert.equal(inferior.decision, 'inferior');
     assert.equal(inferior.reason, 'pass_rate_delta_below_non_inferiority_margin');
   });
@@ -798,8 +830,8 @@ describe('summarizePromptAbComparison', () => {
     assert.equal(result.candidate.passed, 1);
     assert.equal(result.pairedAttempts.wins, 1);
     assert.deepEqual(result.pairedAttempts.budgetDiscordantPairIds, ['t1#r0']);
-    assert.equal(result.decision, 'non_inferior');
-    assert.equal(result.reason, 'non_inferiority_lower_bound_within_margin');
+    assert.equal(result.decision, 'inconclusive');
+    assert.equal(result.reason, 'non_inferiority_confidence_interval_crosses_margin');
   });
 
   test('counts baseline pass and candidate timeout as an effective B loss', () => {

@@ -437,6 +437,8 @@ describe('fixed prompt controller', () => {
       assert.equal(result.events[0]?.eligible, true);
       assert.equal(result.events[0]?.passed, false);
       assert.equal(result.events[0]?.expectedPromptHash, hashSystemPrompt('fixed prompt\n'));
+      if (result.events[0]?.type !== 'task_budget_exhausted') assert.fail('expected budget exhaustion event');
+      assert.equal(result.events[0].runtimeEventsUnavailableReason, 'budget_exhausted_before_cell_output');
       assert.match(await readFile(resultsJsonlPath, 'utf8'), /"type":"task_budget_exhausted"/);
     });
   });

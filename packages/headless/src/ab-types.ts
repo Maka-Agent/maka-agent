@@ -140,6 +140,7 @@ export interface AbAttemptRef {
   roundId: string;
   runtimeEventsPath?: string;
   traceEventsPath?: string;
+  runtimeEventsUnavailableReason?: string;
 }
 
 export interface AbPairInvestigationRef {
@@ -156,7 +157,7 @@ export interface AbInvestigationRefs {
 }
 
 export interface AbNonInferioritySummary {
-  method: 'paired_risk_difference' | 'independent_risk_difference' | 'unavailable';
+  method: 'newcombe_wilson' | 'unavailable';
   confidenceLevel: number;
   lowerBound: number | null;
 }

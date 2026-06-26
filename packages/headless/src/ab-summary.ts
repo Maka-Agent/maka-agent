@@ -1,4 +1,4 @@
-import type { FixedPromptTaskWalEvent } from './fixed-prompt-controller.js';
+import { BUDGET_EXHAUSTED_RUNTIME_UNAVAILABLE_REASON, type FixedPromptTaskWalEvent } from './fixed-prompt-controller.js';
 import { assertRatio } from './numeric-guards.js';
 import type {
   AbArmSummary,
@@ -37,7 +37,7 @@ export function summarizeAbComparison(input: SummarizeAbComparisonInput): AbComp
   const passRateDelta = baseline.passRate !== null && candidate.passRate !== null
     ? roundRateDelta(candidate.passRate - baseline.passRate)
     : null;
-  const nonInferiority = summarizeNonInferiority(baseline, candidate, pairedAttempts, passRateDelta);
+  const nonInferiority = summarizeNonInferiority(baseline, candidate, passRateDelta);
   const { decision, reason } = decide(baseline, candidate, pairedAttempts, passRateDelta, nonInferiority, nonInferiorityMargin);
 
   return {
@@ -218,14 +218,19 @@ function pairRef(
 
 function attemptRef(attempt: ObservedAttempt): AbAttemptRef {
   const event = attempt.event;
+  const runtimeEventsPath = 'runtimeEventsPath' in event ? event.runtimeEventsPath : undefined;
+  const runtimeEventsUnavailableReason = event.type === 'task_budget_exhausted' && !runtimeEventsPath
+    ? event.runtimeEventsUnavailableReason ?? BUDGET_EXHAUSTED_RUNTIME_UNAVAILABLE_REASON
+    : undefined;
   return {
     arm: attempt.arm,
     attemptId: event.id,
     taskId: attempt.taskId,
     rep: attempt.rep,
     roundId: event.roundId,
-    ...('runtimeEventsPath' in event ? { runtimeEventsPath: event.runtimeEventsPath } : {}),
+    ...(runtimeEventsPath ? { runtimeEventsPath } : {}),
     ...('traceEventsPath' in event && event.traceEventsPath ? { traceEventsPath: event.traceEventsPath } : {}),
+    ...(runtimeEventsUnavailableReason ? { runtimeEventsUnavailableReason } : {}),
   };
 }
 
@@ -377,51 +382,30 @@ function decide(
 function summarizeNonInferiority(
   baseline: AbArmSummary,
   candidate: AbArmSummary,
-  pairedAttempts: AbAttemptPairSummary,
   passRateDelta: number | null,
 ): AbNonInferioritySummary {
   if (passRateDelta === null || baseline.passRate === null || candidate.passRate === null || baseline.valid === 0 || candidate.valid === 0) {
     return { method: 'unavailable', confidenceLevel: NON_INFERIORITY_CONFIDENCE_LEVEL, lowerBound: null };
   }
-  if (hasCompleteValidPairing(baseline, candidate, pairedAttempts)) {
-    const standardError = pairedRiskDifferenceStandardError(pairedAttempts, passRateDelta);
-    return {
-      method: 'paired_risk_difference',
-      confidenceLevel: NON_INFERIORITY_CONFIDENCE_LEVEL,
-      lowerBound: roundRateDelta(clampRateDelta(passRateDelta - ONE_SIDED_95_Z * standardError)),
-    };
-  }
-  const standardError = Math.sqrt(
-    (baseline.passRate * (1 - baseline.passRate)) / baseline.valid
-    + (candidate.passRate * (1 - candidate.passRate)) / candidate.valid,
-  );
+  const baselineInterval = wilsonScoreInterval(baseline.passed, baseline.valid, ONE_SIDED_95_Z);
+  const candidateInterval = wilsonScoreInterval(candidate.passed, candidate.valid, ONE_SIDED_95_Z);
   return {
-    method: 'independent_risk_difference',
+    method: 'newcombe_wilson',
     confidenceLevel: NON_INFERIORITY_CONFIDENCE_LEVEL,
-    lowerBound: roundRateDelta(clampRateDelta(passRateDelta - ONE_SIDED_95_Z * standardError)),
+    lowerBound: roundRateDelta(clampRateDelta(candidateInterval.lower - baselineInterval.upper)),
   };
 }
 
-function hasCompleteValidPairing(
-  baseline: AbArmSummary,
-  candidate: AbArmSummary,
-  pairedAttempts: AbAttemptPairSummary,
-): boolean {
-  return pairedAttempts.observedPairs > 0
-    && pairedAttempts.missingPairIds.length === 0
-    && pairedAttempts.observedPairs === baseline.valid
-    && pairedAttempts.observedPairs === candidate.valid;
-}
-
-function pairedRiskDifferenceStandardError(
-  pairedAttempts: AbAttemptPairSummary,
-  meanDifference: number,
-): number {
-  const n = pairedAttempts.observedPairs;
-  if (n <= 1) return 0;
-  const sumSquaredDifferences = pairedAttempts.wins + pairedAttempts.losses;
-  const sampleVariance = Math.max(0, (sumSquaredDifferences - n * meanDifference ** 2) / (n - 1));
-  return Math.sqrt(sampleVariance / n);
+function wilsonScoreInterval(passed: number, total: number, z: number): { lower: number; upper: number } {
+  const proportion = passed / total;
+  const z2 = z ** 2;
+  const denominator = 1 + z2 / total;
+  const center = (proportion + z2 / (2 * total)) / denominator;
+  const halfWidth = z * Math.sqrt((proportion * (1 - proportion) + z2 / (4 * total)) / total) / denominator;
+  return {
+    lower: Math.max(0, center - halfWidth),
+    upper: Math.min(1, center + halfWidth),
+  };
 }
 
 function isValidBudgetedOutcome(

@@ -70,7 +70,7 @@ function renderPairRef(ref: AbPairInvestigationRef): string {
 }
 
 function renderAttemptRef(ref: AbAttemptRef): string {
-  return `${ref.arm} task=${ref.taskId} rep=${ref.rep} id=${ref.attemptId} round=${ref.roundId}${ref.runtimeEventsPath ? ` runtime=${ref.runtimeEventsPath}` : ''}${ref.traceEventsPath ? ` trace=${ref.traceEventsPath}` : ''}`;
+  return `${ref.arm} task=${ref.taskId} rep=${ref.rep} id=${ref.attemptId} round=${ref.roundId}${ref.runtimeEventsPath ? ` runtime=${ref.runtimeEventsPath}` : ''}${ref.traceEventsPath ? ` trace=${ref.traceEventsPath}` : ''}${ref.runtimeEventsUnavailableReason ? ` runtime_unavailable=${ref.runtimeEventsUnavailableReason}` : ''}`;
 }
 
 function renderContextBudgetPolicyLine(summary: AbComparisonSummary): string | undefined {
