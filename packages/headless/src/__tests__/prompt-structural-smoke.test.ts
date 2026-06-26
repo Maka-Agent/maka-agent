@@ -449,7 +449,6 @@ function committedEvent(
 function candidateRationale() {
   return {
     failurePattern: 'coverage_regression' as const,
-    evidenceRefs: [],
     hypothesis: 'held-in coverage can improve with a clearer prompt',
     targetedFix: 'make success criteria explicit without task-specific answers',
     predictedFixes: [],

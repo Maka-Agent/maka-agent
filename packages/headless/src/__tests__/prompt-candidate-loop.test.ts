@@ -258,15 +258,7 @@ describe('prompt candidate loop', () => {
     );
   });
 
-  test('rejects unsafe or oversized candidateRationale evidence and text before writing', async () => {
-    await assertRejectsCandidateRationale(
-      validCandidateRationale({ evidenceRefs: ['../held-out-secret'] }),
-      /candidateRationale.evidenceRefs must contain safe analysis signal ids/,
-    );
-    await assertRejectsCandidateRationale(
-      validCandidateRationale({ evidenceRefs: Array.from({ length: 9 }, (_, i) => `signal-${i}`) }),
-      /candidateRationale.evidenceRefs must contain at most 8 items/,
-    );
+  test('rejects unsafe or oversized candidateRationale text before writing', async () => {
     await assertRejectsCandidateRationale(
       validCandidateRationale({ hypothesis: 'held-out regressed after reading tests/test.sh' }),
       /candidateRationale.hypothesis contains forbidden prompt-memory content/,
@@ -1285,6 +1277,7 @@ describe('prompt candidate loop', () => {
     assert.match(prompt, /task-a/);
     assert.match(prompt, /original prompt/);
     assert.match(prompt, /candidateRationale/);
+    assert.equal(prompt.includes('evidenceRefs'), false);
 
     const metaAgent = createScriptedMetaAgent({
       complete: async ({ prompt: renderedPrompt }) => {
@@ -1786,7 +1779,6 @@ function candidatePromptResult(input: {
 function validCandidateRationale(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     failurePattern: 'coverage_regression',
-    evidenceRefs: ['analysis-signal-1'],
     hypothesis: 'coverage fell after the previous prompt change',
     targetedFix: 'keep the completion criteria explicit and conservative',
     predictedFixes: [],

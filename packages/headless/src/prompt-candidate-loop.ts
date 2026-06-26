@@ -8,25 +8,17 @@ import {
   appendFixedPromptWalEvent,
   FIXED_PROMPT_WAL_SCHEMA_VERSION,
   hashSystemPrompt,
+  PROMPT_CANDIDATE_FAILURE_PATTERNS,
   type PromptCandidateCommittedEvent,
+  type PromptCandidateFailurePattern,
   type PromptCandidateRationale,
 } from './fixed-prompt-controller.js';
 
 const execFileAsync = promisify(execFile);
 
-const CANDIDATE_FAILURE_PATTERNS = [
-  'coverage_regression',
-  'tool_failed',
-  'max_tokens',
-  'runtime_error',
-  'verification_failed',
-  'other',
-] as const;
-const CANDIDATE_RATIONALE_MAX_EVIDENCE_REFS = 8;
 const CANDIDATE_RATIONALE_MAX_TASK_IDS = 16;
 const CANDIDATE_RATIONALE_MAX_TEXT_CHARS = 280;
 const CANDIDATE_RATIONALE_MAX_SERIALIZED_CHARS = 2000;
-const SAFE_RATIONALE_ID_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
 const FORBIDDEN_RATIONALE_TEXT_RE = /```|\r|\n|held[-_]out|verifier|expected[- ]output|\/app\/|tests\/|test\.sh|canary|runtime-events|events\.jsonl|raw trace/i;
 
 export interface TrajectoryDigest {
@@ -70,7 +62,7 @@ export type RewardHackScanResult =
   | { decision: 'quarantine'; reason: 'no_model_visible_events' }
   | { decision: 'quarantine'; reason: 'verifier_pattern'; matchedPatterns: readonly string[] };
 
-export type CandidateFailurePattern = typeof CANDIDATE_FAILURE_PATTERNS[number];
+export type CandidateFailurePattern = PromptCandidateFailurePattern;
 
 export type CandidateRationale = PromptCandidateRationale;
 
@@ -383,7 +375,7 @@ export function createScriptedMetaAgent(input: CreateScriptedMetaAgentInput): Me
 export function renderMetaAgentPrompt(input: MetaAgentPromptInput): string {
   return [
     'You are improving one system prompt for benchmark tasks.',
-    'Return JSON only: {"systemPrompt":"...","summary":"...","candidateRationale":{"failurePattern":"coverage_regression|tool_failed|max_tokens|runtime_error|verification_failed|other","evidenceRefs":["safe-analysis-signal-id"],"hypothesis":"short plain text","targetedFix":"short plain text","predictedFixes":["held-in-task-id"],"riskTasks":["held-in-task-id"]}}.',
+    'Return JSON only: {"systemPrompt":"...","summary":"...","candidateRationale":{"failurePattern":"coverage_regression|tool_failed|max_tokens|runtime_error|verification_failed|other","hypothesis":"short plain text","targetedFix":"short plain text","predictedFixes":["held-in-task-id"],"riskTasks":["held-in-task-id"]}}.',
     'candidateRationale.predictedFixes and riskTasks may only reference held-in task ids from the prompt.',
     'Do not include held-out tasks, verifier internals, expected outputs, raw traces, file paths, code fences, or multiline text in candidateRationale.',
     '',
@@ -456,37 +448,20 @@ function parseCandidateRationaleShape(value: unknown): CandidateRationale {
   if (serialized.length > CANDIDATE_RATIONALE_MAX_SERIALIZED_CHARS) {
     throw new Error(`candidateRationale must serialize to at most ${CANDIDATE_RATIONALE_MAX_SERIALIZED_CHARS} characters`);
   }
-  if (!CANDIDATE_FAILURE_PATTERNS.includes(value.failurePattern as typeof CANDIDATE_FAILURE_PATTERNS[number])) {
-    throw new Error(`candidateRationale.failurePattern must be one of: ${CANDIDATE_FAILURE_PATTERNS.join(', ')}`);
+  if (!PROMPT_CANDIDATE_FAILURE_PATTERNS.includes(value.failurePattern as PromptCandidateFailurePattern)) {
+    throw new Error(`candidateRationale.failurePattern must be one of: ${PROMPT_CANDIDATE_FAILURE_PATTERNS.join(', ')}`);
   }
-  const evidenceRefs = parseEvidenceRefsShape(value.evidenceRefs);
   const hypothesis = parseRationaleTextShape(value.hypothesis, 'hypothesis');
   const targetedFix = parseRationaleTextShape(value.targetedFix, 'targetedFix');
   const predictedFixes = parseTaskIdArrayShape(value.predictedFixes, 'predictedFixes');
   const riskTasks = parseTaskIdArrayShape(value.riskTasks, 'riskTasks');
   return {
     failurePattern: value.failurePattern as CandidateFailurePattern,
-    evidenceRefs,
     hypothesis,
     targetedFix,
     predictedFixes,
     riskTasks,
   };
-}
-
-function parseEvidenceRefsShape(value: unknown): readonly string[] {
-  if (!Array.isArray(value)) {
-    throw new Error('candidateRationale.evidenceRefs must be an array');
-  }
-  if (value.length > CANDIDATE_RATIONALE_MAX_EVIDENCE_REFS) {
-    throw new Error(`candidateRationale.evidenceRefs must contain at most ${CANDIDATE_RATIONALE_MAX_EVIDENCE_REFS} items`);
-  }
-  for (const item of value) {
-    if (typeof item !== 'string' || !SAFE_RATIONALE_ID_RE.test(item)) {
-      throw new Error('candidateRationale.evidenceRefs must contain safe analysis signal ids');
-    }
-  }
-  return value;
 }
 
 function parseRationaleTextShape(value: unknown, field: string): string {

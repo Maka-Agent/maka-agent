@@ -153,17 +153,19 @@ export interface PromptCandidateCommittedEvent {
   candidateRationale: PromptCandidateRationale;
 }
 
-export type PromptCandidateFailurePattern =
-  | 'coverage_regression'
-  | 'tool_failed'
-  | 'max_tokens'
-  | 'runtime_error'
-  | 'verification_failed'
-  | 'other';
+export const PROMPT_CANDIDATE_FAILURE_PATTERNS = [
+  'coverage_regression',
+  'tool_failed',
+  'max_tokens',
+  'runtime_error',
+  'verification_failed',
+  'other',
+] as const;
+
+export type PromptCandidateFailurePattern = typeof PROMPT_CANDIDATE_FAILURE_PATTERNS[number];
 
 export interface PromptCandidateRationale {
   failurePattern: PromptCandidateFailurePattern;
-  evidenceRefs: readonly string[];
   hypothesis: string;
   targetedFix: string;
   predictedFixes: readonly string[];
