@@ -491,6 +491,14 @@ function fakeMetaAgent(): MetaAgent {
   return async (promptInput) => ({
     systemPrompt: `candidate prompt ${promptInput.roundId}\n`,
     summary: `tuned for ${promptInput.roundId}`,
+    candidateRationale: {
+      failurePattern: 'coverage_regression',
+      evidenceRefs: [],
+      hypothesis: 'stable held-in coverage can improve with a clearer prompt',
+      targetedFix: 'make the success criteria explicit without adding task-specific answers',
+      predictedFixes: [],
+      riskTasks: [],
+    },
   });
 }
 

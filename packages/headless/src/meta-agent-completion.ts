@@ -4,7 +4,8 @@ import { runOneShotCompletion } from './one-shot-completion.js';
 
 const META_AGENT_SYSTEM =
   'You optimize a single benchmark system prompt. Reply with exactly one JSON object '
-  + '{"systemPrompt": "...", "summary": "..."} and nothing else — no markdown fences, no prose.';
+  + '{"systemPrompt":"...","summary":"...","candidateRationale":{"failurePattern":"coverage_regression|tool_failed|max_tokens|runtime_error|verification_failed|other","evidenceRefs":["safe-analysis-signal-id"],"hypothesis":"short plain text","targetedFix":"short plain text","predictedFixes":["held-in-task-id"],"riskTasks":["held-in-task-id"]}} '
+  + 'and nothing else - no markdown fences, no prose.';
 
 export interface CreateAiSdkMetaAgentInput {
   connection: LlmConnection;

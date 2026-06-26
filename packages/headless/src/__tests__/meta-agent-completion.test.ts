@@ -20,6 +20,14 @@ const connection: LlmConnection = {
 };
 
 const base = { connection, apiKey: 'unused', modelId: 'deepseek-v4-flash' } as const;
+const candidateRationale = {
+  failurePattern: 'coverage_regression',
+  evidenceRefs: ['analysis-signal-1'],
+  hypothesis: 'coverage fell after the previous prompt change',
+  targetedFix: 'keep the completion criteria explicit and conservative',
+  predictedFixes: [],
+  riskTasks: [],
+} as const;
 
 describe('extractJsonObject', () => {
   test('strips a ```json fence', () => {
@@ -45,12 +53,13 @@ describe('createAiSdkMetaAgentCompletion', () => {
   test('cleans fenced JSON so parseMetaAgentResult accepts it', async () => {
     const complete = createAiSdkMetaAgentCompletion({
       ...base,
-      generate: async () => '```json\n{"systemPrompt":"NEW PROMPT","summary":"tightened rules"}\n```',
+      generate: async () => `\`\`\`json\n${JSON.stringify({ systemPrompt: 'NEW PROMPT', summary: 'tightened rules', candidateRationale })}\n\`\`\``,
     });
     const raw = await complete({ prompt: 'render' });
     assert.deepEqual(parseMetaAgentResult(raw), {
       systemPrompt: 'NEW PROMPT',
       summary: 'tightened rules',
+      candidateRationale,
     });
   });
 
@@ -74,7 +83,7 @@ describe('createAiSdkMetaAgent', () => {
       ...base,
       generate: async ({ prompt }) => {
         assert.match(prompt, /Current System Prompt/);
-        return '{"systemPrompt":"IMPROVED","summary":"removed redundant step"}';
+        return JSON.stringify({ systemPrompt: 'IMPROVED', summary: 'removed redundant step', candidateRationale });
       },
     });
     const result = await agent({
@@ -87,5 +96,6 @@ describe('createAiSdkMetaAgent', () => {
     });
     assert.equal(result.systemPrompt, 'IMPROVED');
     assert.equal(result.summary, 'removed redundant step');
+    assert.deepEqual(result.candidateRationale, candidateRationale);
   });
 });
