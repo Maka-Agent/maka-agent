@@ -125,6 +125,54 @@ describe('runPromptOptimizationLoop', () => {
     });
   });
 
+  test('matches attribution root cause against prompt-time analysis after coverage signal is fixed', async () => {
+    await withHarness(async (harness) => {
+      const promptInputs: MetaAgentPromptInput[] = [];
+      const heldInTasks = makeTasks('hin', 2);
+      const heldOutTasks = makeTasks('hout', 1);
+      const rewardFor = (roundId: string, taskId: string): number => {
+        if (taskId.startsWith('hout-')) return 1;
+        if (roundId.startsWith('baseline-')) return 1;
+        return roundId === 'round-0' && taskId === 'hin-0' ? 0 : 1;
+      };
+
+      await runLoop(harness, {
+        heldInTasks,
+        heldOutTasks,
+        rewardFor,
+        rounds: 2,
+        baselineRuns: 2,
+        shouldFail: (roundId, taskId) => roundId === 'round-0' && taskId === 'hin-0',
+        metaAgent: async (promptInput) => {
+          promptInputs.push(promptInput);
+          return {
+            systemPrompt: `candidate prompt ${promptInput.roundId}\n`,
+            summary: `tuned for ${promptInput.roundId}`,
+            candidateRationale: {
+              failurePattern: 'coverage_regression',
+              evidenceRefs: evidenceRefsFor(promptInput),
+              hypothesis: 'restore coverage for held-in tasks',
+              targetedFix: 'make artifact completion constraints explicit',
+              predictedFixes: ['hin-0'],
+              riskTasks: [],
+            },
+          };
+        },
+      });
+
+      const promptTimeCoverageSignal = promptInputs[1]?.rsiAnalysis?.signals.find((signal) => signal.kind === 'coverage_regression');
+      assert.ok(promptTimeCoverageSignal);
+      const events = await readFixedPromptWal(harness.resultsJsonlPath);
+      const secondAttribution = events.find((event) => event.type === 'rsi_controller_attribution' && event.roundId === 'round-1');
+      assert.equal(secondAttribution?.type, 'rsi_controller_attribution');
+      if (secondAttribution?.type === 'rsi_controller_attribution') {
+        assert.deepEqual(secondAttribution.evidenceRefs, [promptTimeCoverageSignal.id]);
+        assert.deepEqual(secondAttribution.predictedFixes, [{ taskId: 'hin-0', outcome: 'unchanged' }]);
+        assert.equal(secondAttribution.rootCauseSignalMatch, 'matched');
+      }
+    });
+  });
+
   test('does not teach held-out coverage discard reasons to the next prompt', async () => {
     await withHarness(async (harness) => {
       const promptInputs: MetaAgentPromptInput[] = [];
@@ -611,8 +659,9 @@ function fakeMetaAgent(): MetaAgent {
 }
 
 function evidenceRefsFor(promptInput: MetaAgentPromptInput): string[] {
-  const firstSignal = promptInput.rsiAnalysis?.signals[0];
-  return firstSignal ? [firstSignal.id] : [];
+  const signal = promptInput.rsiAnalysis?.signals.find((item) => item.kind === 'coverage_regression')
+    ?? promptInput.rsiAnalysis?.signals[0];
+  return signal ? [signal.id] : [];
 }
 
 /** A Harbor runner that fabricates a completed, correctly-hashed cell per task

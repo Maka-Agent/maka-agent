@@ -260,6 +260,49 @@ describe('RSI controller attribution', () => {
     assert.equal(matched.rootCauseSignalMatch, 'matched');
     assert.equal(contradicted.rootCauseSignalMatch, 'contradicted');
   });
+
+  test('matches root cause against prompt-time analysis when post-eval signals disappear', () => {
+    const attribution = buildRsiControllerAttribution({
+      runId: 'run-1',
+      roundId: 'round-0',
+      candidateCommitSha: 'commit-1',
+      candidateRationaleHash: 'sha256:rationale',
+      candidateRationale: {
+        failurePattern: 'coverage_regression',
+        evidenceRefs: ['rsi-sig:coverage'],
+        hypothesis: 'coverage fell before this candidate',
+        targetedFix: 'restore the missing completion requirement',
+        predictedFixes: ['task-a'],
+        riskTasks: [],
+      },
+      promptTimeAnalysis: {
+        heldInTaskSetHash: 'sha256:held-in-before',
+        transitionVsLastKept: [],
+        transitionVsPreviousCandidate: [],
+        coverageRegressionTaskIds: ['task-a'],
+        errorClassDistribution: [],
+        toolFailureClusters: [],
+        signals: [{ id: 'rsi-sig:coverage', kind: 'coverage_regression', taskIds: ['task-a'] }],
+      },
+      analysis: {
+        heldInTaskSetHash: 'sha256:held-in-after',
+        transitionVsLastKept: [{ taskId: 'task-a', from: 'fail', to: 'pass' }],
+        transitionVsPreviousCandidate: [],
+        coverageRegressionTaskIds: [],
+        errorClassDistribution: [],
+        toolFailureClusters: [],
+        signals: [],
+      },
+      heldInTaskIds: ['task-a'],
+      lastKeptEvents: [completed({ taskId: 'task-a', passed: false })],
+      candidateEvents: [completed({ taskId: 'task-a', passed: true })],
+      decision: acceptanceResult({ decision: 'keep', reason: 'held_in_improved' }),
+    });
+
+    assert.equal(attribution.heldInTaskSetHash, 'sha256:held-in-after');
+    assert.deepEqual(attribution.predictedFixes, [{ taskId: 'task-a', outcome: 'improved' }]);
+    assert.equal(attribution.rootCauseSignalMatch, 'matched');
+  });
 });
 
 function completed(input: {

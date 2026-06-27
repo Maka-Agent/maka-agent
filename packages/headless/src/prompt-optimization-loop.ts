@@ -459,6 +459,7 @@ export async function runPromptOptimizationLoop(
       candidateCommitSha: candidate.commitSha,
       candidateRationaleHash: candidate.candidateRationaleHash,
       candidateRationale: candidate.candidateRationale,
+      promptTimeAnalysis: promptAnalysis,
       analysis: await analyzeRsiRound({
         heldInTaskIds: stableHeldInTaskIds,
         lastKeptEvents: lastKeptHeldInEvents,

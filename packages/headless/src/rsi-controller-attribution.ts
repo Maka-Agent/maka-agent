@@ -46,6 +46,7 @@ export interface BuildRsiControllerAttributionInput {
   candidateCommitSha: string;
   candidateRationaleHash: string;
   candidateRationale: PromptCandidateRationale;
+  promptTimeAnalysis?: RsiRoundAnalysis;
   analysis: RsiRoundAnalysis;
   heldInTaskIds: readonly string[];
   lastKeptEvents: readonly FixedPromptTaskWalEvent[];
@@ -86,7 +87,7 @@ export function buildRsiControllerAttribution(
       decision: input.decision.decision,
       reason: input.decision.reason,
     },
-    rootCauseSignalMatch: rootCauseSignalMatch(input.candidateRationale, input.analysis),
+    rootCauseSignalMatch: rootCauseSignalMatch(input.candidateRationale, input.promptTimeAnalysis ?? input.analysis),
   };
 }
 
