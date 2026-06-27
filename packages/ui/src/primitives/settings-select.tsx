@@ -108,7 +108,7 @@ export function SettingsSelect<T extends string>(
         </SelectValue>
       </SelectTrigger>
       <SelectPortal>
-        <SelectPositioner alignItemWithTrigger={false} sideOffset={6}>
+        <SelectPositioner alignItemWithTrigger={false} sideOffset={6} className="settingsSelectPositioner">
           <SelectPopup className="settingsSelectPopup">
             {props.options.map((option) => {
               const [value, label] = option;

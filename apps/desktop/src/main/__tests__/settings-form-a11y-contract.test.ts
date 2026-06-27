@@ -109,6 +109,7 @@ describe('Settings form accessibility labels', () => {
     const settingsSelect = await readRepo('packages/ui/src/primitives/settings-select.tsx');
     const passwordInput = await readRepo('apps/desktop/src/renderer/settings/password-input.tsx');
     const providersPanel = await readRepo('apps/desktop/src/renderer/settings/ProvidersPanel.tsx');
+    const styles = await readRendererContractCss();
 
     assert.match(settings, /SettingsSelect,/);
     assert.match(settingsSelect, /SelectItem,[\s\S]*SelectPopup,[\s\S]*SelectPortal,[\s\S]*SelectPositioner,[\s\S]*SelectRoot,[\s\S]*SelectTrigger,[\s\S]*SelectValue,/);
@@ -120,7 +121,12 @@ describe('Settings form accessibility labels', () => {
       assert.ok(providersPanelUiImport.includes(name), `ProvidersPanel should import ${name} from @maka/ui`);
     }
     assert.match(settingsSelect, /export function SettingsSelect<T extends string>/);
-    assert.match(settingsSelect, /<SelectPositioner alignItemWithTrigger=\{false\} sideOffset=\{6\}>/);
+    assert.match(settingsSelect, /<SelectPositioner alignItemWithTrigger=\{false\} sideOffset=\{6\} className="settingsSelectPositioner">/);
+    assert.match(
+      styles,
+      /\.settingsSelectPositioner\s*\{[\s\S]*z-index:\s*var\(--z-dropdown\);[\s\S]*\}/,
+      'SettingsSelect popups must stack above full-page Settings rows so visible options are clickable.',
+    );
 
     // ThemeSettingsPage uses native <button> on purpose for the radio-card
     // pickers (mode / palette): the cards are a custom grid with a preview

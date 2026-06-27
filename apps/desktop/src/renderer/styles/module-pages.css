@@ -823,6 +823,11 @@
   font-weight: 600;
 }
 
+.settingsSelectPositioner {
+  z-index: var(--z-dropdown);
+  outline: none;
+}
+
 .settingsSelectPopup {
   min-width: var(--anchor-width);
 }
