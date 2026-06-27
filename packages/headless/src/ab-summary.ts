@@ -18,6 +18,7 @@ import type {
   AbTokenCostSummary,
   SummarizeAbComparisonInput,
 } from './ab-types.js';
+import type { HarborCellContextBudgetSummary } from './cell-output.js';
 
 const DEFAULT_NON_INFERIORITY_MARGIN = 0.10;
 const NON_INFERIORITY_CONFIDENCE_LEVEL = 0.95;
@@ -30,8 +31,9 @@ export function summarizeAbComparison(input: SummarizeAbComparisonInput): AbComp
     : DEFAULT_NON_INFERIORITY_MARGIN;
   const reps = input.baselineRuns.length;
   const taskIds = [...input.evaluationTaskIds];
-  const baseline = summarizeArm(input.baselineRuns, taskIds, reps, 'A');
-  const candidate = summarizeArm(input.candidateRuns, taskIds, reps, 'B');
+  const activePrunePairIds = candidateActivePrunePairIds(observedArmAttempts(input.candidateRuns, taskIds, 'B'));
+  const baseline = summarizeArm(input.baselineRuns, taskIds, reps, 'A', activePrunePairIds);
+  const candidate = summarizeArm(input.candidateRuns, taskIds, reps, 'B', activePrunePairIds);
   const taskLevel = summarizeTasks(input.baselineRuns, input.candidateRuns, taskIds, reps);
   const pairedAttempts = summarizeAttemptPairs(input.baselineRuns, input.candidateRuns, taskIds);
   const investigationRefs = summarizeInvestigationRefs(input.baselineRuns, input.candidateRuns, taskIds);
@@ -74,6 +76,7 @@ function summarizeArm(
   taskIds: readonly string[],
   reps: number,
   arm: AbArmLabel,
+  activePrunePairIds: ReadonlySet<string>,
 ): AbArmSummary {
   const attempts = taskIds.length * reps;
   const observedAttempts = observedArmAttempts(runs, taskIds, arm);
@@ -83,6 +86,7 @@ function summarizeArm(
   const passed = valid.filter((event) => event.passed).length;
   const durations = budgetedRuns.map((event) => event.durationMs);
   const contextBudget = summarizeContextBudget(observedAttempts);
+  const activePruneSubset = summarizeActivePruneSubset(observedAttempts, activePrunePairIds);
   const contextBudgetPolicy = summarizeContextBudgetPolicy(observed);
   const tokenCostSummary = summarizeTokenCost(budgetedRuns);
   return {
@@ -102,7 +106,57 @@ function summarizeArm(
     tokenCostSummary,
     ...(contextBudgetPolicy ? { contextBudgetPolicy } : {}),
     ...(contextBudget ? { contextBudget } : {}),
+    ...(activePruneSubset ? { activePruneSubset } : {}),
   };
+}
+
+function candidateActivePrunePairIds(attempts: readonly ObservedAttempt[]): ReadonlySet<string> {
+  return new Set(
+    attempts
+      .filter((attempt) => 'contextBudgetSummary' in attempt.event && isActivePruneActivated(attempt.event.contextBudgetSummary))
+      .map(attemptPairId),
+  );
+}
+
+function summarizeActivePruneSubset(
+  attempts: readonly ObservedAttempt[],
+  activePrunePairIds: ReadonlySet<string>,
+): AbArmSummary['activePruneSubset'] {
+  if (activePrunePairIds.size === 0) return undefined;
+  const sliceAttempts = attempts.filter((attempt) => activePrunePairIds.has(attemptPairId(attempt)));
+  const observed = sliceAttempts.map((attempt) => attempt.event);
+  const valid = observed.filter(isValidBudgetedOutcome);
+  const budgetedRuns = valid.filter((event) => event.type !== 'task_budget_exhausted');
+  const passed = valid.filter((event) => event.passed).length;
+  const durations = budgetedRuns.map((event) => event.durationMs);
+  const tokenCostSummary = summarizeTokenCost(budgetedRuns);
+  const contextBudget = summarizeContextBudget(sliceAttempts);
+  return {
+    taskCount: new Set([...activePrunePairIds].map(pairTaskId)).size,
+    attempts: activePrunePairIds.size,
+    observed: observed.length,
+    valid: valid.length,
+    passed,
+    passRate: valid.length > 0 ? passed / valid.length : null,
+    completed: observed.filter((event) => event.type === 'task_completed').length,
+    budgetExhausted: observed.filter((event) => event.type === 'task_budget_exhausted').length,
+    infraFailed: observed.filter((event) => event.type === 'task_infra_failed').length,
+    plumbingFailed: observed.filter((event) => event.type === 'task_plumbing_failed').length,
+    missing: activePrunePairIds.size - observed.length,
+    coverageRate: activePrunePairIds.size > 0 ? valid.length / activePrunePairIds.size : 1,
+    totalCostUsd: tokenCostSummary.costUsd,
+    meanDurationMs: durations.length > 0 ? sum(durations) / durations.length : null,
+    tokenCostSummary,
+    ...(contextBudget ? { contextBudget } : {}),
+  };
+}
+
+function attemptPairId(attempt: ObservedAttempt): string {
+  return `${attempt.taskId}#r${attempt.rep}`;
+}
+
+function pairTaskId(pairId: string): string {
+  return pairId.slice(0, pairId.lastIndexOf('#r'));
 }
 
 function summarizeTokenCost(
@@ -160,14 +214,17 @@ function summarizeContextBudget(attempts: readonly ObservedAttempt[]): AbContext
     .filter((summary): summary is NonNullable<typeof summary> => summary !== undefined);
   if (summaries.length === 0) return undefined;
   const activatedAttemptIds = attempts
-    .filter((attempt) => ('contextBudgetSummary' in attempt.event && (attempt.event.contextBudgetSummary?.prunedToolResults ?? 0) > 0))
+    .filter((attempt) => ('contextBudgetSummary' in attempt.event && isActivePruneActivated(attempt.event.contextBudgetSummary)))
     .map((attempt) => attempt.event.id);
   return {
     diagnosticAttempts: summaries.length,
-    activatedAttempts: summaries.filter((summary) => summary.prunedToolResults > 0).length,
+    activatedAttempts: summaries.filter(isActivePruneActivated).length,
     activatedAttemptIds,
     diagnosticEvents: sum(summaries.map((summary) => summary.diagnosticEvents)),
     prunedToolResults: sum(summaries.map((summary) => summary.prunedToolResults)),
+    activePrunedToolResults: sum(summaries.map((summary) => summary.activePrunedToolResults)),
+    activeEstimatedTokensSaved: sum(summaries.map((summary) => summary.activeEstimatedTokensSaved)),
+    activeArchiveFailures: sum(summaries.map((summary) => summary.activeArchiveFailures)),
     archivePlaceholders: sum(summaries.map((summary) => summary.archivePlaceholders)),
     archiveWriteFailures: sum(summaries.map((summary) => summary.archiveWriteFailures)),
     retrievedArchiveToolResults: sum(summaries.map((summary) => summary.retrievedArchiveToolResults)),
@@ -175,6 +232,10 @@ function summarizeContextBudget(attempts: readonly ObservedAttempt[]): AbContext
     archiveRetrievalSkipped: sum(summaries.map((summary) => summary.archiveRetrievalSkipped)),
     archiveRetrievalFailures: sum(summaries.map((summary) => summary.archiveRetrievalFailures)),
   };
+}
+
+function isActivePruneActivated(summary: HarborCellContextBudgetSummary | undefined): boolean {
+  return (summary?.activePrunedToolResults ?? 0) > 0;
 }
 
 function summarizeInvestigationRefs(
@@ -188,7 +249,7 @@ function summarizeInvestigationRefs(
   const budgetDiscordantPairs: AbPairInvestigationRef[] = [];
   const infraOrPlumbingDiscordantPairs: AbPairInvestigationRef[] = [];
   const activatedAttempts = [...baselineByPair.values(), ...candidateByPair.values()]
-    .filter((attempt) => ('contextBudgetSummary' in attempt.event && (attempt.event.contextBudgetSummary?.prunedToolResults ?? 0) > 0))
+    .filter((attempt) => ('contextBudgetSummary' in attempt.event && isActivePruneActivated(attempt.event.contextBudgetSummary)))
     .map(attemptRef);
 
   for (let rep = 0; rep < baselineRuns.length; rep += 1) {

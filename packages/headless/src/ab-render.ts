@@ -9,6 +9,7 @@ import type {
 
 export function renderAbComparisonMarkdown(summary: AbComparisonSummary): string {
   const contextBudgetLine = renderContextBudgetLine(summary);
+  const activePruneSubsetLine = renderActivePruneSubsetLine(summary);
   const contextBudgetPolicyLine = renderContextBudgetPolicyLine(summary);
   const investigationRefLines = renderInvestigationRefLines(summary);
   const lines = [
@@ -31,6 +32,7 @@ export function renderAbComparisonMarkdown(summary: AbComparisonSummary): string
     `- Infra outcomes: A infra_failed=${summary.baseline.infraFailed}, B infra_failed=${summary.candidate.infraFailed}; A plumbing_failed=${summary.baseline.plumbingFailed}, B plumbing_failed=${summary.candidate.plumbingFailed}`,
     ...(contextBudgetPolicyLine ? [contextBudgetPolicyLine] : []),
     ...(contextBudgetLine ? [contextBudgetLine] : []),
+    ...(activePruneSubsetLine ? [activePruneSubsetLine] : []),
     '',
     '## Limitation',
     '',
@@ -106,7 +108,49 @@ function renderContextBudgetLine(summary: AbComparisonSummary): string | undefin
   if (!summary.baseline.contextBudget && !summary.candidate.contextBudget) return undefined;
   const baseline = contextBudgetOrZero(summary.baseline.contextBudget);
   const candidate = contextBudgetOrZero(summary.candidate.contextBudget);
-  return `- Context budget: A activated=${baseline.activatedAttempts}/${baseline.diagnosticAttempts} pruned=${baseline.prunedToolResults} retrieved=${baseline.retrievedArchiveToolResults}, B activated=${candidate.activatedAttempts}/${candidate.diagnosticAttempts} pruned=${candidate.prunedToolResults} retrieved=${candidate.retrievedArchiveToolResults}`;
+  return `- Context budget: A ${renderContextBudgetMetrics(baseline)}, B ${renderContextBudgetMetrics(candidate)}`;
+}
+
+function renderActivePruneSubsetLine(summary: AbComparisonSummary): string | undefined {
+  if (!summary.baseline.activePruneSubset && !summary.candidate.activePruneSubset) return undefined;
+  const baseline = activePruneSubsetOrZero(summary.baseline.activePruneSubset);
+  const candidate = activePruneSubsetOrZero(summary.candidate.activePruneSubset);
+  return `- Active prune subset: A ${renderActivePruneSubsetMetrics(baseline)}, B ${renderActivePruneSubsetMetrics(candidate)}`;
+}
+
+function renderContextBudgetMetrics(summary: AbContextBudgetSummary): string {
+  return [
+    `activated=${summary.activatedAttempts}/${summary.diagnosticAttempts}`,
+    `stale_pruned=${summary.prunedToolResults}`,
+    `active_pruned=${summary.activePrunedToolResults}`,
+    `active_tokens_saved=${summary.activeEstimatedTokensSaved}`,
+    `active_archive_failures=${summary.activeArchiveFailures}`,
+    `archive_placeholders=${summary.archivePlaceholders}`,
+    `archive_write_failures=${summary.archiveWriteFailures}`,
+    `retrieved=${summary.retrievedArchiveToolResults}`,
+    `retrieved_tokens=${summary.retrievedArchiveEstimatedTokens}`,
+    `retrieval_skipped=${summary.archiveRetrievalSkipped}`,
+    `retrieval_failures=${summary.archiveRetrievalFailures}`,
+  ].join(' ');
+}
+
+function renderActivePruneSubsetMetrics(summary: NonNullable<AbComparisonSummary['candidate']['activePruneSubset']>): string {
+  const contextBudget = contextBudgetOrZero(summary.contextBudget);
+  return [
+    `tasks=${summary.taskCount}`,
+    `attempts=${summary.attempts}`,
+    `observed=${summary.observed}`,
+    `missing=${summary.missing}`,
+    `coverage=${rate(summary.coverageRate)}`,
+    `pass_rate=${rate(summary.passRate)}`,
+    `passed=${summary.passed}/${summary.valid}`,
+    `completed=${summary.completed}`,
+    `timed_out=${summary.budgetExhausted}`,
+    `infra_failed=${summary.infraFailed}`,
+    `plumbing_failed=${summary.plumbingFailed}`,
+    renderTokenCost(summary.tokenCostSummary),
+    renderContextBudgetMetrics(contextBudget),
+  ].join(' ');
 }
 
 function contextBudgetOrZero(summary: AbContextBudgetSummary | undefined): AbContextBudgetSummary {
@@ -116,11 +160,48 @@ function contextBudgetOrZero(summary: AbContextBudgetSummary | undefined): AbCon
     activatedAttemptIds: [],
     diagnosticEvents: 0,
     prunedToolResults: 0,
+    activePrunedToolResults: 0,
+    activeEstimatedTokensSaved: 0,
+    activeArchiveFailures: 0,
     archivePlaceholders: 0,
     archiveWriteFailures: 0,
     retrievedArchiveToolResults: 0,
     retrievedArchiveEstimatedTokens: 0,
     archiveRetrievalSkipped: 0,
     archiveRetrievalFailures: 0,
+  };
+}
+
+function activePruneSubsetOrZero(
+  summary: AbComparisonSummary['candidate']['activePruneSubset'] | undefined,
+): NonNullable<AbComparisonSummary['candidate']['activePruneSubset']> {
+  return summary ?? {
+    taskCount: 0,
+    attempts: 0,
+    observed: 0,
+    valid: 0,
+    passed: 0,
+    passRate: null,
+    completed: 0,
+    budgetExhausted: 0,
+    infraFailed: 0,
+    plumbingFailed: 0,
+    missing: 0,
+    coverageRate: 1,
+    totalCostUsd: 0,
+    meanDurationMs: null,
+    tokenCostSummary: {
+      input: 0,
+      cachedInput: 0,
+      cacheHitInput: 0,
+      cacheMissInput: 0,
+      cacheWriteInput: 0,
+      output: 0,
+      reasoning: 0,
+      total: 0,
+      costUsd: 0,
+      meanDurationMs: null,
+    },
+    contextBudget: contextBudgetOrZero(undefined),
   };
 }

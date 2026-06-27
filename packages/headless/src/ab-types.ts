@@ -65,6 +65,26 @@ export interface AbArmSummary {
   tokenCostSummary: AbTokenCostSummary;
   contextBudgetPolicy?: AbContextBudgetPolicySummary;
   contextBudget?: AbContextBudgetSummary;
+  activePruneSubset?: AbActivePruneSubsetSummary;
+}
+
+export interface AbActivePruneSubsetSummary {
+  taskCount: number;
+  attempts: number;
+  observed: number;
+  valid: number;
+  passed: number;
+  passRate: number | null;
+  completed: number;
+  budgetExhausted: number;
+  infraFailed: number;
+  plumbingFailed: number;
+  missing: number;
+  coverageRate: number;
+  totalCostUsd: number;
+  meanDurationMs: number | null;
+  tokenCostSummary: AbTokenCostSummary;
+  contextBudget?: AbContextBudgetSummary;
 }
 
 export interface AbTokenCostSummary {
@@ -92,6 +112,9 @@ export interface AbContextBudgetSummary {
   activatedAttemptIds: string[];
   diagnosticEvents: number;
   prunedToolResults: number;
+  activePrunedToolResults: number;
+  activeEstimatedTokensSaved: number;
+  activeArchiveFailures: number;
   archivePlaceholders: number;
   archiveWriteFailures: number;
   retrievedArchiveToolResults: number;
