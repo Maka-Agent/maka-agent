@@ -97,7 +97,7 @@ export function buildCapabilitySnapshotCollection(input: {
       runtimeProbe: {
         state: 'not_run',
         source: 'runtime_probe',
-        reason: '在设置 → 语音模型运行本地录音自检',
+        reason: '在设置 → 语音运行本地录音自检',
       },
     }),
     staticCapability({

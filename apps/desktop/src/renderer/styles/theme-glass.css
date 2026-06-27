@@ -19,6 +19,19 @@
 }
 
 @layer components {
+  /* PR-SIDEBAR-GLASS-VIBRANCY-0 (WAWQAQ msg `6c0b8a7c` 2026-06-27):
+     `vibrancy: 'sidebar'` was being set on the BrowserWindow and the
+     shell-level `background: transparent` rule was already here, BUT
+     the parent `.appFrame` was still painting solid `--surface-canvas`
+     (see PR-CHAT-CHROME-FIX-1) — so the vibrancy material was rendered
+     behind an opaque cover. Force the appFrame transparent on darwin so
+     the native blur substrate actually shows through. This is the
+     reference-atlas `light-glass` / `dark-glass` mode that we documented
+     but never wired all the way through. */
+  html[data-os="darwin"] .appFrame {
+    background: transparent;
+  }
+
   html[data-os="darwin"] .maka-shell-2col {
     background: transparent;
   }

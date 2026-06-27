@@ -42,5 +42,5 @@ export const BOT_BRAND: Record<BotProvider, BotBrand> = {
   wechat:   { color: '#07C160', glyph: '微', iconifyId: 'maka-bot:wechat', configDocUrl: 'https://developers.weixin.qq.com/doc/offiaccount/Getting_Started/Overview.html' },
   discord:  { color: '#5865F2', glyph: 'D', iconifyId: 'maka-bot:discord', configDocUrl: 'https://discord.com/developers/docs/intro' },
   dingtalk: { color: '#1372FB', glyph: '钉', iconifyId: 'maka-bot:dingtalk', configDocUrl: 'https://open.dingtalk.com/document/' },
-  qq:       { color: '#EB1923', glyph: 'Q', iconifyId: 'maka-bot:qq', configDocUrl: 'https://bot.q.qq.com/wiki/' },
+  qq:       { color: '#12B7F5', glyph: 'Q', iconifyId: 'maka-bot:qq', configDocUrl: 'https://bot.q.qq.com/wiki/' },
 };

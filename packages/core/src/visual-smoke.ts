@@ -22,8 +22,10 @@ export type VisualSmokeScenario =
   | 'stale-sessions'
   | 'settings-data'
   // PR-SETTINGS-IA-CONSOLIDATE-0 + PR-SETTINGS-REVIEW-0: memory and
-  // daily-review split back apart; appearance + voice-gateway stay
-  // merged; network folded into general.
+  // daily-review split back apart; appearance stays merged; network
+  // folded into general. PR-VOICE-GATEWAY-SPLIT-0 (WAWQAQ msg
+  // `d3ea9a33` 2026-06-26) further split voice + open-gateway into
+  // their own nav items.
   | 'settings-appearance'
   | 'settings-bots'
   | 'settings-about'

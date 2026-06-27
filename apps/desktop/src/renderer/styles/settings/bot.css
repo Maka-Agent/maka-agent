@@ -155,7 +155,7 @@
   .settingsBotHero[data-provider="wechat"]   { --bot-brand-color: #07C160; }
   .settingsBotHero[data-provider="discord"]  { --bot-brand-color: #5865F2; }
   .settingsBotHero[data-provider="dingtalk"] { --bot-brand-color: #1372FB; }
-  .settingsBotHero[data-provider="qq"]       { --bot-brand-color: #EB1923; }
+  .settingsBotHero[data-provider="qq"]       { --bot-brand-color: #12B7F5; }
 
   .settingsBotHeroBody {
     min-width: 0;
@@ -386,10 +386,6 @@
 }
 
 .settingsRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
   display: grid;
   grid-template-columns: minmax(150px, 0.36fr) minmax(0, 1fr);
   align-items: center;

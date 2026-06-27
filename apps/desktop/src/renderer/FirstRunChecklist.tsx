@@ -221,7 +221,7 @@ export function FirstRunChecklist(props: FirstRunChecklistProps) {
         reason: '请求麦克风权限、录 2 秒本地样本，确认采集链路通；不上传、不保存、不写记忆。',
         done: false,
         trackCompletion: false,
-        onClick: () => props.onOpenSettingsSection('voice-gateway'),
+        onClick: () => props.onOpenSettingsSection('voice'),
       },
     ];
   }, [settings, planReminders, workspaceInstructionCount, props]);

@@ -9,16 +9,19 @@ const CAPABILITY_SNAPSHOT = join(REPO_ROOT, 'apps', 'desktop', 'src', 'main', 'c
 
 describe('voice capture smoke Settings contract', () => {
   it('does not present voice models as a coming-soon nav item', async () => {
-    // PR-SETTINGS-IA-CONSOLIDATE-0 (2026-06-23): 语音模型 + 开放网关
-    // merged into a single 语音与网关 (`voice-gateway`) section. The
-    // VoiceModelsSettingsPage component is still rendered, just inside
-    // the combined `voice-gateway` case.
+    // PR-VOICE-GATEWAY-SPLIT-0 (WAWQAQ msg `d3ea9a33` 2026-06-26):
+    // 语音 and 开放网关 are now separate nav items (voice + open-
+    // gateway). Both pages stay first-class — neither is coming-soon.
     const src = await readFile(SETTINGS_MODAL, 'utf8');
-    const voiceNav = src.match(/\{\s*id:\s*'voice-gateway'[\s\S]*?\},/);
-    assert.ok(voiceNav, 'voice-gateway nav item must exist');
-    assert.doesNotMatch(voiceNav![0], /comingSoon:\s*true/, 'voice-gateway nav must not be tagged as coming soon');
-    assert.match(src, /case\s+'voice-gateway':\s*\n[\s\S]*?<VoiceModelsSettingsPage\s*\/>/);
-    assert.doesNotMatch(src, /'voice-gateway':\s*\{[\s\S]*当前尚未实现/, 'voice-gateway must not keep stale roadmap copy');
+    const voiceNav = src.match(/\{\s*id:\s*'voice'[\s\S]*?\},/);
+    assert.ok(voiceNav, 'voice nav item must exist');
+    assert.doesNotMatch(voiceNav![0], /comingSoon:\s*true/, 'voice nav must not be tagged as coming soon');
+    const gatewayNav = src.match(/\{\s*id:\s*'open-gateway'[\s\S]*?\},/);
+    assert.ok(gatewayNav, 'open-gateway nav item must exist');
+    assert.doesNotMatch(gatewayNav![0], /comingSoon:\s*true/, 'open-gateway nav must not be tagged as coming soon');
+    assert.match(src, /case\s+'voice':\s*\n[\s\S]*?<VoiceModelsSettingsPage\s*\/>/);
+    assert.match(src, /case\s+'open-gateway':\s*\n[\s\S]*?<OpenGatewaySettingsPage\b/);
+    assert.doesNotMatch(src, /'voice':\s*\{[\s\S]*当前尚未实现/, 'voice must not keep stale roadmap copy');
   });
 
   it('runs only a local renderer capture smoke and validates it through the core voice contract', async () => {
@@ -142,8 +145,8 @@ describe('voice capture smoke Settings contract', () => {
     assert.ok(voiceBlock, 'voice capability block must exist');
     assert.match(voiceBlock![0], /state:\s*'partial'/, 'voice feature must be partial, not not_available');
     assert.match(voiceBlock![0], /本地麦克风录音自检已可用/, 'voice feature reason must name the shipped smoke path');
-    assert.match(voiceBlock![0], /在设置 → 语音模型运行本地录音自检/, 'voice capability guidance must use localized Settings navigation copy');
-    assert.doesNotMatch(voiceBlock![0], /Settings · 语音模型/, 'voice capability guidance must not leak English Settings prefix');
+    assert.match(voiceBlock![0], /在设置 → 语音运行本地录音自检/, 'voice capability guidance must use localized Settings navigation copy after the voice/open-gateway split');
+    assert.doesNotMatch(voiceBlock![0], /Settings · 语音/, 'voice capability guidance must not leak English Settings prefix');
     assert.doesNotMatch(voiceBlock![0], /voice capture\/playback not implemented/, 'old placeholder reason must not return');
   });
 

@@ -1117,6 +1117,12 @@ describe('AiSdkBackend model history', () => {
     assert.equal(usage?.contextBudget?.historyCompactWritesAttempted, 1);
     assert.equal(usage?.contextBudget?.historyCompactBlocksWritten, 1);
     assert.equal(usage?.contextBudget?.highWaterReason, 'history_compact');
+    assert.deepEqual(
+      usage?.contextBudget?.compactionDecisions?.[0]?.boundaryIds,
+      usage?.contextBudget?.historyCompactWrittenBlockIds,
+    );
+    assert.equal(usage?.contextBudget?.compactionDecisions?.[0]?.decision, 'replaced');
+    assert.equal(usage?.contextBudget?.compactionDecisions?.[0]?.boundaryKind, 'historyCompact');
   });
 
   test('loads persisted history compact blocks before replay and does not rewrite them', async () => {
@@ -1792,6 +1798,208 @@ describe('AiSdkBackend usage telemetry', () => {
       assert.equal(contextBudget?.activePrunedToolResults, 1);
       assert.equal(contextBudget?.activeArchiveFailures, undefined);
       assert.ok((contextBudget?.activeEstimatedTokensSaved as number | undefined ?? 0) > 0);
+    }
+  });
+
+  test('active full compact replaces the next step prompt after active tool-result prune', async () => {
+    const messages: unknown[] = [];
+    const events: SessionEvent[] = [];
+    const llmRecords: LlmCallRecord[] = [];
+    const largeBody = 'ACTIVE_FULL_COMPACT_RAW_TOOL_OUTPUT'.repeat(200);
+    let streamCalls = 0;
+    const model = new MockLanguageModelV3({
+      doStream: async () => {
+        streamCalls += 1;
+        const chunks: LanguageModelV3StreamPart[] = streamCalls === 1
+          ? [
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'tool-call',
+                toolCallId: 'tool-1',
+                toolName: 'Read',
+                input: JSON.stringify({ path: 'notes.md' }),
+              },
+              {
+                type: 'finish',
+                finishReason: { unified: 'tool-calls', raw: 'tool_calls' },
+                usage: { inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 1, text: 1, reasoning: 0 } },
+              },
+            ]
+          : [
+              { type: 'stream-start', warnings: [] },
+              { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage: { inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 1, text: 1, reasoning: 0 } } },
+            ];
+        return { stream: simulateReadableStream({ chunks, initialDelayInMs: null, chunkDelayInMs: null }) };
+      },
+    });
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header(),
+      appendMessage: async (message) => {
+        messages.push(message);
+      },
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'mock-model-id',
+      permissionEngine: new PermissionEngine({ newId: () => 'permission-id', now: () => 1 }),
+      modelFactory: () => model,
+      tools: [{
+        name: 'Read',
+        description: 'Read description',
+        parameters: z.object({ path: z.string() }),
+        permissionRequired: false,
+        impl: async () => ({ body: largeBody }),
+      }],
+      contextBudget: {
+        charsPerToken: 1,
+        activeToolResultPrune: { enabled: true, maxCurrentResultEstimatedTokens: 1 },
+        activeFullCompact: {
+          enabled: true,
+          minStepNumber: 1,
+          minRecentMessages: 0,
+          maxActiveEstimatedTokens: 1,
+          highWaterRatio: 0.1,
+          maxSummaryEstimatedTokens: 512,
+        },
+      },
+      archiveToolResult: async () => ({ artifactId: 'artifact-tool-1' }),
+      newId: idGenerator(),
+      now: monotonicClock(),
+      recordLlmCall: (record) => {
+        llmRecords.push(record);
+      },
+    });
+
+    for await (const event of backend.send({ turnId: 'turn-1', text: 'hi', context: [] })) {
+      events.push(event);
+    }
+
+    assert.equal(streamCalls, 2);
+    const secondPrompt = JSON.stringify(model.doStreamCalls[1]?.prompt.map((message) => ({
+      role: message.role,
+      content: message.content,
+    })));
+    assert.match(secondPrompt, /maka_active_full_compact_block/);
+    assert.match(secondPrompt, /artifact-tool-1/);
+    assert.equal(secondPrompt.includes('ACTIVE_FULL_COMPACT_RAW_TOOL_OUTPUT'), false);
+
+    const usageMessage = messages.find((message) =>
+      (message as { type?: string }).type === 'token_usage'
+    ) as { contextBudget?: Record<string, unknown> } | undefined;
+    const usageEvent = events.find((event) => event.type === 'token_usage') as
+      | (Extract<SessionEvent, { type: 'token_usage' }> & { contextBudget?: Record<string, unknown> })
+      | undefined;
+    const recordContextBudget = llmRecords[0]?.contextBudget as Record<string, unknown> | undefined;
+    for (const contextBudget of [usageMessage?.contextBudget, usageEvent?.contextBudget, recordContextBudget]) {
+      assert.equal(contextBudget?.activePrunedToolResults, 1);
+      const decisions = contextBudget?.compactionDecisions as Array<Record<string, unknown>> | undefined;
+      assert.equal(decisions?.some((decision) =>
+        decision.boundaryKind === 'activeFullCompact' && decision.decision === 'replaced'
+      ), true);
+      assert.equal(typeof contextBudget?.highWaterRequestShapeHashBefore, 'string');
+      assert.equal(typeof contextBudget?.highWaterRequestShapeHashAfter, 'string');
+      assert.notEqual(
+        contextBudget?.highWaterRequestShapeHashAfter,
+        contextBudget?.highWaterRequestShapeHashBefore,
+      );
+    }
+  });
+
+  test('active full compact validate_only records diagnostics without replacing the next step prompt', async () => {
+    const messages: unknown[] = [];
+    const events: SessionEvent[] = [];
+    const llmRecords: LlmCallRecord[] = [];
+    const largeBody = 'VALIDATE_ONLY_RAW_TOOL_OUTPUT'.repeat(80);
+    let streamCalls = 0;
+    const model = new MockLanguageModelV3({
+      doStream: async () => {
+        streamCalls += 1;
+        const chunks: LanguageModelV3StreamPart[] = streamCalls === 1
+          ? [
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'tool-call',
+                toolCallId: 'tool-validate-only',
+                toolName: 'Read',
+                input: JSON.stringify({ path: 'notes.md' }),
+              },
+              {
+                type: 'finish',
+                finishReason: { unified: 'tool-calls', raw: 'tool_calls' },
+                usage: { inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 1, text: 1, reasoning: 0 } },
+              },
+            ]
+          : [
+              { type: 'stream-start', warnings: [] },
+              { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage: { inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 1, text: 1, reasoning: 0 } } },
+            ];
+        return { stream: simulateReadableStream({ chunks, initialDelayInMs: null, chunkDelayInMs: null }) };
+      },
+    });
+    const backend = new AiSdkBackend({
+      sessionId: 'session-1',
+      header: header(),
+      appendMessage: async (message) => {
+        messages.push(message);
+      },
+      connection: connection(),
+      apiKey: 'sk-test',
+      modelId: 'mock-model-id',
+      permissionEngine: new PermissionEngine({ newId: () => 'permission-id', now: () => 1 }),
+      modelFactory: () => model,
+      tools: [{
+        name: 'Read',
+        description: 'Read description',
+        parameters: z.object({ path: z.string() }),
+        permissionRequired: false,
+        impl: async () => ({ body: largeBody }),
+      }],
+      contextBudget: {
+        charsPerToken: 1,
+        activeFullCompact: {
+          enabled: true,
+          mode: 'validate_only',
+          minStepNumber: 1,
+          minRecentMessages: 0,
+          maxActiveEstimatedTokens: 1,
+          highWaterRatio: 0.1,
+          maxSummaryEstimatedTokens: 512,
+        },
+      },
+      newId: idGenerator(),
+      now: monotonicClock(),
+      recordLlmCall: (record) => {
+        llmRecords.push(record);
+      },
+    });
+
+    for await (const event of backend.send({ turnId: 'turn-1', text: 'hi', context: [] })) {
+      events.push(event);
+    }
+
+    assert.equal(streamCalls, 2);
+    const secondPrompt = JSON.stringify(model.doStreamCalls[1]?.prompt.map((message) => ({
+      role: message.role,
+      content: message.content,
+    })));
+    assert.doesNotMatch(secondPrompt, /maka_active_full_compact_block/);
+    assert.match(secondPrompt, /VALIDATE_ONLY_RAW_TOOL_OUTPUT/);
+
+    const usageEvent = events.find((event) => event.type === 'token_usage') as
+      | (Extract<SessionEvent, { type: 'token_usage' }> & { contextBudget?: Record<string, unknown> })
+      | undefined;
+    const recordContextBudget = llmRecords[0]?.contextBudget as Record<string, unknown> | undefined;
+    for (const contextBudget of [usageEvent?.contextBudget, recordContextBudget]) {
+      const decisions = contextBudget?.compactionDecisions as Array<Record<string, unknown>> | undefined;
+      assert.equal(decisions?.some((decision) =>
+        decision.boundaryKind === 'activeFullCompact'
+          && decision.decision === 'unchanged'
+          && decision.reason === 'validate_only'
+      ), true);
+      assert.equal(
+        contextBudget?.highWaterRequestShapeHashBefore,
+        contextBudget?.highWaterRequestShapeHashAfter,
+      );
     }
   });
 

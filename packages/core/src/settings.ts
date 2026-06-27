@@ -20,16 +20,21 @@ import { defaultLocalMemorySettings, normalizeLocalMemorySettings } from './loca
  * PR-SETTINGS-IA-CONSOLIDATE-0 + PR-SETTINGS-REVIEW-0 (WAWQAQ msg
  * `886f6406`): the memory+review merge had too much density and got
  * split back out. Other merges (network→general, personalization+
- * theme→appearance, voice-models+open-gateway→voice-gateway) held.
+ * theme→appearance) held.
+ *
+ * PR-VOICE-GATEWAY-SPLIT-0 (WAWQAQ msg `d3ea9a33` 2026-06-26): voice
+ * and open-gateway were re-split — they're two independent surfaces
+ * (local mic / transcription pipeline vs. remote SSE/HTTP gateway)
+ * and the merged page read as crowded.
  *
  * Final mapping:
  *   - `network`                       → `general`
  *   - `personalization` + `theme`     → `appearance`
- *   - `voice-models` + `open-gateway` → `voice-gateway`
+ *   - `voice` and `open-gateway` are independent sections
  *   - `daily-review` is its own section again
  *   - `memory` is its own section again
  *
- * 13 visible sections. See notes/reference-settings.md §7.
+ * 14 visible sections. See notes/reference-settings.md §7.
  */
 export type SettingsSection =
   | 'general'
@@ -38,7 +43,8 @@ export type SettingsSection =
   | 'daily-review'
   | 'models'
   | 'usage'
-  | 'voice-gateway'
+  | 'voice'
+  | 'open-gateway'
   | 'bot-chat'
   | 'search'
   | 'data'

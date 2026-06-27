@@ -80,8 +80,6 @@
 }
 
 .maka-onboarding-ready header {
-  justify-items: start;
-  text-align: left;
   gap: 4px;
   justify-items: center;
   text-align: center;
@@ -539,7 +537,6 @@
   line-height: 1;
 }
 .maka-onboarding-quickchat-submit {
-  min-width: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;

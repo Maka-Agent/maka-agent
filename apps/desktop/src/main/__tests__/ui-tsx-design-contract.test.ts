@@ -43,21 +43,15 @@ const ALLOWED_BARE: ReadonlyArray<{ pattern: string; count: number; reason: stri
   },
   {
     pattern: 'z-50',
-    count: 5,
+    count: 2,
     reason:
-      'dialog popup, sheet popup, tooltip popup, select popup, popover. All shadcn/Base UI overlay surfaces. Equivalent to --z-panel (50) by value but semantically distinct.',
+      'dialog popup (DialogContent) + sheet popup. The previously z-50 floating-overlay surfaces (TooltipPopup, SelectPopup, PopoverPopup) were tokenized to `z-[var(--z-overlay)]` so a Select opened from inside a Settings modal floats above the modal (WAWQAQ msg `d3ea9a33` 2026-06-26). PR-UI-DEAD-EXPORT-SWEEP-0 then deleted PopoverPopup entirely (was unused).',
   },
   {
     pattern: 'backdrop-blur-sm',
     count: 2,
     reason:
       'dialog + sheet backdrop visual depth. Pending kenji #6 audit decision on whether to drop blur entirely or tokenize a single --blur-scrim value.',
-  },
-  {
-    pattern: 'transition-[height]',
-    count: 1,
-    reason:
-      'accordion content panel needs height animation because content is variable-height; `transform: scaleY` would distort children. Layout-property transition is intentional here.',
   },
 ];
 

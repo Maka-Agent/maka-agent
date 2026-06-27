@@ -1,25 +1,19 @@
 import React, { forwardRef } from 'react';
-import { Accordion as BaseAccordion } from '@base-ui/react/accordion';
-import { Avatar as BaseAvatar } from '@base-ui/react/avatar';
 import { Button as BaseButton } from '@base-ui/react/button';
 import { Checkbox as BaseCheckbox } from '@base-ui/react/checkbox';
 import { Dialog as BaseDialog } from '@base-ui/react/dialog';
 import { Field as BaseField } from '@base-ui/react/field';
-import { Form as BaseForm } from '@base-ui/react/form';
-import { Popover as BasePopover } from '@base-ui/react/popover';
 import { Progress as BaseProgress } from '@base-ui/react/progress';
 import { Radio as BaseRadio } from '@base-ui/react/radio';
 import { RadioGroup as BaseRadioGroup } from '@base-ui/react/radio-group';
-import { ScrollArea as BaseScrollArea } from '@base-ui/react/scroll-area';
 import { Switch as BaseSwitch } from '@base-ui/react/switch';
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
-import { Toast as BaseToast } from '@base-ui/react/toast';
 import { Toggle as BaseToggle } from '@base-ui/react/toggle';
 import { ToggleGroup as BaseToggleGroup } from '@base-ui/react/toggle-group';
 import { Tooltip as BaseTooltip } from '@base-ui/react/tooltip';
 import { Select as BaseSelect } from '@base-ui/react/select';
 import { Separator as BaseSeparator } from '@base-ui/react/separator';
-import { Check, ChevronDown, ChevronRight, X } from './icons.js';
+import { Check, ChevronDown, X } from './icons.js';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from './utils.js';
 
@@ -117,48 +111,7 @@ export function Badge({ className, variant, ...props }: BadgeProps) {
   return <span className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
 
-export const Card = forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(function Card(
-  { className, ...props },
-  ref,
-) {
-  return (
-    <div
-      ref={ref}
-      className={cn('rounded-xl border border-border bg-card text-card-foreground shadow-maka-panel', className)}
-      {...props}
-    />
-  );
-});
-
-export const CardHeader = forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(function CardHeader(
-  { className, ...props },
-  ref,
-) {
-  return <div ref={ref} className={cn('grid gap-1.5 p-5', className)} {...props} />;
-});
-
-export const CardTitle = forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(function CardTitle(
-  { className, ...props },
-  ref,
-) {
-  return <h3 ref={ref} className={cn('text-base font-semibold tracking-normal text-foreground', className)} {...props} />;
-});
-
-export const CardDescription = forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(function CardDescription(
-  { className, ...props },
-  ref,
-) {
-  return <p ref={ref} className={cn('text-sm leading-6 text-muted-foreground', className)} {...props} />;
-});
-
-export const CardContent = forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(function CardContent(
-  { className, ...props },
-  ref,
-) {
-  return <div ref={ref} className={cn('p-5 pt-0', className)} {...props} />;
-});
-
-export const inputClasses = [
+const inputClasses = [
   'flex min-h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm',
   'placeholder:text-muted-foreground/70',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
@@ -221,13 +174,10 @@ export const Checkbox = forwardRef<
 });
 
 export const DialogRoot = BaseDialog.Root;
-export const DialogTrigger = BaseDialog.Trigger;
 export const DialogClose = BaseDialog.Close;
-export const DialogPortal = BaseDialog.Portal;
-export const DialogTitle = BaseDialog.Title;
-export const DialogDescription = BaseDialog.Description;
+const DialogPortal = BaseDialog.Portal;
 
-export const DialogBackdrop = forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<typeof BaseDialog.Backdrop>>(function DialogBackdrop(
+const DialogBackdrop = forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<typeof BaseDialog.Backdrop>>(function DialogBackdrop(
   { className, ...props },
   ref,
 ) {
@@ -244,7 +194,7 @@ export const DialogBackdrop = forwardRef<HTMLDivElement, React.ComponentPropsWit
   );
 });
 
-export const DialogPopup = forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<typeof BaseDialog.Popup>>(function DialogPopup(
+const DialogPopup = forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<typeof BaseDialog.Popup>>(function DialogPopup(
   { className, children, ...props },
   ref,
 ) {
@@ -322,10 +272,7 @@ export const TabsPanel = forwardRef<HTMLDivElement, React.ComponentPropsWithoutR
   return <BaseTabs.Panel ref={ref} className={cn('focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', className)} {...props} />;
 });
 
-export const TooltipRoot = BaseTooltip.Root;
 export const TooltipTrigger = BaseTooltip.Trigger;
-export const TooltipPortal = BaseTooltip.Portal;
-export const TooltipPositioner = BaseTooltip.Positioner;
 export const TooltipPopup = forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<typeof BaseTooltip.Popup>>(function TooltipPopup(
   { className, ...props },
   ref,
@@ -333,7 +280,7 @@ export const TooltipPopup = forwardRef<HTMLDivElement, React.ComponentPropsWitho
   return (
     <BaseTooltip.Popup
       ref={ref}
-      className={cn('z-50 rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-maka-panel', className)}
+      className={cn('z-[var(--z-overlay)] rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-maka-panel', className)}
       {...props}
     />
   );
@@ -371,7 +318,14 @@ export const SelectPopup = forwardRef<HTMLDivElement, React.ComponentPropsWithou
   { className, ...props },
   ref,
 ) {
-  return <BaseSelect.Popup ref={ref} className={cn('z-50 min-w-40 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-maka-panel', className)} {...props} />;
+  // The Settings modal uses `--z-modal` (200) — the previous bare
+  // popup layer (Tailwind utility worth 50) was below it, so any
+  // `<SettingsSelect>` opened inside a modal (e.g. Daily Review
+  // → 分析模型) rendered its popup beneath the modal content and
+  // read as "can't select". Pin the popup to `--z-overlay` (300)
+  // so it always floats above the modal it was triggered from
+  // (WAWQAQ msg `d3ea9a33` 2026-06-26).
+  return <BaseSelect.Popup ref={ref} className={cn('z-[var(--z-overlay)] min-w-40 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-maka-panel', className)} {...props} />;
 });
 export const SelectGroup = forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<typeof BaseSelect.Group>>(function SelectGroup(
   { className, ...props },
@@ -420,15 +374,7 @@ export const SelectItem = forwardRef<HTMLDivElement, React.ComponentPropsWithout
 // association automatically via aria-describedby and aria-invalid.
 // =============================================================
 
-export const Form = BaseForm;
 export const FieldRoot = BaseField.Root;
-export const FieldControl = BaseField.Control;
-export const FieldError = forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<typeof BaseField.Error>>(function FieldError(
-  { className, ...props },
-  ref,
-) {
-  return <BaseField.Error ref={ref} className={cn('text-xs text-destructive', className)} {...props} />;
-});
 export const FieldDescription = forwardRef<HTMLParagraphElement, React.ComponentPropsWithoutRef<typeof BaseField.Description>>(function FieldDescription(
   { className, ...props },
   ref,
@@ -557,45 +503,6 @@ export const Progress = forwardRef<
 });
 
 // =============================================================
-// ScrollArea
-// Base UI provides native scroll container + custom scrollbars.
-// =============================================================
-
-export const ScrollAreaRoot = forwardRef<
-  HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof BaseScrollArea.Root>
->(function ScrollAreaRoot({ className, ...props }, ref) {
-  return <BaseScrollArea.Root ref={ref} className={cn('relative overflow-hidden', className)} {...props} />;
-});
-
-export const ScrollAreaViewport = forwardRef<
-  HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof BaseScrollArea.Viewport>
->(function ScrollAreaViewport({ className, ...props }, ref) {
-  return <BaseScrollArea.Viewport ref={ref} className={cn('h-full w-full rounded-[inherit]', className)} {...props} />;
-});
-
-export const ScrollAreaScrollbar = forwardRef<
-  HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof BaseScrollArea.Scrollbar>
->(function ScrollAreaScrollbar({ className, orientation = 'vertical', ...props }, ref) {
-  return (
-    <BaseScrollArea.Scrollbar
-      ref={ref}
-      orientation={orientation}
-      className={cn(
-        'flex touch-none select-none p-0.5 transition-colors',
-        orientation === 'vertical' ? 'h-full w-2.5' : 'h-2.5 w-full flex-col',
-        className,
-      )}
-      {...props}
-    >
-      <BaseScrollArea.Thumb className="relative flex-1 rounded-full bg-border" />
-    </BaseScrollArea.Scrollbar>
-  );
-});
-
-// =============================================================
 // Skeleton — animated loading placeholder
 // =============================================================
 
@@ -617,7 +524,6 @@ export const Skeleton = forwardRef<
 // Built on Base UI Dialog so it inherits a11y + focus trap.
 // =============================================================
 
-export const SheetRoot = BaseDialog.Root;
 export const SheetTrigger = BaseDialog.Trigger;
 export const SheetClose = BaseDialog.Close;
 export const SheetPortal = BaseDialog.Portal;
@@ -637,7 +543,7 @@ export const SheetBackdrop = forwardRef<
   );
 });
 
-export type SheetSide = 'right' | 'left' | 'top' | 'bottom';
+type SheetSide = 'right' | 'left' | 'top' | 'bottom';
 const SHEET_SIDE_CLASSES: Record<SheetSide, string> = {
   right: 'inset-y-0 right-0 h-full w-[min(420px,90vw)] border-l',
   left: 'inset-y-0 left-0 h-full w-[min(420px,90vw)] border-r',
@@ -681,112 +587,6 @@ export const SheetContent = forwardRef<
         {children}
       </SheetPopup>
     </SheetPortal>
-  );
-});
-
-// =============================================================
-// Avatar
-// =============================================================
-
-export const Avatar = forwardRef<
-  HTMLSpanElement,
-  React.ComponentPropsWithoutRef<typeof BaseAvatar.Root>
->(function Avatar({ className, ...props }, ref) {
-  return (
-    <BaseAvatar.Root
-      ref={ref}
-      className={cn('relative inline-flex h-9 w-9 shrink-0 overflow-hidden rounded-full bg-muted text-sm font-medium text-muted-foreground', className)}
-      {...props}
-    />
-  );
-});
-
-export const AvatarImage = forwardRef<
-  HTMLImageElement,
-  React.ComponentPropsWithoutRef<typeof BaseAvatar.Image>
->(function AvatarImage({ className, ...props }, ref) {
-  return <BaseAvatar.Image ref={ref} className={cn('h-full w-full object-cover', className)} {...props} />;
-});
-
-export const AvatarFallback = forwardRef<
-  HTMLSpanElement,
-  React.ComponentPropsWithoutRef<typeof BaseAvatar.Fallback>
->(function AvatarFallback({ className, ...props }, ref) {
-  return <BaseAvatar.Fallback ref={ref} className={cn('grid h-full w-full place-items-center', className)} {...props} />;
-});
-
-// =============================================================
-// Accordion
-// =============================================================
-
-export const AccordionRoot = forwardRef<
-  HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof BaseAccordion.Root>
->(function AccordionRoot({ className, ...props }, ref) {
-  return <BaseAccordion.Root ref={ref} className={cn('divide-y divide-border', className)} {...props} />;
-});
-
-export const AccordionItem = forwardRef<
-  HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof BaseAccordion.Item>
->(function AccordionItem({ className, ...props }, ref) {
-  return <BaseAccordion.Item ref={ref} className={cn('first:rounded-t-md last:rounded-b-md', className)} {...props} />;
-});
-
-export const AccordionHeader = forwardRef<
-  HTMLHeadingElement,
-  React.ComponentPropsWithoutRef<typeof BaseAccordion.Header>
->(function AccordionHeader({ className, ...props }, ref) {
-  return <BaseAccordion.Header ref={ref} className={cn('flex', className)} {...props} />;
-});
-
-export const AccordionTrigger = forwardRef<
-  HTMLButtonElement,
-  React.ComponentPropsWithoutRef<typeof BaseAccordion.Trigger>
->(function AccordionTrigger({ className, children, ...props }, ref) {
-  return (
-    <BaseAccordion.Trigger
-      ref={ref}
-      className={cn(
-        'flex flex-1 items-center justify-between py-3 text-sm font-medium text-foreground transition-colors hover:text-foreground/80',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        '[&[data-panel-open]>svg]:rotate-90',
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      <ChevronRight size={14} strokeWidth={2} aria-hidden="true" className="shrink-0 transition-transform duration-150" />
-    </BaseAccordion.Trigger>
-  );
-});
-
-export const AccordionPanel = forwardRef<
-  HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof BaseAccordion.Panel>
->(function AccordionPanel({ className, ...props }, ref) {
-  return <BaseAccordion.Panel ref={ref} className={cn('overflow-hidden text-sm text-muted-foreground transition-[height]', className)} {...props} />;
-});
-
-// =============================================================
-// Popover
-// =============================================================
-
-export const PopoverRoot = BasePopover.Root;
-export const PopoverTrigger = BasePopover.Trigger;
-export const PopoverPortal = BasePopover.Portal;
-export const PopoverBackdrop = BasePopover.Backdrop;
-export const PopoverPositioner = BasePopover.Positioner;
-export const PopoverPopup = forwardRef<
-  HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof BasePopover.Popup>
->(function PopoverPopup({ className, ...props }, ref) {
-  return (
-    <BasePopover.Popup
-      ref={ref}
-      className={cn('z-50 rounded-lg border border-border bg-popover p-3 text-sm text-popover-foreground shadow-maka-panel', className)}
-      {...props}
-    />
   );
 });
 

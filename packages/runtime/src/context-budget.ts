@@ -6,6 +6,12 @@ import type {
   ContextBudgetDiagnostic,
   PromptSegmentEstimate,
 } from '@maka/core/usage-stats/types';
+import {
+  compactionDecisionDiagnosticPatch,
+  historyCompactBlockToCompactionBoundary,
+} from './compaction-boundary.js';
+import type { ActiveFullCompactPolicy } from './active-full-compact.js';
+import type { CompactionDecisionKind } from './compaction-boundary.js';
 
 export interface ContextBudgetPolicy {
   name?: string;
@@ -27,6 +33,11 @@ export interface ContextBudgetPolicy {
    * AI SDK step. Defaults off and does not mutate persisted session messages.
    */
   activeToolResultPrune?: ActiveToolResultPrunePolicy;
+  /**
+   * Optional active-loop full compact replacement. When enabled, prepareStep can
+   * replace a validated older provider-message span with a source-bearing block.
+   */
+  activeFullCompact?: ActiveFullCompactPolicy;
   /** Optional replay-only archive hydration after pruning. Defaults off. */
   archiveRetrieval?: ArchiveRetrievalPolicy;
   /** Optional deterministic prior-history search used to re-add bounded around-context. Defaults off. */
@@ -575,6 +586,7 @@ export function applyRuntimeEventHistoryCompact(
         ...basePatch,
         historyCompactSkipped: 1,
         historyCompactSkippedReasonCounts: skippedReasonCounts,
+        ...historyCompactSkippedDecisionPatch(skippedReasonCounts),
       },
     };
   }
@@ -591,6 +603,7 @@ export function applyRuntimeEventHistoryCompact(
         ...basePatch,
         historyCompactSkipped: 1,
         historyCompactSkippedReasonCounts: skippedReasonCounts,
+        ...historyCompactSkippedDecisionPatch(skippedReasonCounts),
       },
     };
   }
@@ -605,6 +618,7 @@ export function applyRuntimeEventHistoryCompact(
         ...basePatch,
         historyCompactSkipped: 1,
         historyCompactSkippedReasonCounts: skippedReasonCounts,
+        ...historyCompactSkippedDecisionPatch(skippedReasonCounts),
       },
     };
   }
@@ -633,6 +647,7 @@ export function applyRuntimeEventHistoryCompact(
         ...basePatch,
         historyCompactSkipped: 1,
         historyCompactSkippedReasonCounts: skippedReasonCounts,
+        ...historyCompactSkippedDecisionPatch(skippedReasonCounts),
       },
     };
   }
@@ -649,6 +664,7 @@ export function applyRuntimeEventHistoryCompact(
         ...basePatch,
         historyCompactSkipped: 1,
         historyCompactSkippedReasonCounts: skippedReasonCounts,
+        ...historyCompactSkippedDecisionPatch(skippedReasonCounts),
       },
     };
   }
@@ -660,6 +676,15 @@ export function applyRuntimeEventHistoryCompact(
     skippedReasonCounts,
   );
   if (loadedBlock) {
+    const estimatedTokensBeforeFold = estimateRuntimeEventsTokens(foldedEvents, charsPerToken);
+    const loadedBlockText = renderHistoryCompactBlock(loadedBlock);
+    const estimatedTokensAfterFold =
+      loadedBlock.estimatedTokens ?? estimateTokens(loadedBlockText.length, charsPerToken);
+    const boundary = historyCompactBlockToCompactionBoundary(loadedBlock, {
+      renderedText: loadedBlockText,
+      preservedAnchor: { tailTurnIds: [...tailTurnIds] },
+      validationStatus: 'valid',
+    });
     const outputEvents = [historyCompactBlockToRuntimeEvent(loadedBlock), ...retainedEvents];
     return {
       events: outputEvents,
@@ -671,13 +696,22 @@ export function applyRuntimeEventHistoryCompact(
         historyCompactBlockIds: [loadedBlock.blockId],
         historyCompactedTurns: loadedBlock.coverage.turnIds.length,
         historyCompactedEvents: loadedBlock.coverage.runtimeEventIds.length,
-        historyCompactedEstimatedTokensBefore: estimateRuntimeEventsTokens(foldedEvents, charsPerToken),
-        historyCompactedEstimatedTokensAfter:
-          loadedBlock.estimatedTokens ?? estimateTokens(renderHistoryCompactBlock(loadedBlock).length, charsPerToken),
+        historyCompactedEstimatedTokensBefore: estimatedTokensBeforeFold,
+        historyCompactedEstimatedTokensAfter: estimatedTokensAfterFold,
         historyCompactCoverageHashes: loadedBlock.coverage.bodySha256,
         highWaterName: loadedBlock.highWaterName,
         highWaterSeq: loadedBlock.highWaterSeq,
         highWaterReason: 'history_compact',
+        ...compactionDecisionDiagnosticPatch({
+          stage: 'priorReplay',
+          sourceKind: 'runtimeEvents',
+          decision: 'replaced',
+          boundaryKind: boundary.kind,
+          boundaryIds: [boundary.boundaryId],
+          coverage: boundary.coverage,
+          estimatedTokensBefore: estimatedTokensBeforeFold,
+          estimatedTokensAfter: estimatedTokensAfterFold,
+        }),
       },
     };
   }
@@ -698,6 +732,7 @@ export function applyRuntimeEventHistoryCompact(
           ...basePatch,
           historyCompactSkipped: 1,
           historyCompactSkippedReasonCounts: skippedReasonCounts,
+          ...historyCompactSkippedDecisionPatch(skippedReasonCounts),
         },
       };
     }
@@ -706,6 +741,14 @@ export function applyRuntimeEventHistoryCompact(
   const block = buildHistoryCompactBlock(foldedEvents, compactPolicy, {
     charsPerToken,
     archiveRefs,
+  });
+  const estimatedTokensBeforeFold = estimateRuntimeEventsTokens(foldedEvents, charsPerToken);
+  const blockText = renderHistoryCompactBlock(block);
+  const estimatedTokensAfterFold = block.estimatedTokens ?? estimateTokens(blockText.length, charsPerToken);
+  const boundary = historyCompactBlockToCompactionBoundary(block, {
+    renderedText: blockText,
+    preservedAnchor: { tailTurnIds: [...tailTurnIds] },
+    validationStatus: 'valid',
   });
   const synthetic = historyCompactBlockToRuntimeEvent(block);
   const outputEvents = [synthetic, ...retainedEvents];
@@ -718,12 +761,22 @@ export function applyRuntimeEventHistoryCompact(
       historyCompactBlocksSelected: 1,
       historyCompactedTurns: block.coverage.turnIds.length,
       historyCompactedEvents: block.coverage.runtimeEventIds.length,
-      historyCompactedEstimatedTokensBefore: estimateRuntimeEventsTokens(foldedEvents, charsPerToken),
-      historyCompactedEstimatedTokensAfter: block.estimatedTokens ?? estimateTokens(renderHistoryCompactBlock(block).length, charsPerToken),
+      historyCompactedEstimatedTokensBefore: estimatedTokensBeforeFold,
+      historyCompactedEstimatedTokensAfter: estimatedTokensAfterFold,
       historyCompactCoverageHashes: block.coverage.bodySha256,
       highWaterName: block.highWaterName,
       highWaterSeq: block.highWaterSeq,
       highWaterReason: 'history_compact',
+      ...compactionDecisionDiagnosticPatch({
+        stage: 'priorReplay',
+        sourceKind: 'runtimeEvents',
+        decision: 'replaced',
+        boundaryKind: boundary.kind,
+        boundaryIds: [boundary.boundaryId],
+        coverage: boundary.coverage,
+        estimatedTokensBefore: estimatedTokensBeforeFold,
+        estimatedTokensAfter: estimatedTokensAfterFold,
+      }),
     },
   };
 }
@@ -1608,6 +1661,24 @@ function validateHistoryCompactArchiveCoverage(
     if (!historyCompactArchiveRefMatches(event, ref, charsPerToken)) return 'archive_mismatch';
   }
   return undefined;
+}
+
+function historyCompactSkippedDecisionPatch(
+  skippedReasonCounts: Readonly<Record<string, number>>,
+): Partial<ContextBudgetDiagnostic> {
+  const reason = Object.keys(skippedReasonCounts)[0];
+  const decision: CompactionDecisionKind = reason === 'archive_missing' || reason === 'archive_mismatch'
+    ? 'failedOpen'
+    : 'unchanged';
+  return compactionDecisionDiagnosticPatch({
+    stage: 'priorReplay',
+    sourceKind: 'runtimeEvents',
+    decision,
+    boundaryKind: 'historyCompact',
+    ...(reason ? { reason } : {}),
+    ...(decision === 'failedOpen' && reason ? { failOpenReason: reason } : {}),
+    skippedReasonCounts,
+  });
 }
 
 function historyCompactArchiveRefMatches(

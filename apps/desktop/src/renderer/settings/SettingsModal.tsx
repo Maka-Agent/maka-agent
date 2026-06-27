@@ -194,8 +194,10 @@ export const SETTINGS_NAV: SettingsNavItem[] = [
     description: '本地 MEMORY.md、项目指令文件与上下文注入开关。' },
   { id: 'daily-review', label: '每日回顾', Icon: CalendarDays, enabled: true, group: 'AI 与集成',
     description: '当天对话、模型与工具用量汇总。' },
-  { id: 'voice-gateway', label: '语音与网关', Icon: Volume2, enabled: true, group: 'AI 与集成',
-    description: '语音转写与 Maka 开放网关 SSE 接入。' },
+  { id: 'voice', label: '语音', Icon: Mic, enabled: true, group: 'AI 与集成',
+    description: '语音转写、麦克风权限与本地音频管线设置。' },
+  { id: 'open-gateway', label: '开放网关', Icon: Network, enabled: true, group: 'AI 与集成',
+    description: 'Maka 开放网关 SSE/HTTP 接入、token 管理与运行时状态。' },
   { id: 'bot-chat', label: '机器人对话', Icon: Bot, enabled: true, group: 'AI 与集成',
     description: 'Telegram / 飞书 / 企业微信等机器人凭据与运行状态。' },
   { id: 'search', label: '联网搜索', Icon: Search, enabled: true, group: 'AI 与集成',
@@ -1059,6 +1061,86 @@ function SettingsSurface(props: {
   );
 }
 
+/**
+ * PR-GENERAL-DEFAULTS-CONFIGURABLE-0 (WAWQAQ msg `d3ea9a33` 2026-06-26):
+ * the General page used to ship three read-only `<SettingRow>` lines
+ * (启动 / 新对话模式 / 默认模型) that read like settings but had no
+ * configurable backing — the static text was the entire UI. Drop the
+ * two without backing storage; replace the third with a real
+ * `<SettingsSelect>` that lets the user pick the default LLM
+ * connection inline. The `connections.setDefault(slug)` IPC already
+ * exists; this just wires it up.
+ */
+function GeneralDefaultsCard(props: {
+  connections: readonly LlmConnection[];
+  defaultSlug: string | null;
+  onRefresh(): Promise<void>;
+}) {
+  const toast = useToast();
+  const mountedRef = useRef(true);
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      savingRef.current = false;
+    };
+  }, []);
+
+  const options = useMemo<ReadonlyArray<readonly [string, string]>>(() => {
+    const opts: Array<readonly [string, string]> = [['', '未设置']];
+    for (const connection of props.connections) {
+      if (!connection.enabled) continue;
+      opts.push([connection.slug, connection.name]);
+    }
+    return opts;
+  }, [props.connections]);
+
+  const selectedValue = props.defaultSlug ?? '';
+
+  async function persistDefault(nextSlug: string) {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      await window.maka.connections.setDefault(nextSlug || null);
+      if (!mountedRef.current) return;
+      await props.onRefresh();
+    } catch (error) {
+      if (mountedRef.current) {
+        toast.error('保存默认模型失败', settingsActionErrorMessage(error));
+      }
+    } finally {
+      if (savingRef.current) {
+        savingRef.current = false;
+      }
+      if (mountedRef.current) setSaving(false);
+    }
+  }
+
+  return (
+    <SettingsRows>
+      <div className="settingsRow" data-control-width="select">
+        <div>
+          <strong>默认模型</strong>
+          <small>新对话默认使用的模型连接；可在「模型」页里管理具体连接。</small>
+        </div>
+        <SettingsSelect
+          value={selectedValue}
+          ariaLabel="默认模型连接"
+          options={options}
+          disabled={saving}
+          onChange={(value) => {
+            void persistDefault(value);
+          }}
+        />
+      </div>
+    </SettingsRows>
+  );
+}
+
 function SettingsPage(props: {
   section: SettingsSection;
   settings: AppSettings;
@@ -1135,11 +1217,11 @@ function SettingsPage(props: {
               />
             </div>
           </SettingsRows>
-          <SettingsRows>
-            <SettingRow title="启动" detail="打开应用后回到最近一次对话。" value="已启用" />
-            <SettingRow title="新对话模式" detail="新对话默认从询问权限开始。" value="询问权限" />
-            <SettingRow title="默认模型" detail="新对话默认使用的模型连接。" value={props.defaultSlug ?? '未设置'} />
-          </SettingsRows>
+          <GeneralDefaultsCard
+            connections={props.connections}
+            defaultSlug={props.defaultSlug}
+            onRefresh={props.onRefreshConnections}
+          />
           <SettingsRows>
             <NetworkProxySection settings={props.settings} onUpdate={props.onUpdateSettings} />
           </SettingsRows>
@@ -1191,17 +1273,14 @@ function SettingsPage(props: {
       );
     case 'daily-review':
       return <DailyReviewSettingsPage connections={props.connections} onOpenDailyReview={props.onOpenDailyReview} />;
-    case 'voice-gateway':
-      // PR-SETTINGS-IA-CONSOLIDATE-0: 语音模型 + 开放网关 → 语音与网关.
-      // PR-SETTINGS-SWEEP-0: section heading per sub-block.
-      return (
-        <div className="settingsStructuredPage">
-          <h2 className="settingsSectionHeading">语音模型</h2>
-          <VoiceModelsSettingsPage />
-          <h2 className="settingsSectionHeading">开放网关</h2>
-          <OpenGatewaySettingsPage settings={props.settings} onUpdate={props.onUpdateSettings} />
-        </div>
-      );
+    case 'voice':
+      // PR-VOICE-GATEWAY-SPLIT-0 (WAWQAQ msg `d3ea9a33` 2026-06-26):
+      // 语音 + 网关 是两套独立的功能（一个是本地麦克风/转写管线，
+      // 一个是远程 SSE/HTTP 网关），合在一页里读起来既挤又混。
+      // 拆成两个独立的 nav 项各自独立呈现。
+      return <VoiceModelsSettingsPage />;
+    case 'open-gateway':
+      return <OpenGatewaySettingsPage settings={props.settings} onUpdate={props.onUpdateSettings} />;
     case 'search':
       return (
         <WebSearchSettingsPage
@@ -1580,9 +1659,12 @@ function DailyReviewSettingsPage(props: { connections: readonly LlmConnection[];
             value={effectiveConfig?.executeTime ?? '08:00'}
             disabled={formDisabled || savingKey === 'executeTime'}
             onChange={(event) => {
-              const value = event.target.value;
-              if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return;
-              void patchConfig('executeTime', { executeTime: value });
+              // Native time-pickers only fire `change` once the value
+              // is a complete HH:MM (or cleared); the earlier hand-
+              // rolled regex would silently drop any intermediate
+              // state the user typed (e.g. `08:0`), making the picker
+              // feel stuck. Trust the browser.
+              void patchConfig('executeTime', { executeTime: event.target.value });
             }}
           />
         </div>
@@ -1673,6 +1755,26 @@ function DailyReviewSettingsPage(props: { connections: readonly LlmConnection[];
 
       {(props.onOpenDailyReview || hasRunOnceIpc) && (
         <div className="settingsPageFooterActions" role="toolbar" aria-label="每日回顾操作">
+          {hasRunOnceIpc && (
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void triggerRun('deep')}
+                disabled={runningMode !== null}
+              >
+                {runningMode === 'deep' ? '生成中…' : '生成深度分析'}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void triggerRun('daily')}
+                disabled={runningMode !== null}
+              >
+                {runningMode === 'daily' ? '生成中…' : '生成每日回顾'}
+              </Button>
+            </>
+          )}
           {props.onOpenDailyReview && (
             <Button
               type="button"
@@ -1680,24 +1782,6 @@ function DailyReviewSettingsPage(props: { connections: readonly LlmConnection[];
             >
               打开每日回顾
             </Button>
-          )}
-          {hasRunOnceIpc && (
-            <>
-              <Button
-                type="button"
-                onClick={() => void triggerRun('daily')}
-                disabled={runningMode !== null}
-              >
-                {runningMode === 'daily' ? '生成中…' : '生成每日回顾'}
-              </Button>
-              <Button
-                type="button"
-                onClick={() => void triggerRun('deep')}
-                disabled={runningMode !== null}
-              >
-                {runningMode === 'deep' ? '生成中…' : '生成深度分析'}
-              </Button>
-            </>
           )}
         </div>
       )}
@@ -6577,7 +6661,27 @@ function OsPermissionRow(props: {
           <small className="settingsOsPermissionReason">{snapshot.reason}</small>
         ) : null}
       </div>
+      {/* PR-PERMISSIONS-UNIFIED-CARD-0 (WAWQAQ msg `d3ea9a33`
+          2026-06-26): the action buttons used to stack vertically with
+          two competing button styles (primary + secondary). Order so
+          the primary "请求授权" anchors the right edge, with the
+          system-settings link as a quieter ghost variant on the left.
+          When only one button is shown (e.g. the OS doesn't expose a
+          request flow for the permission), it still falls under the
+          primary slot — no awkward "lonely secondary" state. */}
       <div className="settingsOsPermissionActions">
+        {showOpenSettings && (
+          <Button
+            type="button"
+            variant={showRequest ? 'ghost' : 'default'}
+            size="sm"
+            onClick={props.onOpenSettings}
+            disabled={busy}
+            aria-busy={pendingKey === 'openSettings' ? 'true' : undefined}
+          >
+            {pendingKey === 'openSettings' ? '打开中…' : '前往系统设置'}
+          </Button>
+        )}
         {showRequest && (
           <Button
             type="button"
@@ -6587,18 +6691,6 @@ function OsPermissionRow(props: {
             aria-busy={pendingKey === 'request' ? 'true' : undefined}
           >
             {pendingKey === 'request' ? '请求中…' : '请求授权'}
-          </Button>
-        )}
-        {showOpenSettings && (
-          <Button
-            type="button"
-            variant={showRequest ? 'secondary' : 'default'}
-            size="sm"
-            onClick={props.onOpenSettings}
-            disabled={busy}
-            aria-busy={pendingKey === 'openSettings' ? 'true' : undefined}
-          >
-            {pendingKey === 'openSettings' ? '打开中…' : '前往系统设置'}
           </Button>
         )}
       </div>
@@ -6950,6 +7042,11 @@ function SettingRow(props: { title: string; detail: string; value: string }) {
 function readLastSettingsSection(): SettingsSection {
   const value = safeLocalStorageGet('maka-settings-section-v1');
   if (!value) return 'models';
+  // PR-VOICE-GATEWAY-SPLIT-0 (WAWQAQ msg `d3ea9a33` 2026-06-26):
+  // anyone whose last visit was the now-retired combined 语音与网关
+  // page lands on 语音 (the more user-frequent of the two split
+  // pages) instead of being silently bounced back to 模型.
+  if (value === 'voice-gateway') return 'voice';
   if (SETTINGS_NAV.some((item) => item.id === value)) {
     return value as SettingsSection;
   }
