@@ -156,13 +156,15 @@ const streamPanel = (el, id, attrs) =>
 // either way — the collapsed body row still diffs its box / typography parity.)
 const tv = (part) => toolVariants({ part });
 const openByDefault = (s) => s === 'pending' || s === 'waiting_permission' || s === 'running' || s === 'errored';
+// The SINGLE source of truth for the tool-card fixture: every production
+// `ToolActivityItem['status']` (the keys of components.tsx's STATUS_LABEL). The
+// cards, the header count, and the diffed IDS all derive from this one list, so
+// they can't drift apart; the cascade contract asserts it stays complete, so a
+// new status can't silently escape the zero-visual proof. `pending` has NO
+// `data-[status=pending]` branch in toolVariants, so it falls back to the base
+// card border + gray dot; it renders OPEN (isOpenByDefault).
+const STAT = ['pending', 'waiting_permission', 'running', 'completed', 'errored', 'interrupted'];
 const toolCardSection = (el) => {
-  // Every production `ToolActivityItem['status']` (the keys of components.tsx's
-  // STATUS_LABEL) renders a card here — the cascade contract asserts this set
-  // stays complete so a new status can't silently escape the zero-visual proof.
-  // `pending` has NO `data-[status=pending]` branch in toolVariants, so it falls
-  // back to the base card border + gray dot; it renders OPEN (isOpenByDefault).
-  const STAT = ['pending', 'waiting_permission', 'running', 'completed', 'errored', 'interrupted'];
   const item = pair('maka-tool toolItem', tv('item'));
   const hdr = pair('maka-tool-header', tv('header'));
   const dot = pair('maka-tool-status-dot', tv('dot'));
@@ -200,7 +202,7 @@ const toolCardSection = (el) => {
   return el('section', 'tool-section', pair('toolInline', tv('container')), 'aria-label="工具调用记录"',
     el('header', 'tool-section-header', pair('', tv('container-header')), '',
       '<strong>工具调用</strong>'
-      + el('span', 'tool-count', pair('maka-tool-count', tv('count')), '', '5'))
+      + el('span', 'tool-count', pair('maka-tool-count', tv('count')), '', String(STAT.length)))
     + STAT.map(card).join('\n'));
 };
 
@@ -263,10 +265,14 @@ const IDS = ['summary', 'summary-chip-1', 'summary-chip-2', 'summary-chip-tools'
   // status-invariant inner parts (on the open `errored` card), and the COLLAPSED
   // `completed` default — its summary (no `[open]` divider) + UA-hidden body.
   'tool-section', 'tool-section-header', 'tool-count',
-  'tool-item-pending', 'tool-item-waiting_permission', 'tool-item-running', 'tool-item-completed', 'tool-item-errored', 'tool-item-interrupted',
+  // Derived from the same STAT as the cards (no second hand-kept list to drift):
+  // every status' `[data-status]` container is diffed…
+  ...STAT.map((s) => `tool-item-${s}`),
   'tool-summary', 'tool-name', 'tool-meta', 'tool-duration', 'tool-statuslabel', 'tool-body', 'tool-intent', 'tool-args',
   'tool-summary-collapsed', 'tool-name-collapsed', 'tool-body-collapsed',
-  'tool-dot-pending', 'tool-dot-waiting_permission', 'tool-dot-completed', 'tool-dot-errored', 'tool-dot-interrupted'];
+  // …and every static dot, EXCEPT running's (its `maka-tool-pulse` ring is
+  // animated → phase-dependent `getComputedStyle`; pinned by the keyframe contract).
+  ...STAT.filter((s) => s !== 'running').map((s) => `tool-dot-${s}`)];
 // `::before` middot separators are now diffed for real (they render once the
 // CSS is inlined — the old `<link>` build couldn't apply them, masking this).
 // summary-chip-2 is a non-first chip (`[&:not(:first-child)]:before:…`);
