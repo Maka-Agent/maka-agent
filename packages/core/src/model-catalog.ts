@@ -362,12 +362,12 @@ function providerOrAuthUnavailableReason(
 }
 
 function missingEntryUnavailableReason(
-  input: Pick<BuildModelCatalogInput, 'providerAvailable' | 'authOk'>,
+  input: Pick<BuildModelCatalogInput, 'providerAvailable' | 'authOk' | 'models'>,
   modelSource: ModelDiscoverySource,
 ): ModelUnavailableReason {
   const providerOrAuthReason = providerOrAuthUnavailableReason(input);
   if (providerOrAuthReason) return providerOrAuthReason;
-  return modelSource === 'fetched' ? 'not_in_live_list' : 'none';
+  return modelSource === 'fetched' || input.models ? 'not_in_live_list' : 'none';
 }
 
 function isStale(input: Pick<BuildModelCatalogInput, 'modelSource' | 'modelsFetchedAt' | 'now' | 'staleAfterMs'>): boolean {

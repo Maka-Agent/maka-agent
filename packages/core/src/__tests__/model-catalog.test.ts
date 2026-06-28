@@ -5,6 +5,7 @@ import {
   buildModelCatalogEntries,
   validateChatDefaultModel,
 } from '../model-catalog.js';
+import { isConnectionReady } from '../connection-readiness.js';
 import type { LlmConnection, ModelInfo, ProviderType } from '../llm-connections.js';
 
 describe('ModelCatalogEntry', () => {
@@ -149,7 +150,7 @@ describe('ModelCatalogEntry', () => {
     assert.equal(withProviderFailure[0]?.unavailableReason, 'provider_removed');
   });
 
-  it('keeps fallback missing saved choices recoverable instead of treating them as live-list removals', () => {
+  it('keeps fallback missing saved choices visible without making them directly sendable', () => {
     const entries = buildModelCatalogEntries({
       providerType: 'openai-compatible',
       defaultModel: 'custom-default',
@@ -161,11 +162,45 @@ describe('ModelCatalogEntry', () => {
     assert.deepEqual(
       entries.map((entry) => [entry.id, entry.unavailableReason, entry.availability, entry.canUseAsChatDefault]),
       [
-        ['custom-default', 'none', 'available', true],
+        ['custom-default', 'not_in_live_list', 'blocked', false],
         ['relay-static-model', 'none', 'available', true],
-        ['custom-session', 'none', 'available', true],
+        ['custom-session', 'not_in_live_list', 'blocked', false],
       ],
     );
+  });
+
+  it('does not allow fallback missing defaults that the local send gate will reject', () => {
+    const input = {
+      providerType: 'openai-compatible' as const,
+      defaultModel: 'custom-default',
+      models: [{ id: 'relay-static-model' }],
+      modelSource: 'fallback' as const,
+    };
+
+    const [missingDefault] = buildModelCatalogEntries(input);
+    const validation = validateChatDefaultModel(input);
+    const readiness = isConnectionReady({
+      connection: {
+        slug: 'relay',
+        name: 'Relay',
+        providerType: 'openai-compatible',
+        defaultModel: 'custom-default',
+        enabled: true,
+        models: [{ id: 'relay-static-model' }],
+        modelSource: 'fallback',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      hasSecret: true,
+    });
+
+    assert.equal(missingDefault?.id, 'custom-default');
+    assert.equal(missingDefault?.canUseAsChatDefault, false);
+    assert.deepEqual(
+      validation.ok ? validation : { ok: validation.ok, reason: validation.reason },
+      { ok: false, reason: 'not_in_live_list' },
+    );
+    assert.deepEqual(readiness, { ready: false, reason: 'model_not_enabled' });
   });
 
   it('blocks explicitly image-only models from becoming a chat default', () => {
