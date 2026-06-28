@@ -70,4 +70,25 @@ describe('isConnectionReady — model capability gate', () => {
 
     assert.deepEqual(verdict, { ready: true, model: 'custom-chat' });
   });
+
+  it('returns the normalized model id after validating a whitespace-padded model', () => {
+    assert.deepEqual(
+      isConnectionReady({
+        connection: connection({
+          defaultModel: ' gpt-4.1 ',
+        }),
+        hasSecret: true,
+      }),
+      { ready: true, model: 'gpt-4.1' },
+    );
+
+    assert.deepEqual(
+      isConnectionReady({
+        connection: connection(),
+        hasSecret: true,
+        requestedModel: ' gpt-4.1 ',
+      }),
+      { ready: true, model: 'gpt-4.1' },
+    );
+  });
 });

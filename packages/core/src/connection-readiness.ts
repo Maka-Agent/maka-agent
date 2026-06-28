@@ -114,7 +114,7 @@ export function isConnectionReady(input: IsConnectionReadyInput): IsConnectionRe
   if (authKind !== 'none' && !hasSecret) {
     return { ready: false, reason: 'missing_api_key' };
   }
-  const model = requestedModel || connection.defaultModel;
+  const model = (requestedModel || connection.defaultModel)?.trim();
   if (!model) {
     return { ready: false, reason: 'missing_model' };
   }
@@ -127,7 +127,7 @@ export function isConnectionReady(input: IsConnectionReadyInput): IsConnectionRe
   if (!modelAvailability.ok) {
     return { ready: false, reason: chatModelAvailabilityReasonToReadiness(modelAvailability.reason) };
   }
-  return { ready: true, model };
+  return { ready: true, model: modelAvailability.model };
 }
 
 /**

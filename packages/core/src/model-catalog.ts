@@ -228,6 +228,8 @@ export function evaluateChatModelAvailability(input: {
 }): ChatModelAvailabilityResult {
   const model = input.model?.trim();
   if (!model) return { ok: false, reason: 'missing_model' };
+  const providerOrAuthReason = providerOrAuthUnavailableReason(input);
+  if (providerOrAuthReason) return { ok: false, reason: providerOrAuthReason };
   if (input.models) {
     const entries = new Map(
       input.models
@@ -301,9 +303,7 @@ function makeMissingDefaultEntry(
   modelSource: ModelDiscoverySource,
   savedChoiceSources: ReadonlyMap<string, ModelCatalogUserChoiceSource[]>,
 ): ModelCatalogEntry {
-  const unavailableReason = modelUnavailableReasonFromAvailability(
-    evaluateChatModelAvailability({ ...input, model: id }),
-  );
+  const unavailableReason = missingEntryUnavailableReason(input, modelSource);
   return {
     id,
     ...displayNameForKnownModel(input.providerType, id),
@@ -330,9 +330,7 @@ function makeMissingUserChoiceEntry(
   modelSource: ModelDiscoverySource,
   savedChoiceSources: ReadonlyMap<string, ModelCatalogUserChoiceSource[]>,
 ): ModelCatalogEntry {
-  const unavailableReason = modelUnavailableReasonFromAvailability(
-    evaluateChatModelAvailability({ ...input, model: id }),
-  );
+  const unavailableReason = missingEntryUnavailableReason(input, modelSource);
   return {
     id,
     ...displayNameForKnownModel(input.providerType, id),
@@ -409,23 +407,28 @@ function deriveModelUnavailableReason(
   >,
   model: ModelInfo,
 ): ModelUnavailableReason {
-  if (input.providerAvailable === false) return 'provider_removed';
-  if (input.authOk === false) return 'auth';
+  const providerOrAuthReason = providerOrAuthUnavailableReason(input);
+  if (providerOrAuthReason) return providerOrAuthReason;
   if (isModelExplicitlyUnsupportedForChat(model)) return 'unsupported_for_chat';
   if (isStale(input)) return 'stale';
   return 'none';
 }
 
-function modelUnavailableReasonFromAvailability(result: ChatModelAvailabilityResult): ModelUnavailableReason {
-  if (result.ok) return result.warning ?? 'none';
-  switch (result.reason) {
-    case 'missing_model':
-      return 'not_in_live_list';
-    case 'empty_model_list':
-      return 'not_in_live_list';
-    default:
-      return result.reason;
-  }
+function providerOrAuthUnavailableReason(
+  input: Pick<BuildModelCatalogInput, 'providerAvailable' | 'authOk'>,
+): Extract<ModelUnavailableReason, 'provider_removed' | 'auth'> | null {
+  if (input.providerAvailable === false) return 'provider_removed';
+  if (input.authOk === false) return 'auth';
+  return null;
+}
+
+function missingEntryUnavailableReason(
+  input: Pick<BuildModelCatalogInput, 'providerAvailable' | 'authOk'>,
+  modelSource: ModelDiscoverySource,
+): ModelUnavailableReason {
+  const providerOrAuthReason = providerOrAuthUnavailableReason(input);
+  if (providerOrAuthReason) return providerOrAuthReason;
+  return modelSource === 'fetched' ? 'not_in_live_list' : 'none';
 }
 
 function blockingChatAvailabilityReason(

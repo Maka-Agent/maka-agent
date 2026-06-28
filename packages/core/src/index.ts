@@ -653,13 +653,10 @@ export type {
   ModelCatalogUserChoiceSource,
   ModelUnavailableReason,
   SavedModelChoice,
-  ChatModelAvailabilityReason,
-  ChatModelAvailabilityResult,
 } from './model-catalog.js';
 export {
   buildConnectionModelCatalogEntries,
   buildModelCatalogEntries,
-  evaluateChatModelAvailability,
   isModelExplicitlyUnsupportedForChat,
   validateChatDefaultModel,
 } from './model-catalog.js';

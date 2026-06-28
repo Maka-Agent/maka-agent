@@ -39,6 +39,28 @@ describe('ModelCatalogEntry', () => {
     );
   });
 
+  it('keeps auth and provider state ahead of live-list membership failures', () => {
+    assert.deepEqual(
+      evaluateChatModelAvailability({
+        model: 'glm-removed',
+        models: [{ id: 'glm-4.7' }],
+        modelSource: 'fetched',
+        authOk: false,
+      }),
+      { ok: false, reason: 'auth' },
+    );
+
+    assert.deepEqual(
+      evaluateChatModelAvailability({
+        model: 'glm-removed',
+        models: [{ id: 'glm-4.7' }],
+        modelSource: 'fetched',
+        providerAvailable: false,
+      }),
+      { ok: false, reason: 'provider_removed' },
+    );
+  });
+
   it('normalizes Z.ai fetched models as provider_api facts without guessing unknown capabilities', () => {
     const models: ModelInfo[] = [
       { id: 'glm-4.5' },
@@ -142,6 +164,25 @@ describe('ModelCatalogEntry', () => {
     assert.deepEqual(
       validation.ok ? validation : { ok: validation.ok, reason: validation.reason },
       { ok: false, reason: 'not_in_live_list' },
+    );
+  });
+
+  it('keeps fallback missing saved choices recoverable instead of treating them as live-list removals', () => {
+    const entries = buildModelCatalogEntries({
+      providerType: 'openai-compatible',
+      defaultModel: 'custom-default',
+      models: [{ id: 'relay-static-model' }],
+      modelSource: 'fallback',
+      savedModelIds: [{ id: 'custom-session', source: 'session_model' }],
+    });
+
+    assert.deepEqual(
+      entries.map((entry) => [entry.id, entry.unavailableReason, entry.availability, entry.canUseAsChatDefault]),
+      [
+        ['custom-default', 'none', 'available', true],
+        ['relay-static-model', 'none', 'available', true],
+        ['custom-session', 'none', 'available', true],
+      ],
     );
   });
 
