@@ -1875,11 +1875,18 @@ describe('AiSdkBackend usage telemetry', () => {
     }
 
     assert.equal(streamCalls, 2);
+    const secondPromptMessages = model.doStreamCalls[1]?.prompt ?? [];
     const secondPrompt = JSON.stringify(model.doStreamCalls[1]?.prompt.map((message) => ({
       role: message.role,
       content: message.content,
     })));
     assert.match(secondPrompt, /maka_active_full_compact_block/);
+    assert.equal(secondPromptMessages.some((message) =>
+      message.role === 'user' && JSON.stringify(message.content).includes('maka_active_full_compact_block')
+    ), true);
+    assert.equal(secondPromptMessages.some((message) =>
+      message.role === 'system' && JSON.stringify(message.content).includes('maka_active_full_compact_block')
+    ), false);
     assert.match(secondPrompt, /artifact-tool-1/);
     assert.equal(secondPrompt.includes('ACTIVE_FULL_COMPACT_RAW_TOOL_OUTPUT'), false);
     assert.doesNotMatch(secondPrompt, /providerSourceIds=/);

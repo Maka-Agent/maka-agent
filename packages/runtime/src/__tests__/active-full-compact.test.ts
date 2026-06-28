@@ -451,6 +451,7 @@ describe('active full compact PR1 foundation', () => {
     assert.equal(rewritten.decision, 'replaced');
     assert.equal(rewritten.messages.length, 2);
     assert.equal(rewritten.messages[1], messages[2]);
+    assert.equal((rewritten.messages[0] as { role?: unknown }).role, 'user');
     const rendered = (rewritten.messages[0] as { content?: unknown }).content;
     assert.equal(typeof rendered, 'string');
     assert.match(rendered as string, /maka_active_full_compact_block/);

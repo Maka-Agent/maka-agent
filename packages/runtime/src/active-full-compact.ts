@@ -563,7 +563,7 @@ export function buildDeterministicProcessStateActiveFullCompactSummary(input: {
 
 export function activeFullCompactBlockToModelMessage(block: ActiveFullCompactBlock): ModelMessage {
   return {
-    role: 'system',
+    role: 'user',
     content: renderActiveFullCompactBlock(block),
   } as ModelMessage;
 }
