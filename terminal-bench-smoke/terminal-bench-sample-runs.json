@@ -13,9 +13,7 @@
     "nConcurrentTrials": 1,
     "timeoutMultiplier": 1.0,
     "retryMaxRetries": 0,
-    "modelExtraInstructionPaths": [
-      "terminal-bench-smoke/prompts/self-check-cleanup.md"
-    ]
+    "modelExtraInstructionPaths": []
   },
   "profiles": {
     "maka-basic": {

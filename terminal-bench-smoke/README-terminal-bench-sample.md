@@ -88,13 +88,12 @@ so it may only become meaningful near completion. `maka-harbor.status.json`,
 `maka-harbor.stderr.log`, and `maka-task-run/` are the live files to inspect
 while a trial is running.
 
-## Self-Check Cleanup Prompt
+## Extra Instructions
 
-Maka/OpenCode model profiles automatically inject
-`terminal-bench-smoke/prompts/self-check-cleanup.md` through Harbor
-`extra_instruction_paths`. The prompt tells the agent to delete self-check
-byproducts and restore verifier-clean runtime state after validation, while
-keeping final required implementation/output files intact.
+Maka/OpenCode model profiles do not inject additional verifier-hygiene prompts
+by default. The benchmark task text and Maka runtime policy should be the only
+model-visible source of task behavior unless a run profile explicitly opts into
+extra instruction files.
 
-The `oracle` profile does not inject this prompt, so it remains a cheap pure
-dataset/wrapper smoke path.
+The `oracle` profile also uses an empty `extraInstructionPaths` list, so it
+remains a cheap pure dataset/wrapper smoke path.
