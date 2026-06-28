@@ -217,23 +217,26 @@ function makeEntry(
   const pricing = findPricing(input, normalizedModel.id);
   const metadata = lookupModelMetadata(input.providerType, normalizedModel.id);
   const recommendedRank = recommendedRanks.get(normalizedModel.id);
+  const contextWindow = normalizedModel.contextWindow ?? metadata.contextWindow;
+  const maxOutputTokens = normalizedModel.maxOutputTokens ?? metadata.maxOutputTokens;
+  const capabilities = normalizedModel.capabilities ?? metadata.capabilities;
   return {
     id: normalizedModel.id,
     ...displayNameForModel(input.providerType, normalizedModel),
     providerType: input.providerType,
     ...(input.connectionSlug ? { connectionSlug: input.connectionSlug } : {}),
     source,
-    capabilitySource: model.capabilities ? source : 'unknown',
+    capabilitySource: normalizedModel.capabilities ? source : metadata.capabilities ? 'static_catalog' : 'unknown',
     unavailableReason,
     availability: availabilityOf(unavailableReason),
     canUseAsChatDefault: canUseUnavailableReasonAsDefault(unavailableReason),
     isDefault: normalizedModel.id === normalizedDefaultModel,
-    capabilities: normalizeCapabilities(normalizedModel),
+    capabilities: normalizeCapabilities(capabilities),
     lifecycle: metadata.lifecycle ?? 'unknown',
     ...(recommendedRank ? { recommendedRank } : {}),
     ...(metadata.docsUrl ? { docsUrl: metadata.docsUrl } : {}),
-    ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
-    ...(model.maxOutputTokens ? { maxOutputTokens: model.maxOutputTokens } : {}),
+    ...(contextWindow !== undefined ? { contextWindow } : {}),
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     ...(pricing ? { pricing } : {}),
     provenance: {
       modelSource,
@@ -261,15 +264,17 @@ function makeMissingDefaultEntry(
     providerType: input.providerType,
     ...(input.connectionSlug ? { connectionSlug: input.connectionSlug } : {}),
     source: 'unknown',
-    capabilitySource: 'unknown',
+    capabilitySource: metadata.capabilities ? 'static_catalog' : 'unknown',
     unavailableReason,
     availability: availabilityOf(unavailableReason),
     canUseAsChatDefault: canUseUnavailableReasonAsDefault(unavailableReason),
     isDefault: true,
-    capabilities: {},
+    capabilities: normalizeCapabilities(metadata.capabilities),
     lifecycle: metadata.lifecycle ?? 'unknown',
     ...(recommendedRank ? { recommendedRank } : {}),
     ...(metadata.docsUrl ? { docsUrl: metadata.docsUrl } : {}),
+    ...(metadata.contextWindow !== undefined ? { contextWindow: metadata.contextWindow } : {}),
+    ...(metadata.maxOutputTokens !== undefined ? { maxOutputTokens: metadata.maxOutputTokens } : {}),
     provenance: {
       modelSource,
       ...(input.modelsFetchedAt ? { modelsFetchedAt: input.modelsFetchedAt } : {}),
@@ -295,15 +300,17 @@ function makeMissingUserChoiceEntry(
     providerType: input.providerType,
     ...(input.connectionSlug ? { connectionSlug: input.connectionSlug } : {}),
     source: 'unknown',
-    capabilitySource: 'unknown',
+    capabilitySource: metadata.capabilities ? 'static_catalog' : 'unknown',
     unavailableReason,
     availability: availabilityOf(unavailableReason),
     canUseAsChatDefault: canUseUnavailableReasonAsDefault(unavailableReason),
     isDefault: id === normalizedDefaultModel,
-    capabilities: {},
+    capabilities: normalizeCapabilities(metadata.capabilities),
     lifecycle: metadata.lifecycle ?? 'unknown',
     ...(recommendedRank ? { recommendedRank } : {}),
     ...(metadata.docsUrl ? { docsUrl: metadata.docsUrl } : {}),
+    ...(metadata.contextWindow !== undefined ? { contextWindow: metadata.contextWindow } : {}),
+    ...(metadata.maxOutputTokens !== undefined ? { maxOutputTokens: metadata.maxOutputTokens } : {}),
     provenance: {
       modelSource,
       ...(input.modelsFetchedAt ? { modelsFetchedAt: input.modelsFetchedAt } : {}),
@@ -420,8 +427,7 @@ export function isModelExplicitlyUnsupportedForChat(model: ModelInfo): boolean {
     caps.functionCalling !== true;
 }
 
-function normalizeCapabilities(model: ModelInfo): KnownModelCapabilities {
-  const caps = model.capabilities;
+function normalizeCapabilities(caps: ModelInfo['capabilities']): KnownModelCapabilities {
   if (!caps) return {};
   return {
     ...(caps.chat === true ? { chat: true as const } : {}),

@@ -1,9 +1,12 @@
-import type { ProviderType } from './llm-connections.js';
+import type { ModelInfo, ProviderType } from './llm-connections.js';
 
 export interface ModelMetadata {
   displayName?: string;
   lifecycle?: 'active' | 'deprecated' | 'retired';
   docsUrl?: string;
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  capabilities?: ModelInfo['capabilities'];
 }
 
 export function lookupModelMetadata(providerType: ProviderType, modelId: string): ModelMetadata {
@@ -14,27 +17,54 @@ export function catalogFallbackModelsForProvider(providerType: ProviderType): re
   return CATALOG_FALLBACK_MODELS[providerType];
 }
 
+const REASONING_FUNCTION_CALLING = { reasoning: true, functionCalling: true } satisfies ModelInfo['capabilities'];
+const FUNCTION_CALLING_ONLY = { functionCalling: true } satisfies ModelInfo['capabilities'];
+
 const ANTHROPIC_MODELS_DEV_METADATA: Record<string, ModelMetadata> = {
-  'claude-sonnet-4-6': { displayName: 'Claude Sonnet 4.6', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview' },
-  'claude-opus-4-8': { displayName: 'Claude Opus 4.8', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview' },
-  'claude-fable-5': { displayName: 'Claude Fable 5', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview' },
-  'claude-sonnet-4-5': { displayName: 'Claude Sonnet 4.5 (latest)', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview' },
-  'claude-sonnet-4-5-20250929': { displayName: 'Claude Sonnet 4.5', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview' },
-  'claude-opus-4-1-20250805': { displayName: 'Claude Opus 4.1', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview' },
-  'claude-haiku-4-5': { displayName: 'Claude Haiku 4.5 (latest)', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview' },
-  'claude-haiku-4-5-20251001': { displayName: 'Claude Haiku 4.5', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview' },
-  'claude-3-5-sonnet-20241022': { displayName: 'Claude Sonnet 3.5 v2', lifecycle: 'deprecated', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview' },
+  'claude-sonnet-4-6': { displayName: 'Claude Sonnet 4.6', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview', contextWindow: 1_000_000, maxOutputTokens: 64_000, capabilities: REASONING_FUNCTION_CALLING },
+  'claude-opus-4-8': { displayName: 'Claude Opus 4.8', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview', contextWindow: 1_000_000, maxOutputTokens: 128_000, capabilities: REASONING_FUNCTION_CALLING },
+  'claude-fable-5': { displayName: 'Claude Fable 5', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview', contextWindow: 1_000_000, maxOutputTokens: 128_000, capabilities: REASONING_FUNCTION_CALLING },
+  'claude-sonnet-4-5': { displayName: 'Claude Sonnet 4.5 (latest)', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview', contextWindow: 200_000, maxOutputTokens: 64_000, capabilities: REASONING_FUNCTION_CALLING },
+  'claude-sonnet-4-5-20250929': { displayName: 'Claude Sonnet 4.5', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview', contextWindow: 200_000, maxOutputTokens: 64_000, capabilities: REASONING_FUNCTION_CALLING },
+  'claude-opus-4-1-20250805': { displayName: 'Claude Opus 4.1', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview', contextWindow: 200_000, maxOutputTokens: 32_000, capabilities: REASONING_FUNCTION_CALLING },
+  'claude-haiku-4-5': { displayName: 'Claude Haiku 4.5 (latest)', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview', contextWindow: 200_000, maxOutputTokens: 64_000, capabilities: REASONING_FUNCTION_CALLING },
+  'claude-haiku-4-5-20251001': { displayName: 'Claude Haiku 4.5', lifecycle: 'active', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview', contextWindow: 200_000, maxOutputTokens: 64_000, capabilities: REASONING_FUNCTION_CALLING },
+  'claude-3-5-sonnet-20241022': { displayName: 'Claude Sonnet 3.5 v2', lifecycle: 'deprecated', docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models/overview', contextWindow: 200_000, maxOutputTokens: 8_192, capabilities: FUNCTION_CALLING_ONLY },
 };
 
 const GOOGLE_MODELS_DEV_METADATA: Record<string, ModelMetadata> = {
-  'gemini-3.5-flash': { displayName: 'Gemini 3.5 Flash', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models' },
-  'gemini-3.1-pro-preview': { displayName: 'Gemini 3.1 Pro Preview', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models' },
-  'gemini-3.1-flash-lite': { displayName: 'Gemini 3.1 Flash Lite', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models' },
-  'gemini-3-pro-preview': { displayName: 'Gemini 3 Pro Preview', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models' },
-  'gemini-3-flash-preview': { displayName: 'Gemini 3 Flash Preview', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models' },
-  'gemini-2.5-pro': { displayName: 'Gemini 2.5 Pro', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models' },
-  'gemini-2.5-flash': { displayName: 'Gemini 2.5 Flash', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models' },
-  'gemini-2.0-flash': { displayName: 'Gemini 2.0 Flash', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models' },
+  'gemini-3.5-flash': { displayName: 'Gemini 3.5 Flash', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models', contextWindow: 1_048_576, maxOutputTokens: 65_536, capabilities: REASONING_FUNCTION_CALLING },
+  'gemini-3.1-pro-preview': { displayName: 'Gemini 3.1 Pro Preview', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models', contextWindow: 1_048_576, maxOutputTokens: 65_536, capabilities: REASONING_FUNCTION_CALLING },
+  'gemini-3.1-flash-lite': { displayName: 'Gemini 3.1 Flash Lite', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models', contextWindow: 1_048_576, maxOutputTokens: 65_536, capabilities: REASONING_FUNCTION_CALLING },
+  'gemini-3-pro-preview': { displayName: 'Gemini 3 Pro Preview', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models', contextWindow: 1_048_576, maxOutputTokens: 65_536, capabilities: REASONING_FUNCTION_CALLING },
+  'gemini-3-flash-preview': { displayName: 'Gemini 3 Flash Preview', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models', contextWindow: 1_048_576, maxOutputTokens: 65_536, capabilities: REASONING_FUNCTION_CALLING },
+  'gemini-2.5-pro': { displayName: 'Gemini 2.5 Pro', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models', contextWindow: 1_048_576, maxOutputTokens: 65_536, capabilities: REASONING_FUNCTION_CALLING },
+  'gemini-2.5-flash': { displayName: 'Gemini 2.5 Flash', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models', contextWindow: 1_048_576, maxOutputTokens: 65_536, capabilities: REASONING_FUNCTION_CALLING },
+  'gemini-2.0-flash': { displayName: 'Gemini 2.0 Flash', lifecycle: 'active', docsUrl: 'https://ai.google.dev/gemini-api/docs/models', contextWindow: 1_048_576, maxOutputTokens: 8_192, capabilities: FUNCTION_CALLING_ONLY },
+};
+
+const OPENAI_MODELS_DEV_METADATA: Record<string, ModelMetadata> = {
+  'gpt-5.5': { displayName: 'GPT-5.5', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models', contextWindow: 1_050_000, maxOutputTokens: 128_000, capabilities: REASONING_FUNCTION_CALLING },
+  'gpt-5.5-pro': { displayName: 'GPT-5.5 Pro', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models', contextWindow: 1_050_000, maxOutputTokens: 128_000, capabilities: REASONING_FUNCTION_CALLING },
+  'gpt-5.4': { displayName: 'GPT-5.4', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models', contextWindow: 1_050_000, maxOutputTokens: 128_000, capabilities: REASONING_FUNCTION_CALLING },
+  'gpt-5.4-mini': { displayName: 'GPT-5.4 mini', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models', contextWindow: 400_000, maxOutputTokens: 128_000, capabilities: REASONING_FUNCTION_CALLING },
+  'gpt-5.3-codex-spark': { displayName: 'GPT-5.3 Codex Spark', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models', contextWindow: 128_000, maxOutputTokens: 32_000, capabilities: REASONING_FUNCTION_CALLING },
+  'gpt-5.3-codex': { displayName: 'GPT-5.3 Codex', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models', contextWindow: 400_000, maxOutputTokens: 128_000, capabilities: REASONING_FUNCTION_CALLING },
+  'gpt-5.2': { displayName: 'GPT-5.2', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models', contextWindow: 400_000, maxOutputTokens: 128_000, capabilities: REASONING_FUNCTION_CALLING },
+  'gpt-5.2-codex': { displayName: 'GPT-5.2 Codex', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models', contextWindow: 400_000, maxOutputTokens: 128_000, capabilities: REASONING_FUNCTION_CALLING },
+  'gpt-5.1-codex-mini': { displayName: 'GPT-5.1 Codex mini', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models', contextWindow: 400_000, maxOutputTokens: 128_000, capabilities: REASONING_FUNCTION_CALLING },
+  'gpt-4o-mini': { displayName: 'GPT-4o mini', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models', contextWindow: 128_000, maxOutputTokens: 16_384, capabilities: FUNCTION_CALLING_ONLY },
+  'gpt-4o': { displayName: 'GPT-4o', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models', contextWindow: 128_000, maxOutputTokens: 16_384, capabilities: FUNCTION_CALLING_ONLY },
+  'gpt-4-turbo': { displayName: 'GPT-4 Turbo', lifecycle: 'deprecated', docsUrl: 'https://platform.openai.com/docs/models', contextWindow: 128_000, maxOutputTokens: 4_096, capabilities: FUNCTION_CALLING_ONLY },
+  'gpt-5': { displayName: 'GPT-5', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models', contextWindow: 400_000, maxOutputTokens: 128_000, capabilities: REASONING_FUNCTION_CALLING },
+};
+
+const CODEX_SUBSCRIPTION_MODELS_DEV_METADATA: Record<string, ModelMetadata> = {
+  'gpt-5.5': OPENAI_MODELS_DEV_METADATA['gpt-5.5']!,
+  'gpt-5.5-pro': OPENAI_MODELS_DEV_METADATA['gpt-5.5-pro']!,
+  'gpt-5.4': OPENAI_MODELS_DEV_METADATA['gpt-5.4']!,
+  'gpt-5.4-mini': OPENAI_MODELS_DEV_METADATA['gpt-5.4-mini']!,
+  'gpt-5.3-codex-spark': OPENAI_MODELS_DEV_METADATA['gpt-5.3-codex-spark']!,
 };
 
 // Curated from https://models.dev/api.json. Keep this small: the model catalog
@@ -42,43 +72,23 @@ const GOOGLE_MODELS_DEV_METADATA: Record<string, ModelMetadata> = {
 const MODELS_DEV_METADATA: Partial<Record<ProviderType, Record<string, ModelMetadata>>> = {
   anthropic: ANTHROPIC_MODELS_DEV_METADATA,
   'claude-subscription': ANTHROPIC_MODELS_DEV_METADATA,
-  openai: {
-    'gpt-5.5': { displayName: 'GPT-5.5', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-5.5-pro': { displayName: 'GPT-5.5 Pro', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-5.4': { displayName: 'GPT-5.4', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-5.4-mini': { displayName: 'GPT-5.4 mini', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-5.3-codex-spark': { displayName: 'GPT-5.3 Codex Spark', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-5.3-codex': { displayName: 'GPT-5.3 Codex', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-5.2': { displayName: 'GPT-5.2', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-5.2-codex': { displayName: 'GPT-5.2 Codex', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-5.1-codex-mini': { displayName: 'GPT-5.1 Codex mini', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-4o-mini': { displayName: 'GPT-4o mini', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-4o': { displayName: 'GPT-4o', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-4-turbo': { displayName: 'GPT-4 Turbo', lifecycle: 'deprecated', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-5': { displayName: 'GPT-5', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-  },
+  openai: OPENAI_MODELS_DEV_METADATA,
   google: GOOGLE_MODELS_DEV_METADATA,
   'gemini-cli': GOOGLE_MODELS_DEV_METADATA,
-  'codex-subscription': {
-    'gpt-5.5': { displayName: 'GPT-5.5', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-5.5-pro': { displayName: 'GPT-5.5 Pro', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-5.4': { displayName: 'GPT-5.4', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-5.4-mini': { displayName: 'GPT-5.4 mini', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-    'gpt-5.3-codex-spark': { displayName: 'GPT-5.3 Codex Spark', lifecycle: 'active', docsUrl: 'https://platform.openai.com/docs/models' },
-  },
+  'codex-subscription': CODEX_SUBSCRIPTION_MODELS_DEV_METADATA,
   deepseek: {
-    'deepseek-v4-flash': { displayName: 'DeepSeek V4 Flash', lifecycle: 'active', docsUrl: 'https://api-docs.deepseek.com/quick_start/pricing' },
-    'deepseek-v4-pro': { displayName: 'DeepSeek V4 Pro', lifecycle: 'active', docsUrl: 'https://api-docs.deepseek.com/quick_start/pricing' },
-    'deepseek-reasoner': { displayName: 'DeepSeek Reasoner', lifecycle: 'deprecated', docsUrl: 'https://api-docs.deepseek.com/quick_start/pricing' },
-    'deepseek-chat': { displayName: 'DeepSeek Chat', lifecycle: 'deprecated', docsUrl: 'https://api-docs.deepseek.com/quick_start/pricing' },
+    'deepseek-v4-flash': { displayName: 'DeepSeek V4 Flash', lifecycle: 'active', docsUrl: 'https://api-docs.deepseek.com/quick_start/pricing', contextWindow: 1_000_000, maxOutputTokens: 384_000, capabilities: REASONING_FUNCTION_CALLING },
+    'deepseek-v4-pro': { displayName: 'DeepSeek V4 Pro', lifecycle: 'active', docsUrl: 'https://api-docs.deepseek.com/quick_start/pricing', contextWindow: 1_000_000, maxOutputTokens: 384_000, capabilities: REASONING_FUNCTION_CALLING },
+    'deepseek-reasoner': { displayName: 'DeepSeek Reasoner', lifecycle: 'deprecated', docsUrl: 'https://api-docs.deepseek.com/quick_start/pricing', contextWindow: 1_000_000, maxOutputTokens: 384_000, capabilities: REASONING_FUNCTION_CALLING },
+    'deepseek-chat': { displayName: 'DeepSeek Chat', lifecycle: 'deprecated', docsUrl: 'https://api-docs.deepseek.com/quick_start/pricing', contextWindow: 1_000_000, maxOutputTokens: 384_000, capabilities: FUNCTION_CALLING_ONLY },
   },
   'zai-coding-plan': {
-    'glm-5.2': { displayName: 'GLM-5.2', lifecycle: 'active', docsUrl: 'https://docs.z.ai' },
-    'glm-5.1': { displayName: 'GLM-5.1', lifecycle: 'active', docsUrl: 'https://docs.z.ai' },
-    'glm-5-turbo': { displayName: 'GLM-5-Turbo', lifecycle: 'active', docsUrl: 'https://docs.z.ai' },
-    'glm-5v-turbo': { displayName: 'GLM-5V-Turbo', lifecycle: 'active', docsUrl: 'https://docs.z.ai' },
-    'glm-4.7': { displayName: 'GLM-4.7', lifecycle: 'active', docsUrl: 'https://docs.z.ai' },
-    'glm-4.5-air': { displayName: 'GLM-4.5-Air', lifecycle: 'deprecated', docsUrl: 'https://docs.z.ai' },
+    'glm-5.2': { displayName: 'GLM-5.2', lifecycle: 'active', docsUrl: 'https://docs.z.ai', contextWindow: 1_000_000, maxOutputTokens: 131_072, capabilities: REASONING_FUNCTION_CALLING },
+    'glm-5.1': { displayName: 'GLM-5.1', lifecycle: 'active', docsUrl: 'https://docs.z.ai', contextWindow: 200_000, maxOutputTokens: 131_072, capabilities: REASONING_FUNCTION_CALLING },
+    'glm-5-turbo': { displayName: 'GLM-5-Turbo', lifecycle: 'active', docsUrl: 'https://docs.z.ai', contextWindow: 200_000, maxOutputTokens: 131_072, capabilities: REASONING_FUNCTION_CALLING },
+    'glm-5v-turbo': { displayName: 'GLM-5V-Turbo', lifecycle: 'active', docsUrl: 'https://docs.z.ai', contextWindow: 200_000, maxOutputTokens: 131_072, capabilities: REASONING_FUNCTION_CALLING },
+    'glm-4.7': { displayName: 'GLM-4.7', lifecycle: 'active', docsUrl: 'https://docs.z.ai', contextWindow: 204_800, maxOutputTokens: 131_072, capabilities: REASONING_FUNCTION_CALLING },
+    'glm-4.5-air': { displayName: 'GLM-4.5-Air', lifecycle: 'deprecated', docsUrl: 'https://docs.z.ai', contextWindow: 131_072, maxOutputTokens: 98_304, capabilities: REASONING_FUNCTION_CALLING },
   },
 };
 

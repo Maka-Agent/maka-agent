@@ -135,6 +135,57 @@ describe('ModelCatalogEntry', () => {
     assert.equal(entry?.canUseAsChatDefault, true);
   });
 
+  it('fills missing provider limits and capabilities from static model metadata', () => {
+    const [entry] = buildModelCatalogEntries({
+      providerType: 'deepseek',
+      defaultModel: 'deepseek-v4-pro',
+      models: [{ id: 'deepseek-v4-pro' }],
+      modelSource: 'fetched',
+    });
+
+    assert.equal(entry?.contextWindow, 1_000_000);
+    assert.equal(entry?.maxOutputTokens, 384_000);
+    assert.equal(entry?.capabilitySource, 'static_catalog');
+    assert.deepEqual(entry?.capabilities, { reasoning: true, functionCalling: true });
+  });
+
+  it('keeps provider limits and capabilities ahead of static model metadata', () => {
+    const [entry] = buildModelCatalogEntries({
+      providerType: 'deepseek',
+      defaultModel: 'deepseek-v4-pro',
+      models: [{
+        id: 'deepseek-v4-pro',
+        contextWindow: 128_000,
+        maxOutputTokens: 8_192,
+        capabilities: { reasoning: false, functionCalling: false },
+      }],
+      modelSource: 'fetched',
+    });
+
+    assert.equal(entry?.contextWindow, 128_000);
+    assert.equal(entry?.maxOutputTokens, 8_192);
+    assert.equal(entry?.capabilitySource, 'provider_api');
+    assert.deepEqual(entry?.capabilities, {});
+  });
+
+  it('keeps static model facts on missing default entries without making them sendable', () => {
+    const [entry] = buildModelCatalogEntries({
+      providerType: 'zai-coding-plan',
+      defaultModel: 'glm-4.7',
+      models: [{ id: 'glm-5.2' }],
+      modelSource: 'fetched',
+    });
+
+    assert.equal(entry?.id, 'glm-4.7');
+    assert.equal(entry?.source, 'unknown');
+    assert.equal(entry?.unavailableReason, 'not_in_live_list');
+    assert.equal(entry?.canUseAsChatDefault, false);
+    assert.equal(entry?.contextWindow, 204_800);
+    assert.equal(entry?.maxOutputTokens, 131_072);
+    assert.equal(entry?.capabilitySource, 'static_catalog');
+    assert.deepEqual(entry?.capabilities, { reasoning: true, functionCalling: true });
+  });
+
   it('marks a fetched model as default when the saved default id has surrounding whitespace', () => {
     const entries = buildModelCatalogEntries({
       providerType: 'openai',
@@ -457,12 +508,19 @@ describe('ModelCatalogEntry', () => {
           modelSource: 'fetched',
           modelsFetchedAt: 1_800_000_000_000,
         });
-        return [entry?.id, entry?.displayName];
+        return [
+          entry?.id,
+          entry?.displayName,
+          entry?.contextWindow,
+          entry?.maxOutputTokens,
+          entry?.capabilitySource,
+          entry?.capabilities,
+        ];
       }),
       [
-        ['gemini-1.5-pro', undefined],
-        ['moonshot-v1-8k', undefined],
-        ['kimi-for-coding', undefined],
+        ['gemini-1.5-pro', undefined, undefined, undefined, 'unknown', {}],
+        ['moonshot-v1-8k', undefined, undefined, undefined, 'unknown', {}],
+        ['kimi-for-coding', undefined, undefined, undefined, 'unknown', {}],
       ],
     );
   });
