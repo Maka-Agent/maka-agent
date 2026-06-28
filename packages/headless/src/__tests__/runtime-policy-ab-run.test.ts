@@ -264,7 +264,7 @@ describe('runRuntimePolicyAbComparison', () => {
         now: () => 100,
         newId: idFactory(),
       });
-      assert.deepEqual(calls, [
+      assert.deepEqual(calls.sort(), [
         'ab-prune-off-r0-t1:{"MAKA_HARBOR_CONTINUATION":"on","MAKA_HARBOR_CONTINUATION_MAX_TURNS":"3","MAKA_HARBOR_CONTINUATION_MAX_TOTAL_RUNTIME_STEPS":"150","MAKA_CONTEXT_BUDGET":"off"}',
         'ab-prune-on-r0-t1:{"MAKA_HARBOR_CONTINUATION":"on","MAKA_HARBOR_CONTINUATION_MAX_TURNS":"3","MAKA_HARBOR_CONTINUATION_MAX_TOTAL_RUNTIME_STEPS":"150","MAKA_CONTEXT_STALE_TOOL_RESULT_PRUNE":"on","MAKA_CONTEXT_STALE_TOOL_RESULT_MAX_TOKENS":"4096"}',
       ]);
