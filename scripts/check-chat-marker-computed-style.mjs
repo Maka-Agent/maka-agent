@@ -139,7 +139,7 @@ const streamPanel = (el, id, attrs) =>
 // status dot (its `maka-tool-pulse` ring is animated → phase-dependent
 // `getComputedStyle`), pinned by the cascade contract's keyframe frames +
 // chat.tsx literal instead. Every other surface — the inline section + count, all
-// five `[data-status]` card containers (border / bg / opacity swaps), the summary
+// six `[data-status]` card containers (border / bg / opacity swaps), the summary
 // header grid, the static dot colors, name / meta / duration / status-label /
 // body / intent, and the args `<pre>` override over the shared `.maka-code` base
 // — is static and diffed in full.
@@ -157,7 +157,12 @@ const streamPanel = (el, id, attrs) =>
 const tv = (part) => toolVariants({ part });
 const openByDefault = (s) => s === 'pending' || s === 'waiting_permission' || s === 'running' || s === 'errored';
 const toolCardSection = (el) => {
-  const STAT = ['waiting_permission', 'running', 'completed', 'errored', 'interrupted'];
+  // Every production `ToolActivityItem['status']` (the keys of components.tsx's
+  // STATUS_LABEL) renders a card here — the cascade contract asserts this set
+  // stays complete so a new status can't silently escape the zero-visual proof.
+  // `pending` has NO `data-[status=pending]` branch in toolVariants, so it falls
+  // back to the base card border + gray dot; it renders OPEN (isOpenByDefault).
+  const STAT = ['pending', 'waiting_permission', 'running', 'completed', 'errored', 'interrupted'];
   const item = pair('maka-tool toolItem', tv('item'));
   const hdr = pair('maka-tool-header', tv('header'));
   const dot = pair('maka-tool-status-dot', tv('dot'));
@@ -252,16 +257,16 @@ const IDS = ['summary', 'summary-chip-1', 'summary-chip-2', 'summary-chip-tools'
   // PR3 stream shell (resting + live border ring). The pulse dot is excluded
   // (animated → phase-dependent computed style).
   'stream', 'stream-header', 'stream-label', 'stream-counts', 'stream-count', 'stream-count-stderr', 'stream-count-redacted', 'stream-count-truncated', 'stream-body', 'stream-chunk', 'stream-chunk-stderr', 'stream-chunk-redacted', 'stream-redacted-tag', 'stream-live',
-  // PR3b tool-card shell: section + count, all five `[data-status]` card
+  // PR3b tool-card shell: section + count, all six `[data-status]` card
   // containers at their REAL default open/collapsed state, the summary header
   // grid, the static dot colors (running dot excluded — animated ring), the
   // status-invariant inner parts (on the open `errored` card), and the COLLAPSED
   // `completed` default — its summary (no `[open]` divider) + UA-hidden body.
   'tool-section', 'tool-section-header', 'tool-count',
-  'tool-item-waiting_permission', 'tool-item-running', 'tool-item-completed', 'tool-item-errored', 'tool-item-interrupted',
+  'tool-item-pending', 'tool-item-waiting_permission', 'tool-item-running', 'tool-item-completed', 'tool-item-errored', 'tool-item-interrupted',
   'tool-summary', 'tool-name', 'tool-meta', 'tool-duration', 'tool-statuslabel', 'tool-body', 'tool-intent', 'tool-args',
   'tool-summary-collapsed', 'tool-name-collapsed', 'tool-body-collapsed',
-  'tool-dot-waiting_permission', 'tool-dot-completed', 'tool-dot-errored', 'tool-dot-interrupted'];
+  'tool-dot-pending', 'tool-dot-waiting_permission', 'tool-dot-completed', 'tool-dot-errored', 'tool-dot-interrupted'];
 // `::before` middot separators are now diffed for real (they render once the
 // CSS is inlined — the old `<link>` build couldn't apply them, masking this).
 // summary-chip-2 is a non-first chip (`[&:not(:first-child)]:before:…`);
