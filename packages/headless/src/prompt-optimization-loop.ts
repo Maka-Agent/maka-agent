@@ -5,13 +5,13 @@ import {
   FIXED_PROMPT_WAL_SCHEMA_VERSION,
   runFixedPromptController,
   readFixedPromptWal,
+  writeFixedPromptResultsTsv,
   type FixedPromptControllerResult,
   type FixedPromptTask,
   type FixedPromptTaskCompletedEvent,
   type FixedPromptTaskWalEvent,
   type FixedPromptWalEvent,
   type HarborTaskRunner,
-  type PromptCandidateCommittedEvent,
   type PromptCandidateRewardHackScan,
   type RsiControllerAttributionEvent,
 } from './fixed-prompt-controller.js';
@@ -44,6 +44,7 @@ import {
   projectRsiPromptAttribution,
   type RsiPromptAttribution,
 } from './rsi-controller-attribution.js';
+import { derivePromptOptimizationReplayState } from './prompt-optimization-replay.js';
 
 /**
  * Top-level driver for the RSI prompt-optimization loop (Issue #64).
@@ -181,6 +182,13 @@ export async function runPromptOptimizationLoop(
   if (input.maxConcurrency !== undefined) assertPositiveInt('maxConcurrency', input.maxConcurrency);
 
   const resumeEvents = await readFixedPromptWal(input.resultsJsonlPath);
+  const replayState = await derivePromptOptimizationReplayState({
+    events: resumeEvents,
+    promptRepoDir: input.git.gitRootPath,
+    runId: input.runId,
+    ...(input.resumeFingerprint ? { resumeFingerprint: input.resumeFingerprint } : {}),
+    strictRoundState: true,
+  });
 
   const heldInTaskIds = input.heldInTasks.map((task) => task.id);
   const heldOutTaskIds = input.heldOutTasks.map((task) => task.id);
@@ -282,7 +290,7 @@ export async function runPromptOptimizationLoop(
     const existingHeldIn = eventsForTaskIds(existingBaselineEvents, heldInTaskIds);
     const existingHeldOut = eventsForTaskIds(existingBaselineEvents, heldOutTaskIds);
     const heldIn = existingHeldIn.length === input.heldInTasks.length
-      ? fixedPromptControllerResultFromWal(existingHeldIn, input.heldInResultsTsvPath)
+      ? await fixedPromptControllerResultFromWal(existingHeldIn, input.heldInResultsTsvPath)
       : await sweep(roundId, input.heldInTasks, input.heldInResultsTsvPath);
     accumulate(heldIn);
     const postHeldInGuard = stopGuard();
@@ -293,7 +301,7 @@ export async function runPromptOptimizationLoop(
       );
     }
     const heldOut = existingHeldOut.length === input.heldOutTasks.length
-      ? fixedPromptControllerResultFromWal(existingHeldOut, input.heldOutResultsTsvPath)
+      ? await fixedPromptControllerResultFromWal(existingHeldOut, input.heldOutResultsTsvPath)
       : await sweep(roundId, input.heldOutTasks, input.heldOutResultsTsvPath);
     accumulate(heldOut);
     baselineRunsData.push({ heldInEvents: heldIn.events, heldOutEvents: heldOut.events });
@@ -356,7 +364,7 @@ export async function runPromptOptimizationLoop(
   });
 
   const originalHeldOutEvents = stableHeldOut(baselineRunsData[0]!.heldOutEvents);
-  let lastKeptCommitSha = input.originalCommitSha;
+  let lastKeptCommitSha = replayState.seedCommitSha;
   let heldInReference = baseline.heldIn.referencePassEligibleRate;
   let lastKeptHeldInEvents: readonly FixedPromptTaskWalEvent[] = stableHeldIn(baselineRunsData[0]!.heldInEvents);
   let previousCandidateHeldInEvents: readonly FixedPromptTaskWalEvent[] | undefined;
@@ -376,18 +384,13 @@ export async function runPromptOptimizationLoop(
       break;
     }
     const roundId = `round-${round}`;
-    const existingDecision = promptDecisionForRound(resumeEvents, input.runId, roundId);
+    const existingDecision = replayState.decisionByRoundId.get(roundId);
     if (existingDecision) {
       const existingRoundTaskEvents = taskEventsForRound(resumeEvents, input.runId, roundId);
       const existingHeldInEvents = stableHeldIn(existingRoundTaskEvents);
       const existingResult = promptAcceptanceResultFromDecision(existingDecision);
-      const existingAttribution = rsiAttributionForRound(
-        resumeEvents,
-        input.runId,
-        roundId,
-        existingDecision.candidateCommitSha,
-      );
-      accumulate(fixedPromptControllerResultFromWal(existingRoundTaskEvents, input.heldInResultsTsvPath));
+      const existingAttribution = replayState.attributionByRoundId.get(roundId);
+      accumulate(await fixedPromptControllerResultFromWal(existingRoundTaskEvents, input.heldInResultsTsvPath));
       decisions.push(existingResult);
       if (existingResult.decision === 'keep') {
         lastKeptCommitSha = existingResult.lastKeptCommitSha;
@@ -409,7 +412,7 @@ export async function runPromptOptimizationLoop(
       ...(previousCandidateHeldInEvents ? { previousCandidateEvents: previousCandidateHeldInEvents } : {}),
       candidateEvents: latestHeldInFeedbackEvents,
     });
-    const existingCandidate = promptCandidateForRound(resumeEvents, input.runId, roundId);
+    const existingCandidate = replayState.candidateByRoundId.get(roundId);
     const candidate = existingCandidate ?? await runPromptCandidateRound({
       runId: input.runId,
       roundId,
@@ -471,7 +474,7 @@ export async function runPromptOptimizationLoop(
       roundId,
       candidateCommitSha: candidate.commitSha,
       previousLastKeptCommitSha: lastKeptCommitSha,
-      originalCommitSha: input.originalCommitSha,
+      originalCommitSha: replayState.seedCommitSha,
       heldInTaskIds: stableHeldInTaskIds,
       heldOutTaskIds: stableHeldOutTaskIds,
       previousHeldInReferencePassEligibleRate: heldInReference,
@@ -561,41 +564,6 @@ export async function runPromptOptimizationLoop(
   };
 }
 
-function promptCandidateForRound(
-  events: readonly FixedPromptWalEvent[],
-  runId: string,
-  roundId: string,
-): PromptCandidateCommittedEvent | undefined {
-  return events.find((event): event is PromptCandidateCommittedEvent =>
-    event.type === 'prompt_candidate_committed'
-    && event.runId === runId
-    && event.roundId === roundId);
-}
-
-function promptDecisionForRound(
-  events: readonly FixedPromptWalEvent[],
-  runId: string,
-  roundId: string,
-): Extract<FixedPromptWalEvent, { type: 'prompt_candidate_decided' }> | undefined {
-  return events.find((event): event is Extract<FixedPromptWalEvent, { type: 'prompt_candidate_decided' }> =>
-    event.type === 'prompt_candidate_decided'
-    && event.runId === runId
-    && event.roundId === roundId);
-}
-
-function rsiAttributionForRound(
-  events: readonly FixedPromptWalEvent[],
-  runId: string,
-  roundId: string,
-  candidateCommitSha: string,
-): RsiControllerAttributionEvent | undefined {
-  return events.find((event): event is RsiControllerAttributionEvent =>
-    event.type === 'rsi_controller_attribution'
-    && event.runId === runId
-    && event.roundId === roundId
-    && event.candidateCommitSha === candidateCommitSha);
-}
-
 function taskEventsForRound(
   events: readonly FixedPromptWalEvent[],
   runId: string,
@@ -617,10 +585,11 @@ function eventsForTaskIds(
     .filter((event): event is FixedPromptTaskWalEvent => event !== undefined);
 }
 
-function fixedPromptControllerResultFromWal(
+async function fixedPromptControllerResultFromWal(
   events: readonly FixedPromptTaskWalEvent[],
   resultsTsvPath: string,
-): FixedPromptControllerResult {
+): Promise<FixedPromptControllerResult> {
+  await writeFixedPromptResultsTsv(resultsTsvPath, events);
   return {
     taskIds: events.map((event) => event.taskId),
     events: [...events],

@@ -3,6 +3,7 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { readFixedPromptWal } from './fixed-prompt-controller.js';
+import { derivePromptOptimizationReplayState } from './prompt-optimization-replay.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -51,16 +52,11 @@ export async function assertPromptOptimizationResumeSupported(input: {
 }): Promise<void> {
   const events = await readFixedPromptWal(input.resultsJsonlPath);
   const head = await gitOutput(input.promptRepoDir, 'rev-parse', 'HEAD');
-  const seedCommitSha = await gitOutput(input.promptRepoDir, 'rev-list', '--max-parents=0', 'HEAD');
-  let expectedHead = seedCommitSha;
-  for (const event of events) {
-    if (event.type === 'prompt_candidate_committed') {
-      expectedHead = event.commitSha;
-    }
-    if (event.type === 'prompt_candidate_decided') {
-      expectedHead = event.lastKeptCommitSha;
-    }
-  }
+  const replayState = await derivePromptOptimizationReplayState({
+    events,
+    promptRepoDir: input.promptRepoDir,
+  });
+  const expectedHead = replayState.expectedPromptRepoHead;
   if (head !== expectedHead) {
     throw new Error(`prompt repo HEAD does not match resumed RSI WAL state: expected ${expectedHead}, got ${head}`);
   }

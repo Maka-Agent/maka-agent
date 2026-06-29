@@ -246,7 +246,7 @@ export async function runPromptOptimizationRun(
 
   const git = createCliPromptCandidateGit({ cwd: input.gitCwdPath, systemPromptPath: input.systemPromptPath });
   const originalCommitSha = (
-    await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: input.gitCwdPath })
+    await execFileAsync('git', ['rev-list', '--max-parents=0', 'HEAD'], { cwd: input.gitCwdPath })
   ).stdout.trim();
 
   const config: Config = {
