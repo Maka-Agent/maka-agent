@@ -593,7 +593,7 @@ function promptCandidateCommittedEvent(input: {
   };
 }
 
-function hashHeldInTaskSet(heldInTaskIds: readonly string[]): string {
+export function hashHeldInTaskSet(heldInTaskIds: readonly string[]): string {
   return sha256Json([...new Set(heldInTaskIds)].sort((a, b) => a.localeCompare(b)));
 }
 

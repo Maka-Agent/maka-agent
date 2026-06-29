@@ -245,6 +245,49 @@ describe('runPromptOptimizationLoop', () => {
     });
   });
 
+  test('fails closed when replayed task evidence has no prompt hash', async () => {
+    await withHarness(async (harness) => {
+      const heldInTasks = makeTasks('hin', 20);
+      const heldOutTasks = makeTasks('hout', 8);
+      const rewardFor = (roundId: string, taskId: string): number => {
+        const index = taskIndex(taskId);
+        if (taskId.startsWith('hout-')) return index < 4 ? 1 : 0;
+        if (roundId.startsWith('baseline-')) return index < 10 ? 1 : 0;
+        return 1;
+      };
+
+      await runLoop(harness, {
+        heldInTasks,
+        heldOutTasks,
+        rewardFor,
+        rounds: 1,
+        baselineRuns: 1,
+      });
+      const events = await readFixedPromptWal(harness.resultsJsonlPath);
+      const missingHashEvents = events.map((event) => {
+        if (event.type !== 'task_completed' || event.roundId !== 'round-0' || event.taskId !== 'hin-0') return event;
+        const { promptHash: _promptHash, ...withoutPromptHash } = event;
+        return withoutPromptHash;
+      });
+      await writeFile(
+        harness.resultsJsonlPath,
+        `${missingHashEvents.map((event) => JSON.stringify(event)).join('\n')}\n`,
+        'utf8',
+      );
+
+      await assert.rejects(
+        runLoop(harness, {
+          heldInTasks,
+          heldOutTasks,
+          rewardFor,
+          rounds: 2,
+          baselineRuns: 1,
+        }),
+        /RSI WAL replay prompt hash mismatch/,
+      );
+    });
+  });
+
   test('fails closed when replayed baseline task evidence has a stale prompt hash', async () => {
     await withHarness(async (harness) => {
       const heldInTasks = makeTasks('hin', 20);
@@ -897,6 +940,94 @@ describe('runPromptOptimizationLoop', () => {
     });
   });
 
+  test('fails closed before sweeping when a pending candidate task-set is stale', async () => {
+    await withHarness(async (harness) => {
+      const heldInTasks = makeTasks('hin', 20);
+      const heldOutTasks = makeTasks('hout', 8);
+      const rewardFor = (roundId: string, taskId: string): number => {
+        const index = taskIndex(taskId);
+        if (taskId.startsWith('hout-')) return index < 4 ? 1 : 0;
+        if (roundId.startsWith('baseline-')) return index < 10 ? 1 : 0;
+        return 1;
+      };
+      const durationMsFor = (_roundId: string, taskId: string): number =>
+        taskId === 'hin-19' ? 200 : 10;
+
+      await runLoop(harness, {
+        heldInTasks,
+        heldOutTasks,
+        rewardFor,
+        durationMsFor,
+        rounds: 1,
+        baselineRuns: 1,
+      });
+      const events = await readFixedPromptWal(harness.resultsJsonlPath);
+      const committed = events.find((event): event is Extract<typeof event, { type: 'prompt_candidate_committed' }> =>
+        event.type === 'prompt_candidate_committed' && event.roundId === 'round-0');
+      assert.ok(committed);
+      const commitIndex = events.indexOf(committed);
+      await writeFile(
+        harness.resultsJsonlPath,
+        `${events.slice(0, commitIndex + 1).map((event) => JSON.stringify(event)).join('\n')}\n`,
+        'utf8',
+      );
+      await execFileAsync('git', ['reset', '--hard', committed.commitSha], { cwd: harness.repoDir });
+
+      const taskRuns: string[] = [];
+      await assert.rejects(
+        runLoop(harness, {
+          heldInTasks,
+          heldOutTasks,
+          rewardFor,
+          durationMsFor,
+          rounds: 1,
+          baselineRuns: 1,
+          maxStableTaskDurationMs: 100,
+          onTaskRun: (roundId, taskId) => taskRuns.push(`${roundId}:${taskId}`),
+        }),
+        /RSI WAL replay candidate task-set mismatch for round-0/,
+      );
+      assert.deepEqual(taskRuns, []);
+    });
+  });
+
+  test('fails closed before baseline when the WAL already belongs to another run', async () => {
+    await withHarness(async (harness) => {
+      const heldInTasks = makeTasks('hin', 20);
+      const heldOutTasks = makeTasks('hout', 8);
+      const rewardFor = (roundId: string, taskId: string): number => {
+        const index = taskIndex(taskId);
+        if (taskId.startsWith('hout-')) return index < 4 ? 1 : 0;
+        if (roundId.startsWith('baseline-')) return index < 10 ? 1 : 0;
+        return 0;
+      };
+
+      await runLoop(harness, {
+        runId: 'run-old',
+        heldInTasks,
+        heldOutTasks,
+        rewardFor,
+        rounds: 1,
+        baselineRuns: 1,
+      });
+
+      const taskRuns: string[] = [];
+      await assert.rejects(
+        runLoop(harness, {
+          runId: 'run-new',
+          heldInTasks,
+          heldOutTasks,
+          rewardFor,
+          rounds: 1,
+          baselineRuns: 1,
+          onTaskRun: (roundId, taskId) => taskRuns.push(`${roundId}:${taskId}`),
+        }),
+        /RSI WAL replay found events for a different runId/,
+      );
+      assert.deepEqual(taskRuns, []);
+    });
+  });
+
   test('fails closed before baseline when prompt files are dirty', async () => {
     await withHarness(async (harness) => {
       const taskRuns: string[] = [];
@@ -1535,6 +1666,7 @@ interface Harness {
 }
 
 interface RunLoopOptions {
+  runId?: string;
   heldInTasks: readonly { id: string; path: string }[];
   heldOutTasks: readonly { id: string; path: string }[];
   rewardFor: (roundId: string, taskId: string) => number;
@@ -1562,7 +1694,7 @@ async function runLoop(harness: Harness, options: RunLoopOptions) {
     options.heldInTasks.map((task) => [task.id, ['ZZZ_NO_VERIFIER_MATCH']]),
   );
   const input: PromptOptimizationLoopInput = {
-    runId: 'run-1',
+    runId: options.runId ?? 'run-1',
     rounds: options.rounds,
     baselineRuns: options.baselineRuns,
     agentCwdPath: harness.agentCwdPath,

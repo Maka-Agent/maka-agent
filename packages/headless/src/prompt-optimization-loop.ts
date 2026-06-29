@@ -21,6 +21,7 @@ import {
 } from './fixed-prompt-controller.js';
 import {
   extractTrajectoryDigest,
+  hashHeldInTaskSet,
   runPromptCandidateRound,
   scanRuntimeEventsForRewardHack,
   type MetaAgent,
@@ -494,6 +495,9 @@ export async function runPromptOptimizationLoop(
       candidateEvents: latestHeldInFeedbackEvents,
     });
     const existingCandidate = replayState.candidateByRoundId.get(roundId);
+    if (existingCandidate) {
+      assertCandidateMatchesStableTaskSet(existingCandidate, stableHeldInTaskIds);
+    }
     const candidate = existingCandidate ?? await runPromptCandidateRound({
       runId: input.runId,
       roundId,
@@ -709,6 +713,17 @@ function assertReplayedDecisionMatchesResult(
   };
   if (!isDeepStrictEqual(persistedDecision, replayedDecision)) {
     throw new Error(`RSI WAL replay decision mismatch for ${decision.roundId}`);
+  }
+}
+
+function assertCandidateMatchesStableTaskSet(
+  candidate: { roundId: string; heldInTaskIds: readonly string[]; heldInTaskSetHash: string },
+  stableHeldInTaskIds: readonly string[],
+): void {
+  const actualHash = hashHeldInTaskSet(candidate.heldInTaskIds);
+  const expectedHash = hashHeldInTaskSet(stableHeldInTaskIds);
+  if (candidate.heldInTaskSetHash !== actualHash || candidate.heldInTaskSetHash !== expectedHash) {
+    throw new Error(`RSI WAL replay candidate task-set mismatch for ${candidate.roundId}`);
   }
 }
 

@@ -44,6 +44,7 @@ export async function buildPromptOptimizationReplayPlan(input: {
   resumeFingerprint?: string;
   strictRoundState?: boolean;
 }): Promise<PromptOptimizationReplayPlan> {
+  if (input.runId) assertWalBelongsToRun(input.events, input.runId);
   const state = await derivePromptOptimizationReplayState({
     events: input.events,
     promptRepoDir: input.promptRepoDir,
@@ -88,7 +89,7 @@ function replayControllerSweep(input: {
       throw new Error(`RSI WAL replay identity mismatch for ${event.roundId}/${event.taskId}`);
     }
     const eventPromptHash = promptHashForReplayIdentity(event);
-    if (eventPromptHash !== undefined && eventPromptHash !== input.expectedPromptHash) {
+    if (eventPromptHash !== input.expectedPromptHash) {
       throw new Error(`RSI WAL replay prompt hash mismatch for ${event.roundId}/${event.taskId}`);
     }
     if (byTaskId.has(event.taskId)) {
@@ -218,7 +219,7 @@ export async function derivePromptOptimizationReplayState(input: {
         throw new Error(`RSI WAL replay found task evidence before candidate commit for ${event.roundId}`);
       }
       const eventPromptHash = promptHashForReplayIdentity(event);
-      if (candidate && eventPromptHash !== undefined && eventPromptHash !== candidate.promptHash) {
+      if (candidate && eventPromptHash !== candidate.promptHash) {
         throw new Error(`RSI WAL replay prompt hash mismatch for ${event.roundId}/${event.taskId}`);
       }
     }
@@ -271,6 +272,13 @@ function hasHistoricalPromptOptimizationState(state: PromptOptimizationReplaySta
   return state.candidateByRoundId.size > 0
     || state.decisionByRoundId.size > 0
     || state.expectedPromptRepoHead !== state.seedCommitSha;
+}
+
+function assertWalBelongsToRun(events: readonly FixedPromptWalEvent[], runId: string): void {
+  const otherRun = events.find((event) => event.runId !== runId);
+  if (otherRun) {
+    throw new Error(`RSI WAL replay found events for a different runId: expected ${runId}, got ${otherRun.runId}`);
+  }
 }
 
 function replayDecisionAttribution(input: {
