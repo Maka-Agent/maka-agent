@@ -32,9 +32,10 @@ export async function ensurePromptOptimizationPromptRepo(
       await commitSeed(input.promptRepoDir);
       return { agentCwdPath, programPath, systemPromptPath };
     }
-    await assertPromptRepoHeadIsSeed(input.promptRepoDir);
     await assertExistingSeedFile(programPath, input.program);
-    await assertExistingSeedFile(systemPromptPath, input.systemPrompt);
+    if (await promptRepoHeadIsSeed(input.promptRepoDir)) {
+      await assertExistingSeedFile(systemPromptPath, input.systemPrompt);
+    }
     return { agentCwdPath, programPath, systemPromptPath };
   }
 
@@ -48,21 +49,27 @@ export async function assertPromptOptimizationResumeSupported(input: {
   promptRepoDir: string;
   resultsJsonlPath: string;
 }): Promise<void> {
-  await assertPromptRepoHeadIsSeed(input.promptRepoDir);
   const events = await readFixedPromptWal(input.resultsJsonlPath);
+  const head = await gitOutput(input.promptRepoDir, 'rev-parse', 'HEAD');
+  const seedCommitSha = await gitOutput(input.promptRepoDir, 'rev-list', '--max-parents=0', 'HEAD');
+  let expectedHead = seedCommitSha;
   for (const event of events) {
-    if (event.type === 'prompt_candidate_committed' || event.type === 'prompt_candidate_decided') {
-      throw unsupportedPostCandidateResumeError();
+    if (event.type === 'prompt_candidate_committed') {
+      expectedHead = event.commitSha;
     }
+    if (event.type === 'prompt_candidate_decided') {
+      expectedHead = event.lastKeptCommitSha;
+    }
+  }
+  if (head !== expectedHead) {
+    throw new Error(`prompt repo HEAD does not match resumed RSI WAL state: expected ${expectedHead}, got ${head}`);
   }
 }
 
-async function assertPromptRepoHeadIsSeed(promptRepoDir: string): Promise<void> {
+async function promptRepoHeadIsSeed(promptRepoDir: string): Promise<boolean> {
   const head = await gitOutput(promptRepoDir, 'rev-parse', 'HEAD');
   const seedCommitSha = await gitOutput(promptRepoDir, 'rev-list', '--max-parents=0', 'HEAD');
-  if (head !== seedCommitSha) {
-    throw unsupportedPostCandidateResumeError();
-  }
+  return head === seedCommitSha;
 }
 
 async function assertExistingSeedFile(path: string, expected: string): Promise<void> {
@@ -127,12 +134,6 @@ async function pathExists(path: string): Promise<boolean> {
     }
     throw error;
   }
-}
-
-function unsupportedPostCandidateResumeError(): Error {
-  return new Error(
-    'post-candidate RSI resume is not supported yet; use a new MAKA_PROMPT_RUN_ID or implement whole-loop WAL replay before resuming after candidate commits/decisions',
-  );
 }
 
 function isNotFound(error: unknown): boolean {

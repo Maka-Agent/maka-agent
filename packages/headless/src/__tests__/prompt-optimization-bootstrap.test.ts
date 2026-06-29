@@ -61,16 +61,17 @@ describe('ensurePromptOptimizationPromptRepo', () => {
     });
   });
 
-  test('rejects post-candidate resume with a dedicated error before seed file checks', async () => {
+  test('allows post-candidate resume when the prompt repo matches the WAL state', async () => {
     await withDir(async (dir) => {
       const promptRepoDir = join(dir, 'prompt-repo');
       const resultsJsonlPath = join(dir, 'controller', 'results.jsonl');
       await mkdir(join(dir, 'controller'), { recursive: true });
-      await ensurePromptOptimizationPromptRepo({
+      const input = {
         promptRepoDir,
         program: 'program v1\n',
         systemPrompt: 'prompt v1\n',
-      });
+      };
+      await ensurePromptOptimizationPromptRepo(input);
       await writeFile(join(promptRepoDir, 'system_prompt.md'), 'candidate prompt\n', 'utf8');
       await git(promptRepoDir, 'add', 'system_prompt.md');
       await git(promptRepoDir, 'commit', '-q', '-m', 'candidate prompt round-0');
@@ -95,17 +96,52 @@ describe('ensurePromptOptimizationPromptRepo', () => {
         metrics: {},
       })}\n`, 'utf8');
 
-      await assert.rejects(
-        ensurePromptOptimizationPromptRepo({
-          promptRepoDir,
-          program: 'program v1\n',
-          systemPrompt: 'prompt v1\n',
-        }),
-        /post-candidate RSI resume is not supported yet/,
+      await assert.doesNotReject(ensurePromptOptimizationPromptRepo(input));
+      await assert.doesNotReject(
+        assertPromptOptimizationResumeSupported({ promptRepoDir, resultsJsonlPath }),
       );
+    });
+  });
+
+  test('rejects post-candidate resume when the prompt repo does not match the WAL state', async () => {
+    await withDir(async (dir) => {
+      const promptRepoDir = join(dir, 'prompt-repo');
+      const resultsJsonlPath = join(dir, 'controller', 'results.jsonl');
+      await mkdir(join(dir, 'controller'), { recursive: true });
+      await ensurePromptOptimizationPromptRepo({
+        promptRepoDir,
+        program: 'program v1\n',
+        systemPrompt: 'prompt v1\n',
+      });
+      const seedSha = await gitOutput(promptRepoDir, 'rev-parse', 'HEAD');
+      await writeFile(join(promptRepoDir, 'system_prompt.md'), 'candidate prompt\n', 'utf8');
+      await git(promptRepoDir, 'add', 'system_prompt.md');
+      await git(promptRepoDir, 'commit', '-q', '-m', 'candidate prompt round-0');
+      const candidateSha = await gitOutput(promptRepoDir, 'rev-parse', 'HEAD');
+      await appendFile(resultsJsonlPath, `${JSON.stringify({
+        schemaVersion: 1,
+        type: 'prompt_candidate_decided',
+        id: 'decision-1',
+        ts: 1,
+        runId: 'run-1',
+        roundId: 'round-0',
+        decision: 'discard',
+        reason: 'held_in_within_noise',
+        candidateCommitSha: candidateSha,
+        previousLastKeptCommitSha: seedSha,
+        lastKeptCommitSha: seedSha,
+        previousHeldInReferencePassEligibleRate: 0,
+        heldInReferencePassEligibleRate: 0,
+        originalCommitSha: seedSha,
+        originalHeldOutPassEligibleRate: 0,
+        heldInPassRateNoiseBand: 0,
+        heldOutPassRateNoiseBand: 0,
+        metrics: {},
+      })}\n`, 'utf8');
+
       await assert.rejects(
         assertPromptOptimizationResumeSupported({ promptRepoDir, resultsJsonlPath }),
-        /post-candidate RSI resume is not supported yet/,
+        /prompt repo HEAD does not match resumed RSI WAL state/,
       );
     });
   });

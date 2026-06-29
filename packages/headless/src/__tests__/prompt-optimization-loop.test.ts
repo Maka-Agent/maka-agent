@@ -68,6 +68,55 @@ describe('runPromptOptimizationLoop', () => {
     });
   });
 
+  test('resumes after a committed candidate and finishes that round', async () => {
+    await withHarness(async (harness) => {
+      const heldInTasks = makeTasks('hin', 20);
+      const heldOutTasks = makeTasks('hout', 8);
+      const rewardFor = (roundId: string, taskId: string): number => {
+        const index = taskIndex(taskId);
+        if (taskId.startsWith('hout-')) return index < 4 ? 1 : 0;
+        if (roundId.startsWith('baseline-')) return index < 10 ? 1 : 0;
+        return 1;
+      };
+
+      await runLoop(harness, {
+        heldInTasks,
+        heldOutTasks,
+        rewardFor,
+        rounds: 1,
+        baselineRuns: 1,
+      });
+      const events = await readFixedPromptWal(harness.resultsJsonlPath);
+      const commitIndex = events.findIndex((event) => event.type === 'prompt_candidate_committed' && event.roundId === 'round-0');
+      assert.ok(commitIndex > -1);
+      await writeFile(
+        harness.resultsJsonlPath,
+        `${events.slice(0, commitIndex + 1).map((event) => JSON.stringify(event)).join('\n')}\n`,
+        'utf8',
+      );
+
+      const resumedMetaAgentRounds: string[] = [];
+      const resumed = await runLoop(harness, {
+        heldInTasks,
+        heldOutTasks,
+        rewardFor,
+        rounds: 1,
+        baselineRuns: 1,
+        metaAgent: async (promptInput) => {
+          resumedMetaAgentRounds.push(promptInput.roundId);
+          return fakeMetaAgent()(promptInput);
+        },
+      });
+
+      assert.deepEqual(resumedMetaAgentRounds, []);
+      assert.deepEqual(resumed.decisions.map((decision) => decision.decision), ['keep']);
+      assert.equal(resumed.smoke.status, 'pass');
+      const resumedEvents = await readFixedPromptWal(harness.resultsJsonlPath);
+      assert.equal(resumedEvents.filter((event) => event.type === 'prompt_candidate_committed' && event.roundId === 'round-0').length, 1);
+      assert.equal(resumedEvents.filter((event) => event.type === 'prompt_candidate_decided' && event.roundId === 'round-0').length, 1);
+    });
+  });
+
   test('keeps an improving candidate, discards a regressing one, and reports a passing smoke', async () => {
     await withHarness(async (harness) => {
       const heldInTasks = makeTasks('hin', 20);
