@@ -109,6 +109,62 @@ describe('ensurePromptOptimizationPromptRepo', () => {
       );
     });
   });
+
+  test('allows baseline resume when the WAL has a torn malformed final line', async () => {
+    await withDir(async (dir) => {
+      const promptRepoDir = join(dir, 'prompt-repo');
+      const resultsJsonlPath = join(dir, 'controller', 'results.jsonl');
+      await mkdir(join(dir, 'controller'), { recursive: true });
+      await ensurePromptOptimizationPromptRepo({
+        promptRepoDir,
+        program: 'program v1\n',
+        systemPrompt: 'prompt v1\n',
+      });
+      await appendFile(resultsJsonlPath, `${JSON.stringify({
+        schemaVersion: 1,
+        type: 'task_completed',
+        id: 'event-1',
+        ts: 1,
+        runId: 'run-1',
+        roundId: 'baseline-0',
+        taskId: 'task-a',
+        status: 'passed',
+        passed: true,
+        scored: true,
+        eligible: true,
+        promptHash: 'sha256:prompt',
+        tokenSummary: { input: 1, output: 1, total: 2, costUsd: 0.01 },
+        steps: 1,
+        durationMs: 1,
+        runtimeEventsPath: '/tmp/runtime-events.jsonl',
+        harbor: { reward: 1 },
+      })}\n{"schemaVersion":`, 'utf8');
+
+      await assert.doesNotReject(
+        assertPromptOptimizationResumeSupported({ promptRepoDir, resultsJsonlPath }),
+      );
+    });
+  });
+
+  test('finishes seed commit when git was initialized before the first commit', async () => {
+    await withDir(async (dir) => {
+      const promptRepoDir = join(dir, 'prompt-repo');
+      await mkdir(promptRepoDir, { recursive: true });
+      await git(promptRepoDir, 'init', '-q');
+      await writeFile(join(promptRepoDir, 'program.md'), 'program v1\n', 'utf8');
+      await writeFile(join(promptRepoDir, 'system_prompt.md'), 'prompt v1\n', 'utf8');
+
+      await ensurePromptOptimizationPromptRepo({
+        promptRepoDir,
+        program: 'program v1\n',
+        systemPrompt: 'prompt v1\n',
+      });
+
+      assert.equal(await gitOutput(promptRepoDir, 'rev-list', '--count', 'HEAD'), '1');
+      assert.equal(await readFile(join(promptRepoDir, 'program.md'), 'utf8'), 'program v1\n');
+      assert.equal(await readFile(join(promptRepoDir, 'system_prompt.md'), 'utf8'), 'prompt v1\n');
+    });
+  });
 });
 
 async function gitOutput(cwd: string, ...args: string[]): Promise<string> {

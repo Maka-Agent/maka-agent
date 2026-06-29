@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
@@ -11,6 +11,7 @@ import {
   buildPromptOptimizationSubjectFingerprint,
   buildPromptOptimizationTaskSourceFingerprint,
   buildPromptOptimizationToolchainFingerprint,
+  ensurePromptOptimizationRunManifest,
 } from '../prompt-optimization-manifest.js';
 
 const execFileAsync = promisify(execFile);
@@ -86,6 +87,29 @@ describe('prompt optimization run manifest', () => {
         buildPromptOptimizationToolchainFingerprint(dir),
         /execution checkout must be clean for resume-safe prompt optimization runs/,
       );
+    });
+  });
+
+  test('rejects manifest mismatch without rewriting an existing prompt repo', async () => {
+    await withDir(async (dir) => {
+      const runRoot = join(dir, 'run-1');
+      const promptRepoDir = join(runRoot, 'prompt-repo');
+      const manifestPath = join(runRoot, 'prompt-optimization-manifest.json');
+      await mkdir(promptRepoDir, { recursive: true });
+      await writeFile(manifestPath, '{"fingerprint":"sha256:old"}\n', 'utf8');
+      await writeFile(join(promptRepoDir, 'program.md'), 'old program\n', 'utf8');
+      const taskSourceFingerprint = 'sha256:new-task-source';
+
+      await assert.rejects(
+        ensurePromptOptimizationRunManifest(
+          manifestPath,
+          buildManifest(taskSourceFingerprint, []),
+          runRoot,
+        ),
+        /prompt optimization run manifest does not match existing run id/,
+      );
+
+      assert.equal(await readFile(join(promptRepoDir, 'program.md'), 'utf8'), 'old program\n');
     });
   });
 });

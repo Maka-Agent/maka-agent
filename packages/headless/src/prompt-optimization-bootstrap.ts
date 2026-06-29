@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { readFixedPromptWal } from './fixed-prompt-controller.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -26,19 +27,20 @@ export async function ensurePromptOptimizationPromptRepo(
   await mkdir(agentCwdPath, { recursive: true });
 
   if (await pathExists(join(input.promptRepoDir, '.git'))) {
+    if (!(await hasHead(input.promptRepoDir))) {
+      await ensureSeedFiles(input);
+      await commitSeed(input.promptRepoDir);
+      return { agentCwdPath, programPath, systemPromptPath };
+    }
     await assertPromptRepoHeadIsSeed(input.promptRepoDir);
     await assertExistingSeedFile(programPath, input.program);
     await assertExistingSeedFile(systemPromptPath, input.systemPrompt);
     return { agentCwdPath, programPath, systemPromptPath };
   }
 
-  await writeFile(programPath, input.program, 'utf8');
-  await writeFile(systemPromptPath, input.systemPrompt, 'utf8');
+  await ensureSeedFiles(input);
   await git(input.promptRepoDir, 'init', '-q');
-  await git(input.promptRepoDir, 'config', 'user.email', 'rsi@maka.local');
-  await git(input.promptRepoDir, 'config', 'user.name', 'RSI Loop');
-  await git(input.promptRepoDir, 'add', 'program.md', 'system_prompt.md');
-  await git(input.promptRepoDir, 'commit', '-q', '-m', 'seed prompt');
+  await commitSeed(input.promptRepoDir);
   return { agentCwdPath, programPath, systemPromptPath };
 }
 
@@ -47,16 +49,8 @@ export async function assertPromptOptimizationResumeSupported(input: {
   resultsJsonlPath: string;
 }): Promise<void> {
   await assertPromptRepoHeadIsSeed(input.promptRepoDir);
-  let raw: string;
-  try {
-    raw = await readFile(input.resultsJsonlPath, 'utf8');
-  } catch (error) {
-    if (isNotFound(error)) return;
-    throw error;
-  }
-  for (const line of raw.split('\n')) {
-    if (line.trim().length === 0) continue;
-    const event = JSON.parse(line) as { type?: unknown };
+  const events = await readFixedPromptWal(input.resultsJsonlPath);
+  for (const event of events) {
     if (event.type === 'prompt_candidate_committed' || event.type === 'prompt_candidate_decided') {
       throw unsupportedPostCandidateResumeError();
     }
@@ -75,6 +69,42 @@ async function assertExistingSeedFile(path: string, expected: string): Promise<v
   const actual = await readFile(path, 'utf8');
   if (actual !== expected) {
     throw new Error(`existing prompt repo seed files do not match this run: ${path}`);
+  }
+}
+
+async function ensureSeedFiles(input: EnsurePromptOptimizationPromptRepoInput): Promise<void> {
+  const programPath = join(input.promptRepoDir, 'program.md');
+  const systemPromptPath = join(input.promptRepoDir, 'system_prompt.md');
+  await mkdir(input.promptRepoDir, { recursive: true });
+  await ensureSeedFile(programPath, input.program);
+  await ensureSeedFile(systemPromptPath, input.systemPrompt);
+}
+
+async function ensureSeedFile(path: string, expected: string): Promise<void> {
+  try {
+    await assertExistingSeedFile(path, expected);
+  } catch (error) {
+    if (isNotFound(error)) {
+      await writeFile(path, expected, 'utf8');
+      return;
+    }
+    throw error;
+  }
+}
+
+async function commitSeed(promptRepoDir: string): Promise<void> {
+  await git(promptRepoDir, 'config', 'user.email', 'rsi@maka.local');
+  await git(promptRepoDir, 'config', 'user.name', 'RSI Loop');
+  await git(promptRepoDir, 'add', 'program.md', 'system_prompt.md');
+  await git(promptRepoDir, 'commit', '-q', '-m', 'seed prompt');
+}
+
+async function hasHead(promptRepoDir: string): Promise<boolean> {
+  try {
+    await gitOutput(promptRepoDir, 'rev-parse', '--verify', 'HEAD');
+    return true;
+  } catch {
+    return false;
   }
 }
 
