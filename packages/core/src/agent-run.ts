@@ -61,6 +61,7 @@ export type AgentRunEventType =
   | 'permission_failed'
   | 'usage_recorded'
   | 'active_full_compact_block_recorded'
+  | 'semantic_compact_block_recorded'
   | 'abort_requested'
   | 'run_completed'
   | 'run_failed'

@@ -311,6 +311,12 @@ export class RuntimeKernel implements RuntimeKernelLike {
         const run = runId ? active?.activeRuns.get(runId) : undefined;
         run?.recordActiveFullCompactBlock(block);
       },
+      recordSemanticCompactBlock: (block) => {
+        const active = this.active.get(sessionId);
+        const runId = active?.turnToRunId.get(block.turnId);
+        const run = runId ? active?.activeRuns.get(runId) : undefined;
+        run?.recordSemanticCompactBlock(block);
+      },
     });
     const entry: ActiveSession = {
       sessionId,
@@ -354,6 +360,12 @@ export class RuntimeKernel implements RuntimeKernelLike {
         const runId = active?.turnToRunId.get(block.turnId);
         const run = runId ? active?.activeRuns.get(runId) : undefined;
         run?.recordActiveFullCompactBlock(block);
+      },
+      recordSemanticCompactBlock: (block) => {
+        const active = this.childActive.get(activeKey);
+        const runId = active?.turnToRunId.get(block.turnId);
+        const run = runId ? active?.activeRuns.get(runId) : undefined;
+        run?.recordSemanticCompactBlock(block);
       },
     });
     const entry: ActiveSession = {

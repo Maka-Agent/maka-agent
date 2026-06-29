@@ -924,6 +924,11 @@ describe('fixed prompt controller', () => {
         archiveRetrievalSkippedReasonCounts: {},
         archiveRetrievalFailures: 0,
         archiveRetrievalFailureReasonCounts: {},
+        semanticCompactCallInputTokens: 0,
+        semanticCompactCallOutputTokens: 0,
+        semanticCompactCallCacheReadInputTokens: 0,
+        semanticCompactCallCacheWriteInputTokens: 0,
+        semanticCompactCallTotalTokens: 0,
       };
       const contextBudgetPolicy = {
         enabled: true as const,

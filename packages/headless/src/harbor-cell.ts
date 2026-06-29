@@ -158,6 +158,31 @@ export const HARBOR_CELL_CONTEXT_ENV_KEYS = [
   'MAKA_CONTEXT_ACTIVE_FULL_COMPACT_SUMMARY_MAX_ESTIMATED_TOKENS',
   'MAKA_CONTEXT_ACTIVE_FULL_COMPACT_ARCHIVE_REQUIRED',
   'MAKA_CONTEXT_ACTIVE_FULL_COMPACT_HIGH_WATER_NAME',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_MODE',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_MIN_STEP_NUMBER',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_HIGH_WATER_RATIO',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_FORCE_RATIO',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_TARGET_RATIO',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_MAX_ACTIVE_ESTIMATED_TOKENS',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_MAX_ESTIMATED_TOKENS',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_MIN_RECENT_MESSAGES',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_MIN_RECENT_TOOL_PAIRS',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_MAX_SUMMARY_ESTIMATED_TOKENS',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_SUMMARY_MAX_ESTIMATED_TOKENS',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_MIN_SAVINGS_TOKENS',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_MIN_SAVINGS_RATIO',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_MIN_NET_SAVINGS_TOKENS',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_CALL_TOKEN_COST_WEIGHT',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_MAX_CALL_TOKENS',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_MAX_CONSECUTIVE_INVALID_SUMMARIES',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_INVALID_SUMMARY_COOLDOWN_STEPS',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_TIMEOUT_MS',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_ARCHIVE_REQUIRED',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_BENCHMARK_STATE_CARDS',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_MODEL',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_PROMPT_VERSION',
+  'MAKA_CONTEXT_SEMANTIC_COMPACT_HIGH_WATER_NAME',
   'MAKA_CONTEXT_ARCHIVE_RETRIEVAL',
   'MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MODE',
   'MAKA_CONTEXT_ARCHIVE_RETRIEVAL_MAX_RESULTS',
@@ -600,6 +625,7 @@ export function buildAiSdkCellBackendRegistration(input: {
         now: input.now,
         recordRunTrace: ctx.recordRunTrace,
         recordActiveFullCompactBlock: ctx.recordActiveFullCompactBlock,
+        recordSemanticCompactBlock: ctx.recordSemanticCompactBlock,
       }),
     );
   };
@@ -646,7 +672,12 @@ export function buildHarborCellContextBudgetBackendOptions(
     env.MAKA_HARBOR_CONTEXT_ACTIVE_FULL_COMPACT,
     'MAKA_CONTEXT_ACTIVE_FULL_COMPACT',
   ) ?? false;
-  if (!pruneEnabled && !activePruneEnabled && !archiveRetrievalEnabled && !activeFullCompactEnabled) return {};
+  const semanticCompactEnabled = booleanEnv(
+    env.MAKA_CONTEXT_SEMANTIC_COMPACT ??
+    env.MAKA_HARBOR_CONTEXT_SEMANTIC_COMPACT,
+    'MAKA_CONTEXT_SEMANTIC_COMPACT',
+  ) ?? false;
+  if (!pruneEnabled && !activePruneEnabled && !archiveRetrievalEnabled && !activeFullCompactEnabled && !semanticCompactEnabled) return {};
 
   const contextBudget: ContextBudgetPolicy = {
     name: env.MAKA_CONTEXT_BUDGET_NAME ?? 'harbor-cell-context-budget',
@@ -752,6 +783,79 @@ export function buildHarborCellContextBudgetBackendOptions(
       ...(archiveRequired !== undefined ? { archiveRequired } : {}),
       ...(env.MAKA_CONTEXT_ACTIVE_FULL_COMPACT_HIGH_WATER_NAME
         ? { highWaterName: env.MAKA_CONTEXT_ACTIVE_FULL_COMPACT_HIGH_WATER_NAME }
+        : {}),
+    };
+  }
+
+  if (semanticCompactEnabled) {
+    const mode = semanticCompactModeEnv(env.MAKA_CONTEXT_SEMANTIC_COMPACT_MODE);
+    const maxActiveEstimatedTokens = positiveIntEnv(
+      env.MAKA_CONTEXT_SEMANTIC_COMPACT_MAX_ACTIVE_ESTIMATED_TOKENS ??
+      env.MAKA_CONTEXT_SEMANTIC_COMPACT_MAX_ESTIMATED_TOKENS,
+      'MAKA_CONTEXT_SEMANTIC_COMPACT_MAX_ACTIVE_ESTIMATED_TOKENS',
+    );
+    const minStepNumber = firstContextNonNegativeIntEnv(env, ['MAKA_CONTEXT_SEMANTIC_COMPACT_MIN_STEP_NUMBER']);
+    const minRecentMessages = firstContextNonNegativeIntEnv(env, ['MAKA_CONTEXT_SEMANTIC_COMPACT_MIN_RECENT_MESSAGES']);
+    const minRecentToolPairs = firstContextNonNegativeIntEnv(env, ['MAKA_CONTEXT_SEMANTIC_COMPACT_MIN_RECENT_TOOL_PAIRS']);
+    const maxSummaryEstimatedTokens = positiveIntEnv(
+      env.MAKA_CONTEXT_SEMANTIC_COMPACT_MAX_SUMMARY_ESTIMATED_TOKENS ??
+      env.MAKA_CONTEXT_SEMANTIC_COMPACT_SUMMARY_MAX_ESTIMATED_TOKENS,
+      'MAKA_CONTEXT_SEMANTIC_COMPACT_MAX_SUMMARY_ESTIMATED_TOKENS',
+    );
+    const minSavingsTokens = firstContextNonNegativeIntEnv(env, ['MAKA_CONTEXT_SEMANTIC_COMPACT_MIN_SAVINGS_TOKENS']);
+    const minNetSavingsTokens = firstContextNonNegativeIntEnv(env, ['MAKA_CONTEXT_SEMANTIC_COMPACT_MIN_NET_SAVINGS_TOKENS']);
+    const maxCompactCallTokens = positiveIntEnv(
+      env.MAKA_CONTEXT_SEMANTIC_COMPACT_MAX_CALL_TOKENS,
+      'MAKA_CONTEXT_SEMANTIC_COMPACT_MAX_CALL_TOKENS',
+    );
+    const maxConsecutiveInvalidSummaries = firstContextNonNegativeIntEnv(env, ['MAKA_CONTEXT_SEMANTIC_COMPACT_MAX_CONSECUTIVE_INVALID_SUMMARIES']);
+    const invalidSummaryCooldownSteps = firstContextNonNegativeIntEnv(env, ['MAKA_CONTEXT_SEMANTIC_COMPACT_INVALID_SUMMARY_COOLDOWN_STEPS']);
+    const timeoutMs = positiveIntEnv(
+      env.MAKA_CONTEXT_SEMANTIC_COMPACT_TIMEOUT_MS,
+      'MAKA_CONTEXT_SEMANTIC_COMPACT_TIMEOUT_MS',
+    );
+    const archiveRequired = booleanEnv(
+      env.MAKA_CONTEXT_SEMANTIC_COMPACT_ARCHIVE_REQUIRED,
+      'MAKA_CONTEXT_SEMANTIC_COMPACT_ARCHIVE_REQUIRED',
+    );
+    const benchmarkStateCards = booleanEnv(
+      env.MAKA_CONTEXT_SEMANTIC_COMPACT_BENCHMARK_STATE_CARDS,
+      'MAKA_CONTEXT_SEMANTIC_COMPACT_BENCHMARK_STATE_CARDS',
+    );
+    const highWaterRatio = numericEnv(env.MAKA_CONTEXT_SEMANTIC_COMPACT_HIGH_WATER_RATIO);
+    const forceRatio = numericEnv(env.MAKA_CONTEXT_SEMANTIC_COMPACT_FORCE_RATIO);
+    const targetRatio = numericEnv(env.MAKA_CONTEXT_SEMANTIC_COMPACT_TARGET_RATIO);
+    const minSavingsRatio = numericEnv(env.MAKA_CONTEXT_SEMANTIC_COMPACT_MIN_SAVINGS_RATIO);
+    const compactCallTokenCostWeight = numericEnv(env.MAKA_CONTEXT_SEMANTIC_COMPACT_CALL_TOKEN_COST_WEIGHT);
+    contextBudget.semanticCompact = {
+      enabled: true,
+      ...(mode ? { mode } : {}),
+      ...(minStepNumber !== undefined ? { minStepNumber } : {}),
+      ...(highWaterRatio !== undefined ? { highWaterRatio } : {}),
+      ...(forceRatio !== undefined ? { forceRatio } : {}),
+      ...(targetRatio !== undefined ? { targetRatio } : {}),
+      ...(maxActiveEstimatedTokens !== undefined ? { maxActiveEstimatedTokens } : {}),
+      ...(minRecentMessages !== undefined ? { minRecentMessages } : {}),
+      ...(minRecentToolPairs !== undefined ? { minRecentToolPairs } : {}),
+      ...(maxSummaryEstimatedTokens !== undefined ? { maxSummaryEstimatedTokens } : {}),
+      ...(minSavingsTokens !== undefined ? { minSavingsTokens } : {}),
+      ...(minSavingsRatio !== undefined ? { minSavingsRatio } : {}),
+      ...(minNetSavingsTokens !== undefined ? { minNetSavingsTokens } : {}),
+      ...(compactCallTokenCostWeight !== undefined ? { compactCallTokenCostWeight } : {}),
+      ...(maxCompactCallTokens !== undefined ? { maxCompactCallTokens } : {}),
+      ...(maxConsecutiveInvalidSummaries !== undefined ? { maxConsecutiveInvalidSummaries } : {}),
+      ...(invalidSummaryCooldownSteps !== undefined ? { invalidSummaryCooldownSteps } : {}),
+      ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+      ...(archiveRequired !== undefined ? { archiveRequired } : {}),
+      ...(benchmarkStateCards !== undefined ? { benchmarkStateCards } : {}),
+      ...(env.MAKA_CONTEXT_SEMANTIC_COMPACT_MODEL
+        ? { summarizerModel: env.MAKA_CONTEXT_SEMANTIC_COMPACT_MODEL }
+        : {}),
+      ...(env.MAKA_CONTEXT_SEMANTIC_COMPACT_PROMPT_VERSION
+        ? { promptVersion: env.MAKA_CONTEXT_SEMANTIC_COMPACT_PROMPT_VERSION }
+        : {}),
+      ...(env.MAKA_CONTEXT_SEMANTIC_COMPACT_HIGH_WATER_NAME
+        ? { highWaterName: env.MAKA_CONTEXT_SEMANTIC_COMPACT_HIGH_WATER_NAME }
         : {}),
     };
   }
@@ -874,6 +978,77 @@ export function buildHarborCellContextBudgetPolicySnapshot(
               : {}),
             ...(contextBudget.activeFullCompact.highWaterName
               ? { highWaterName: contextBudget.activeFullCompact.highWaterName }
+              : {}),
+          },
+        }
+      : {}),
+    ...(contextBudget.semanticCompact
+      ? {
+          semanticCompact: {
+            enabled: contextBudget.semanticCompact.enabled,
+            ...(contextBudget.semanticCompact.mode ? { mode: contextBudget.semanticCompact.mode } : {}),
+            ...(contextBudget.semanticCompact.minStepNumber !== undefined
+              ? { minStepNumber: contextBudget.semanticCompact.minStepNumber }
+              : {}),
+            ...(contextBudget.semanticCompact.highWaterRatio !== undefined
+              ? { highWaterRatio: contextBudget.semanticCompact.highWaterRatio }
+              : {}),
+            ...(contextBudget.semanticCompact.forceRatio !== undefined
+              ? { forceRatio: contextBudget.semanticCompact.forceRatio }
+              : {}),
+            ...(contextBudget.semanticCompact.targetRatio !== undefined
+              ? { targetRatio: contextBudget.semanticCompact.targetRatio }
+              : {}),
+            ...(contextBudget.semanticCompact.maxActiveEstimatedTokens !== undefined
+              ? { maxActiveEstimatedTokens: contextBudget.semanticCompact.maxActiveEstimatedTokens }
+              : {}),
+            ...(contextBudget.semanticCompact.minRecentMessages !== undefined
+              ? { minRecentMessages: contextBudget.semanticCompact.minRecentMessages }
+              : {}),
+            ...(contextBudget.semanticCompact.minRecentToolPairs !== undefined
+              ? { minRecentToolPairs: contextBudget.semanticCompact.minRecentToolPairs }
+              : {}),
+            ...(contextBudget.semanticCompact.maxSummaryEstimatedTokens !== undefined
+              ? { maxSummaryEstimatedTokens: contextBudget.semanticCompact.maxSummaryEstimatedTokens }
+              : {}),
+            ...(contextBudget.semanticCompact.minSavingsTokens !== undefined
+              ? { minSavingsTokens: contextBudget.semanticCompact.minSavingsTokens }
+              : {}),
+            ...(contextBudget.semanticCompact.minSavingsRatio !== undefined
+              ? { minSavingsRatio: contextBudget.semanticCompact.minSavingsRatio }
+              : {}),
+            ...(contextBudget.semanticCompact.minNetSavingsTokens !== undefined
+              ? { minNetSavingsTokens: contextBudget.semanticCompact.minNetSavingsTokens }
+              : {}),
+            ...(contextBudget.semanticCompact.compactCallTokenCostWeight !== undefined
+              ? { compactCallTokenCostWeight: contextBudget.semanticCompact.compactCallTokenCostWeight }
+              : {}),
+            ...(contextBudget.semanticCompact.maxCompactCallTokens !== undefined
+              ? { maxCompactCallTokens: contextBudget.semanticCompact.maxCompactCallTokens }
+              : {}),
+            ...(contextBudget.semanticCompact.maxConsecutiveInvalidSummaries !== undefined
+              ? { maxConsecutiveInvalidSummaries: contextBudget.semanticCompact.maxConsecutiveInvalidSummaries }
+              : {}),
+            ...(contextBudget.semanticCompact.invalidSummaryCooldownSteps !== undefined
+              ? { invalidSummaryCooldownSteps: contextBudget.semanticCompact.invalidSummaryCooldownSteps }
+              : {}),
+            ...(contextBudget.semanticCompact.timeoutMs !== undefined
+              ? { timeoutMs: contextBudget.semanticCompact.timeoutMs }
+              : {}),
+            ...(contextBudget.semanticCompact.archiveRequired !== undefined
+              ? { archiveRequired: contextBudget.semanticCompact.archiveRequired }
+              : {}),
+            ...(contextBudget.semanticCompact.benchmarkStateCards !== undefined
+              ? { benchmarkStateCards: contextBudget.semanticCompact.benchmarkStateCards }
+              : {}),
+            ...(contextBudget.semanticCompact.summarizerModel
+              ? { summarizerModel: contextBudget.semanticCompact.summarizerModel }
+              : {}),
+            ...(contextBudget.semanticCompact.promptVersion
+              ? { promptVersion: contextBudget.semanticCompact.promptVersion }
+              : {}),
+            ...(contextBudget.semanticCompact.highWaterName
+              ? { highWaterName: contextBudget.semanticCompact.highWaterName }
               : {}),
           },
         }
@@ -1078,6 +1253,19 @@ function activeFullCompactModeEnv(
   }
   throw new Error(
     `MAKA_CONTEXT_ACTIVE_FULL_COMPACT_MODE must be one of off, index_only, validate_only, prepare_step_dry_run, got ${JSON.stringify(raw)}`,
+  );
+}
+
+function semanticCompactModeEnv(
+  raw: string | undefined,
+): NonNullable<ContextBudgetPolicy['semanticCompact']>['mode'] | undefined {
+  const value = raw?.trim();
+  if (value === undefined || value === '') return undefined;
+  if (value === 'off' || value === 'validate_only' || value === 'prepare_step_dry_run' || value === 'replace') {
+    return value;
+  }
+  throw new Error(
+    `MAKA_CONTEXT_SEMANTIC_COMPACT_MODE must be one of off, validate_only, prepare_step_dry_run, replace, got ${JSON.stringify(raw)}`,
   );
 }
 

@@ -39,6 +39,11 @@ export interface HarborCellContextBudgetSummary {
   archiveRetrievalSkippedReasonCounts: Record<string, number>;
   archiveRetrievalFailures: number;
   archiveRetrievalFailureReasonCounts: Record<string, number>;
+  semanticCompactCallInputTokens: number;
+  semanticCompactCallOutputTokens: number;
+  semanticCompactCallCacheReadInputTokens: number;
+  semanticCompactCallCacheWriteInputTokens: number;
+  semanticCompactCallTotalTokens: number;
 }
 
 export type HarborCellContextBudgetPolicySnapshot = ({ enabled: false } | ({ enabled: true } & ContextBudgetPolicy));
@@ -301,6 +306,11 @@ export function summarizeCellContextBudget(
     archiveRetrievalSkippedReasonCounts: {},
     archiveRetrievalFailures: 0,
     archiveRetrievalFailureReasonCounts: {},
+    semanticCompactCallInputTokens: 0,
+    semanticCompactCallOutputTokens: 0,
+    semanticCompactCallCacheReadInputTokens: 0,
+    semanticCompactCallCacheWriteInputTokens: 0,
+    semanticCompactCallTotalTokens: 0,
   };
 
   for (const event of events) {
@@ -327,6 +337,14 @@ export function summarizeCellContextBudget(
     mergeCountRecord(summary.archiveRetrievalSkippedReasonCounts, diagnostic.archiveRetrievalSkippedReasonCounts);
     summary.archiveRetrievalFailures += diagnostic.archiveRetrievalFailures ?? 0;
     mergeCountRecord(summary.archiveRetrievalFailureReasonCounts, diagnostic.archiveRetrievalFailureReasonCounts);
+    for (const decision of diagnostic.compactionDecisions ?? []) {
+      if (decision.boundaryKind !== 'semanticCompact') continue;
+      summary.semanticCompactCallInputTokens += decision.compactCallInputTokens ?? 0;
+      summary.semanticCompactCallOutputTokens += decision.compactCallOutputTokens ?? 0;
+      summary.semanticCompactCallCacheReadInputTokens += decision.compactCallCacheReadInputTokens ?? 0;
+      summary.semanticCompactCallCacheWriteInputTokens += decision.compactCallCacheWriteInputTokens ?? 0;
+      summary.semanticCompactCallTotalTokens += decision.compactCallTotalTokens ?? 0;
+    }
   }
 
   return summary.diagnosticEvents > 0 ? summary : undefined;
@@ -434,6 +452,26 @@ function validateContextBudgetSummary(value: unknown): HarborCellContextBudgetSu
       value.archiveRetrievalFailureReasonCounts,
       'contextBudgetSummary.archiveRetrievalFailureReasonCounts',
     ) ?? {},
+    semanticCompactCallInputTokens: optionalNumber(
+      value.semanticCompactCallInputTokens,
+      'contextBudgetSummary.semanticCompactCallInputTokens',
+    ) ?? 0,
+    semanticCompactCallOutputTokens: optionalNumber(
+      value.semanticCompactCallOutputTokens,
+      'contextBudgetSummary.semanticCompactCallOutputTokens',
+    ) ?? 0,
+    semanticCompactCallCacheReadInputTokens: optionalNumber(
+      value.semanticCompactCallCacheReadInputTokens,
+      'contextBudgetSummary.semanticCompactCallCacheReadInputTokens',
+    ) ?? 0,
+    semanticCompactCallCacheWriteInputTokens: optionalNumber(
+      value.semanticCompactCallCacheWriteInputTokens,
+      'contextBudgetSummary.semanticCompactCallCacheWriteInputTokens',
+    ) ?? 0,
+    semanticCompactCallTotalTokens: optionalNumber(
+      value.semanticCompactCallTotalTokens,
+      'contextBudgetSummary.semanticCompactCallTotalTokens',
+    ) ?? 0,
   };
 }
 
@@ -475,6 +513,9 @@ function validateContextBudgetPolicySnapshot(value: unknown): HarborCellContextB
       : {}),
     ...(value.activeFullCompact !== undefined
       ? { activeFullCompact: validateActiveFullCompactSnapshot(value.activeFullCompact) }
+      : {}),
+    ...(value.semanticCompact !== undefined
+      ? { semanticCompact: validateSemanticCompactSnapshot(value.semanticCompact) }
       : {}),
     ...(value.archiveRetrieval !== undefined
       ? { archiveRetrieval: validateArchiveRetrievalSnapshot(value.archiveRetrieval) }
@@ -537,6 +578,79 @@ function validateActiveFullCompactSnapshot(value: unknown): NonNullable<ContextB
       : {}),
     ...(value.highWaterName !== undefined
       ? { highWaterName: requireString(value.highWaterName, 'contextBudgetPolicy.activeFullCompact.highWaterName') }
+      : {}),
+  };
+}
+
+function validateSemanticCompactSnapshot(value: unknown): NonNullable<ContextBudgetPolicy['semanticCompact']> {
+  if (!isRecord(value)) throw new Error('contextBudgetPolicy.semanticCompact must be a JSON object');
+  return {
+    enabled: requireBoolean(value.enabled, 'contextBudgetPolicy.semanticCompact.enabled'),
+    ...(value.mode !== undefined
+      ? { mode: requireStringUnion(value.mode, 'contextBudgetPolicy.semanticCompact.mode', ['off', 'validate_only', 'prepare_step_dry_run', 'replace'] as const) }
+      : {}),
+    ...(optionalNumber(value.minStepNumber, 'contextBudgetPolicy.semanticCompact.minStepNumber') !== undefined
+      ? { minStepNumber: optionalNumber(value.minStepNumber, 'contextBudgetPolicy.semanticCompact.minStepNumber') }
+      : {}),
+    ...(optionalNumber(value.highWaterRatio, 'contextBudgetPolicy.semanticCompact.highWaterRatio') !== undefined
+      ? { highWaterRatio: optionalNumber(value.highWaterRatio, 'contextBudgetPolicy.semanticCompact.highWaterRatio') }
+      : {}),
+    ...(optionalNumber(value.forceRatio, 'contextBudgetPolicy.semanticCompact.forceRatio') !== undefined
+      ? { forceRatio: optionalNumber(value.forceRatio, 'contextBudgetPolicy.semanticCompact.forceRatio') }
+      : {}),
+    ...(optionalNumber(value.targetRatio, 'contextBudgetPolicy.semanticCompact.targetRatio') !== undefined
+      ? { targetRatio: optionalNumber(value.targetRatio, 'contextBudgetPolicy.semanticCompact.targetRatio') }
+      : {}),
+    ...(optionalNumber(value.maxActiveEstimatedTokens, 'contextBudgetPolicy.semanticCompact.maxActiveEstimatedTokens') !== undefined
+      ? { maxActiveEstimatedTokens: optionalNumber(value.maxActiveEstimatedTokens, 'contextBudgetPolicy.semanticCompact.maxActiveEstimatedTokens') }
+      : {}),
+    ...(optionalNumber(value.minRecentMessages, 'contextBudgetPolicy.semanticCompact.minRecentMessages') !== undefined
+      ? { minRecentMessages: optionalNumber(value.minRecentMessages, 'contextBudgetPolicy.semanticCompact.minRecentMessages') }
+      : {}),
+    ...(optionalNumber(value.minRecentToolPairs, 'contextBudgetPolicy.semanticCompact.minRecentToolPairs') !== undefined
+      ? { minRecentToolPairs: optionalNumber(value.minRecentToolPairs, 'contextBudgetPolicy.semanticCompact.minRecentToolPairs') }
+      : {}),
+    ...(optionalNumber(value.maxSummaryEstimatedTokens, 'contextBudgetPolicy.semanticCompact.maxSummaryEstimatedTokens') !== undefined
+      ? { maxSummaryEstimatedTokens: optionalNumber(value.maxSummaryEstimatedTokens, 'contextBudgetPolicy.semanticCompact.maxSummaryEstimatedTokens') }
+      : {}),
+    ...(optionalNumber(value.minSavingsTokens, 'contextBudgetPolicy.semanticCompact.minSavingsTokens') !== undefined
+      ? { minSavingsTokens: optionalNumber(value.minSavingsTokens, 'contextBudgetPolicy.semanticCompact.minSavingsTokens') }
+      : {}),
+    ...(optionalNumber(value.minSavingsRatio, 'contextBudgetPolicy.semanticCompact.minSavingsRatio') !== undefined
+      ? { minSavingsRatio: optionalNumber(value.minSavingsRatio, 'contextBudgetPolicy.semanticCompact.minSavingsRatio') }
+      : {}),
+    ...(optionalNumber(value.minNetSavingsTokens, 'contextBudgetPolicy.semanticCompact.minNetSavingsTokens') !== undefined
+      ? { minNetSavingsTokens: optionalNumber(value.minNetSavingsTokens, 'contextBudgetPolicy.semanticCompact.minNetSavingsTokens') }
+      : {}),
+    ...(optionalNumber(value.compactCallTokenCostWeight, 'contextBudgetPolicy.semanticCompact.compactCallTokenCostWeight') !== undefined
+      ? { compactCallTokenCostWeight: optionalNumber(value.compactCallTokenCostWeight, 'contextBudgetPolicy.semanticCompact.compactCallTokenCostWeight') }
+      : {}),
+    ...(optionalNumber(value.maxCompactCallTokens, 'contextBudgetPolicy.semanticCompact.maxCompactCallTokens') !== undefined
+      ? { maxCompactCallTokens: optionalNumber(value.maxCompactCallTokens, 'contextBudgetPolicy.semanticCompact.maxCompactCallTokens') }
+      : {}),
+    ...(optionalNumber(value.maxConsecutiveInvalidSummaries, 'contextBudgetPolicy.semanticCompact.maxConsecutiveInvalidSummaries') !== undefined
+      ? { maxConsecutiveInvalidSummaries: optionalNumber(value.maxConsecutiveInvalidSummaries, 'contextBudgetPolicy.semanticCompact.maxConsecutiveInvalidSummaries') }
+      : {}),
+    ...(optionalNumber(value.invalidSummaryCooldownSteps, 'contextBudgetPolicy.semanticCompact.invalidSummaryCooldownSteps') !== undefined
+      ? { invalidSummaryCooldownSteps: optionalNumber(value.invalidSummaryCooldownSteps, 'contextBudgetPolicy.semanticCompact.invalidSummaryCooldownSteps') }
+      : {}),
+    ...(optionalNumber(value.timeoutMs, 'contextBudgetPolicy.semanticCompact.timeoutMs') !== undefined
+      ? { timeoutMs: optionalNumber(value.timeoutMs, 'contextBudgetPolicy.semanticCompact.timeoutMs') }
+      : {}),
+    ...(value.archiveRequired !== undefined
+      ? { archiveRequired: requireBoolean(value.archiveRequired, 'contextBudgetPolicy.semanticCompact.archiveRequired') }
+      : {}),
+    ...(value.benchmarkStateCards !== undefined
+      ? { benchmarkStateCards: requireBoolean(value.benchmarkStateCards, 'contextBudgetPolicy.semanticCompact.benchmarkStateCards') }
+      : {}),
+    ...(value.summarizerModel !== undefined
+      ? { summarizerModel: requireString(value.summarizerModel, 'contextBudgetPolicy.semanticCompact.summarizerModel') }
+      : {}),
+    ...(value.promptVersion !== undefined
+      ? { promptVersion: requireString(value.promptVersion, 'contextBudgetPolicy.semanticCompact.promptVersion') }
+      : {}),
+    ...(value.highWaterName !== undefined
+      ? { highWaterName: requireString(value.highWaterName, 'contextBudgetPolicy.semanticCompact.highWaterName') }
       : {}),
   };
 }

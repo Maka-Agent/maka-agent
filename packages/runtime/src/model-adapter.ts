@@ -71,6 +71,21 @@ export type PrepareStepFunctionLike = (
   options: PrepareStepLike,
 ) => PrepareStepResultLike | undefined | PromiseLike<PrepareStepResultLike | undefined>;
 
+export interface CompactSummaryRequest {
+  model: unknown;
+  system: string;
+  messages: readonly ModelMessage[];
+  maxOutputTokens: number;
+  abortSignal?: AbortSignal;
+}
+
+export interface CompactSummaryResult {
+  text: string;
+  usage?: NormalizedAiSdkUsage;
+  finishReason?: string;
+  providerRequestId?: string;
+}
+
 export interface ModelAdapterStreamInput {
   model: unknown;
   messages: ModelMessage[];
@@ -141,6 +156,39 @@ export class ModelAdapter {
       stopWhen: stepCountIs(this.input.maxSteps),
       abortSignal: input.abortSignal,
     });
+  }
+
+  async generateCompactSummary(input: CompactSummaryRequest): Promise<CompactSummaryResult> {
+    const ai = await import('ai').catch((err) => {
+      throw new Error(`Failed to load 'ai' package. Run \`npm install ai\`. Inner: ${(err as Error).message}`);
+    });
+    const { generateText } = ai as unknown as {
+      generateText: (opts: Record<string, unknown>) => Promise<{
+        text?: string;
+        usage?: AiSdkUsageLike;
+        totalUsage?: AiSdkUsageLike;
+        finishReason?: unknown;
+        providerMetadata?: unknown;
+        response?: { id?: string };
+      }>;
+    };
+
+    const result = await generateText({
+      model: input.model,
+      system: input.system,
+      messages: input.messages,
+      maxOutputTokens: input.maxOutputTokens,
+      abortSignal: input.abortSignal,
+    });
+    const usage = normalizeAiSdkUsage(result.totalUsage ?? result.usage, {
+      rawFinishReason: result.finishReason,
+    });
+    return {
+      text: result.text ?? '',
+      ...(usage ? { usage } : {}),
+      ...(result.finishReason !== undefined ? { finishReason: rawFinishReasonString(result.finishReason) } : {}),
+      ...(typeof result.response?.id === 'string' ? { providerRequestId: result.response.id } : {}),
+    };
   }
 
   handleStreamChunk(

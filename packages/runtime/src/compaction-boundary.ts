@@ -10,7 +10,8 @@ export type CompactionBoundaryKind =
   | 'synthesisCache'
   | 'staleToolResultPrune'
   | 'activeToolResultPrune'
-  | 'activeFullCompact';
+  | 'activeFullCompact'
+  | 'semanticCompact';
 export type CompactionDecisionKind = 'unchanged' | 'replaced' | 'failedOpen';
 
 export interface CompactionCoverage {
@@ -68,6 +69,13 @@ export interface CompactionDecision {
   estimatedTokensBefore?: number;
   estimatedTokensAfter?: number;
   estimatedTokensSaved?: number;
+  compactCallUsage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadInputTokens?: number;
+    cacheWriteInputTokens?: number;
+    totalTokens?: number;
+  };
   reason?: string;
   failOpenReason?: string;
   skippedReasonCounts?: Readonly<Record<string, number>>;
@@ -172,6 +180,21 @@ export function compactionDecisionToDiagnostic(
       ? { estimatedTokensAfter: decision.estimatedTokensAfter }
       : {}),
     ...(estimatedTokensSaved !== undefined ? { estimatedTokensSaved } : {}),
+    ...(decision.compactCallUsage?.inputTokens !== undefined
+      ? { compactCallInputTokens: decision.compactCallUsage.inputTokens }
+      : {}),
+    ...(decision.compactCallUsage?.outputTokens !== undefined
+      ? { compactCallOutputTokens: decision.compactCallUsage.outputTokens }
+      : {}),
+    ...(decision.compactCallUsage?.cacheReadInputTokens !== undefined
+      ? { compactCallCacheReadInputTokens: decision.compactCallUsage.cacheReadInputTokens }
+      : {}),
+    ...(decision.compactCallUsage?.cacheWriteInputTokens !== undefined
+      ? { compactCallCacheWriteInputTokens: decision.compactCallUsage.cacheWriteInputTokens }
+      : {}),
+    ...(decision.compactCallUsage?.totalTokens !== undefined
+      ? { compactCallTotalTokens: decision.compactCallUsage.totalTokens }
+      : {}),
     ...(decision.reason ? { reason: decision.reason } : {}),
     ...(decision.failOpenReason ? { failOpenReason: decision.failOpenReason } : {}),
     ...(decision.skippedReasonCounts ? { skippedReasonCounts: { ...decision.skippedReasonCounts } } : {}),

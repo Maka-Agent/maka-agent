@@ -55,6 +55,7 @@ export type {
   SynthesisCacheWriteResult,
   ToolResultArchiveRecorder,
   ToolResultArchiveRecorderInput,
+  SemanticCompactBlockRecorder,
 } from './ai-sdk-backend.js';
 export { PiAgentBackend, normalizePiAgentFrame } from './pi-agent-backend.js';
 export type {
@@ -259,6 +260,21 @@ export type {
   ActiveFullCompactValidationResult,
   BuildActiveFullCompactBlockInput,
 } from './active-full-compact.js';
+export {
+  renderSemanticCompactBlock,
+  rewriteSemanticCompactInMessages,
+  semanticCompactBlockToModelMessage,
+} from './semantic-compact.js';
+export type {
+  SemanticCompactBlock,
+  SemanticCompactDecision,
+  SemanticCompactPolicy,
+  SemanticCompactRewriteInput,
+  SemanticCompactRewriteResult,
+  SemanticCompactStateCard,
+  SemanticCompactSummarizer,
+  SemanticCompactSummaryRequest,
+} from './semantic-compact.js';
 export { testConnection } from './test-connection.js';
 export { fetchProviderModels } from './model-fetcher.js';
 

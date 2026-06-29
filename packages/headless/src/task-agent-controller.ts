@@ -809,6 +809,7 @@ function createSingleRunActiveSession(
           store,
           recordRunTrace: (event) => boundRun?.recordRunTrace(event),
           recordActiveFullCompactBlock: (block) => boundRun?.recordActiveFullCompactBlock(block),
+          recordSemanticCompactBlock: (block) => boundRun?.recordSemanticCompactBlock(block),
         });
         active = {
           sessionId,

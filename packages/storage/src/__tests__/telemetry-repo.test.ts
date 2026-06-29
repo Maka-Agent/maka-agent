@@ -66,6 +66,22 @@ describe('FileTelemetryRepo', () => {
     });
   });
 
+  test('carries auxiliary LLM call identity through logs()', async () => {
+    await withRepo(async (repo) => {
+      await repo.load();
+      repo.insertLlmCall(llmRecord({
+        id: 'usage_semantic_compact_turn_1_2_3',
+        callKind: 'semantic_compact',
+        callId: 'semantic_compact_turn_1_2_3',
+      }));
+      await flushWrites();
+
+      const row = repo.logs({ range: 'all' }).rows[0];
+      assert.equal(row?.callKind, 'semantic_compact');
+      assert.equal(row?.callId, 'semantic_compact_turn_1_2_3');
+    });
+  });
+
   test('filters logs by range, status, provider, model, and pagination', async () => {
     await withRepo(async (repo) => {
       await repo.load();

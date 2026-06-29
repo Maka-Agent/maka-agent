@@ -202,6 +202,17 @@ describe('Harbor cell output contract', () => {
                   archiveRetrievalSkippedReasonCounts: { max_bytes: 2, max_results: 1 },
                   archiveRetrievalFailures: 1,
                   archiveRetrievalFailureReasonCounts: { corrupt: 1 },
+                  compactionDecisions: [{
+                    stage: 'activeStep',
+                    sourceKind: 'providerMessages',
+                    decision: 'replaced',
+                    boundaryKind: 'semanticCompact',
+                    compactCallInputTokens: 31,
+                    compactCallOutputTokens: 11,
+                    compactCallCacheReadInputTokens: 7,
+                    compactCallCacheWriteInputTokens: 2,
+                    compactCallTotalTokens: 42,
+                  }],
                 },
               },
             },
@@ -253,6 +264,11 @@ describe('Harbor cell output contract', () => {
       archiveRetrievalSkippedReasonCounts: { max_bytes: 2, max_results: 1 },
       archiveRetrievalFailures: 1,
       archiveRetrievalFailureReasonCounts: { corrupt: 1 },
+      semanticCompactCallInputTokens: 31,
+      semanticCompactCallOutputTokens: 11,
+      semanticCompactCallCacheReadInputTokens: 7,
+      semanticCompactCallCacheWriteInputTokens: 2,
+      semanticCompactCallTotalTokens: 42,
     });
     assert.deepEqual(validateHarborCellOutput(output), output);
   });

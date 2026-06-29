@@ -17,6 +17,7 @@
     "./model-factory": "./dist/model-factory.js",
     "./context-budget": "./dist/context-budget.js",
     "./active-full-compact": "./dist/active-full-compact.js",
+    "./semantic-compact": "./dist/semantic-compact.js",
     "./test-connection": "./dist/test-connection.js",
     "./model-fetcher": "./dist/model-fetcher.js",
     "./materializer": "./dist/materializer.js",

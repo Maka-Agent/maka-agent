@@ -54,6 +54,8 @@ export interface UsageBucket {
 export interface UsageLogRow {
   id: string;
   ts: number;
+  callKind?: 'main' | 'semantic_compact';
+  callId?: string;
   connectionSlug?: string;
   providerId: string;
   modelId: string;
@@ -93,6 +95,13 @@ export interface PricingConfig {
 export interface LlmCallRecord {
   sessionId?: string;
   turnId?: string;
+  /**
+   * Distinguishes the main agent stream from auxiliary model calls such as
+   * semantic compaction. Omitted means the historical main stream call.
+   */
+  callKind?: 'main' | 'semantic_compact';
+  /** Stable id for auxiliary calls so multiple records in one turn do not collide. */
+  callId?: string;
   connectionSlug?: string;
   providerId: string;
   modelId: string;
@@ -213,6 +222,11 @@ export interface CompactionDecisionDiagnostic {
   estimatedTokensBefore?: number;
   estimatedTokensAfter?: number;
   estimatedTokensSaved?: number;
+  compactCallInputTokens?: number;
+  compactCallOutputTokens?: number;
+  compactCallCacheReadInputTokens?: number;
+  compactCallCacheWriteInputTokens?: number;
+  compactCallTotalTokens?: number;
   reason?: string;
   failOpenReason?: string;
   skippedReasonCounts?: Record<string, number>;
@@ -240,6 +254,8 @@ export interface ContextBudgetDiagnostic {
   activePrunedToolResults?: number;
   activeArchiveFailures?: number;
   activeEstimatedTokensSaved?: number;
+  semanticCompactEnabled?: boolean;
+  semanticCompactMode?: 'off' | 'validate_only' | 'prepare_step_dry_run' | 'replace';
   compactionDecisions?: CompactionDecisionDiagnostic[];
   archiveRetrievalMode?: 'eager' | 'history_search_gated';
   archiveRetrievalEligibleTurns?: number;

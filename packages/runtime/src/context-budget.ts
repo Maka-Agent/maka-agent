@@ -11,6 +11,7 @@ import {
   historyCompactBlockToCompactionBoundary,
 } from './compaction-boundary.js';
 import type { ActiveFullCompactPolicy } from './active-full-compact.js';
+import type { SemanticCompactPolicy } from './semantic-compact.js';
 import type { CompactionDecisionKind } from './compaction-boundary.js';
 
 export interface ContextBudgetPolicy {
@@ -38,6 +39,11 @@ export interface ContextBudgetPolicy {
    * replace a validated older provider-message span with a source-bearing block.
    */
   activeFullCompact?: ActiveFullCompactPolicy;
+  /**
+   * Optional current-turn LLM semantic compact replacement. Runs after active
+   * tool-result pruning and before the next provider step.
+   */
+  semanticCompact?: SemanticCompactPolicy;
   /** Optional replay-only archive hydration after pruning. Defaults off. */
   archiveRetrieval?: ArchiveRetrievalPolicy;
   /** Optional deterministic prior-history search used to re-add bounded around-context. Defaults off. */

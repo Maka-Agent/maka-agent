@@ -140,6 +140,8 @@ class FileTelemetryRepo implements TelemetryRepo {
       .map((row) => ({
         id: row.id,
         ts: row.ts,
+        ...(row.callKind ? { callKind: row.callKind } : {}),
+        ...(row.callId ? { callId: row.callId } : {}),
         ...(row.connectionSlug ? { connectionSlug: row.connectionSlug } : {}),
         providerId: row.providerId,
         modelId: row.modelId,

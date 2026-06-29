@@ -33,9 +33,12 @@ export function recordLlmCall(deps: LlmRecorderDeps, record: LlmCallRecord): voi
         deps.lookupPricing(`${record.providerId}:${record.modelId}`),
       ).totalCost;
       const ts = record.startedAt + record.latencyMs;
+      const recordId = record.callId
+        ? `usage_${record.callId}`
+        : `usage_${record.turnId ?? randomUUID()}`;
       deps.repo.insertLlmCall({
         ...record,
-        id: `usage_${record.turnId ?? randomUUID()}`,
+        id: recordId,
         cacheHitInputTokens,
         cacheMissInputTokens,
         ...(cacheMissInputSource !== undefined ? { cacheMissInputSource } : {}),

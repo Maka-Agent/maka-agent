@@ -103,6 +103,11 @@ import {
   type ActiveFullCompactBlock,
 } from './active-full-compact.js';
 import {
+  rewriteSemanticCompactInMessages,
+  type SemanticCompactBlock,
+  type SemanticCompactControllerState,
+} from './semantic-compact.js';
+import {
   compactionDecisionDiagnosticPatch,
   historyCompactBlockToCompactionBoundary,
 } from './compaction-boundary.js';
@@ -356,6 +361,7 @@ export type HistoryCompactWriter = (
   input: HistoryCompactWriteInput,
 ) => Promise<HistoryCompactWriteResult | void> | HistoryCompactWriteResult | void;
 export type ActiveFullCompactBlockRecorder = (block: ActiveFullCompactBlock) => void | Promise<void>;
+export type SemanticCompactBlockRecorder = (block: SemanticCompactBlock) => void | Promise<void>;
 
 export interface AiSdkBackendInput {
   // ── Session context ────────────────────────────────────────────────────
@@ -450,6 +456,8 @@ export interface AiSdkBackendInput {
   writeHistoryCompact?: HistoryCompactWriter;
   /** Optional best-effort durable recorder for accepted active full compact blocks. */
   recordActiveFullCompactBlock?: ActiveFullCompactBlockRecorder;
+  /** Optional best-effort durable recorder for accepted semantic compact blocks. */
+  recordSemanticCompactBlock?: SemanticCompactBlockRecorder;
 }
 
 export interface SystemPromptContext {
@@ -601,7 +609,7 @@ export class AiSdkBackend implements AgentBackend {
     );
     const providerTools = plan.providerTools;
     let activeToolResultPruneDiagnosticPatch: ActiveToolResultPruneDiagnosticPatch = {};
-    let activeFullCompactDiagnosticPatch: Partial<ContextBudgetDiagnostic> | undefined;
+    let activeCompactDiagnosticPatch: Partial<ContextBudgetDiagnostic> | undefined;
     // Tool names the repair path matches a mis-cased call against — follows the
     // current step's snapshot so a group loaded mid-turn is repairable on the
     // step it becomes active, not routed to `invalid`.
@@ -751,13 +759,24 @@ export class AiSdkBackend implements AgentBackend {
               patch,
             );
           }),
-          this.buildActiveFullCompactPrepareStep(
+          this.buildSemanticCompactPrepareStep(
+            turnId,
+            model,
+            input.runtimeContext,
+            (messagesForStep, activeToolsForStep) => stepRequestShapeHash(messagesForStep, activeToolsForStep),
+            (patch) => {
+              activeCompactDiagnosticPatch = mergeContextBudgetDiagnosticPatches(
+                activeCompactDiagnosticPatch,
+                patch,
+              );
+            },
+          ) ?? this.buildActiveFullCompactPrepareStep(
             turnId,
             input.runtimeContext,
             (messagesForStep, activeToolsForStep) => stepRequestShapeHash(messagesForStep, activeToolsForStep),
             (patch) => {
-              activeFullCompactDiagnosticPatch = mergeContextBudgetDiagnosticPatches(
-                activeFullCompactDiagnosticPatch,
+              activeCompactDiagnosticPatch = mergeContextBudgetDiagnosticPatches(
+                activeCompactDiagnosticPatch,
                 patch,
               );
             },
@@ -888,7 +907,7 @@ export class AiSdkBackend implements AgentBackend {
             const contextBudgetForUsage = contextBudgetWithActivePrepareStepDiagnostics(
               contextBudgetForTelemetry,
               activeToolResultPruneDiagnosticPatch,
-              activeFullCompactDiagnosticPatch,
+              activeCompactDiagnosticPatch,
             );
             const tu: TokenUsageMessage = {
               type: 'token_usage',
@@ -995,7 +1014,7 @@ export class AiSdkBackend implements AgentBackend {
         contextBudgetForTelemetry = contextBudgetWithActivePrepareStepDiagnostics(
           contextBudgetForTelemetry,
           activeToolResultPruneDiagnosticPatch,
-          activeFullCompactDiagnosticPatch,
+          activeCompactDiagnosticPatch,
         );
         this.input.recordLlmCall?.({
           sessionId: this.sessionId,
@@ -1434,6 +1453,108 @@ export class AiSdkBackend implements AgentBackend {
     };
   }
 
+  private buildSemanticCompactPrepareStep(
+    turnId: string,
+    model: unknown,
+    runtimeEvents: readonly RuntimeEvent[] | undefined,
+    requestShapeHashForMessages: (
+      messages: readonly ModelMessage[],
+      activeToolsForStep: readonly string[] | undefined,
+    ) => string,
+    onDiagnosticPatch?: (patch: Partial<ContextBudgetDiagnostic>) => void,
+  ): PrepareStepFunctionLike | undefined {
+    const policy = this.input.contextBudget?.semanticCompact;
+    if (policy?.enabled !== true || policy.mode === 'off') return undefined;
+
+    let acceptedProjection: ActiveFullCompactPrepareStepProjection | undefined;
+    const controllerState: SemanticCompactControllerState = {
+      consecutiveInvalidSummaries: 0,
+      totalInvalidSummaries: 0,
+      compactCallCount: 0,
+      compactCallTotalTokens: 0,
+      acceptedEstimatedTokensSaved: 0,
+    };
+    return async (options) => {
+      const activeToolsForStep = (options as PrepareStepLike & { activeTools?: readonly string[] }).activeTools;
+      const dryRun = policy.mode === 'validate_only' || policy.mode === 'prepare_step_dry_run';
+      const incomingMessages = options.messages;
+      const projectedMessages = dryRun
+        ? undefined
+        : projectAcceptedActiveFullCompactMessages(incomingMessages, acceptedProjection);
+      const messagesForRewrite = projectedMessages ?? incomingMessages;
+      const summarizerModel = policy.summarizerModel
+        ? this.input.modelFactory({
+            connection: this.input.connection,
+            apiKey: this.input.apiKey,
+            modelId: policy.summarizerModel,
+          })
+        : model;
+      const summarizerModelId = policy.summarizerModel ?? this.input.modelId;
+      const rewritten = await rewriteSemanticCompactInMessages({
+        sessionId: this.sessionId,
+        turnId,
+        messages: messagesForRewrite,
+        policy,
+        controllerState,
+        runtimeEvents: runtimeEvents?.filter((event) => event.turnId === turnId),
+        stepNumber: options.stepNumber,
+        now: this.now(),
+        charsPerToken: this.input.contextBudget?.charsPerToken,
+        requestShapeHashForMessages: (messages) => requestShapeHashForMessages(messages, activeToolsForStep),
+        abortSignal: this.abortController?.signal,
+        summarizer: async (request) => {
+          const startedAt = this.now();
+          const callId = `semantic_compact_${turnId}_${options.stepNumber}_${startedAt}`;
+          try {
+            const result = await this.modelAdapter.generateCompactSummary({
+              model: summarizerModel,
+              system: request.system,
+              messages: request.messages,
+              maxOutputTokens: request.maxOutputTokens,
+              abortSignal: request.abortSignal,
+            });
+            this.recordSemanticCompactSummaryCall({
+              callId,
+              turnId,
+              modelId: summarizerModelId,
+              startedAt,
+              latencyMs: Math.max(0, this.now() - startedAt),
+              usage: result.usage,
+              finishReason: result.finishReason,
+              status: 'success',
+            });
+            return result;
+          } catch (error) {
+            this.recordSemanticCompactSummaryCall({
+              callId,
+              turnId,
+              modelId: summarizerModelId,
+              startedAt,
+              latencyMs: Math.max(0, this.now() - startedAt),
+              status: request.abortSignal?.aborted ? 'aborted' : 'error',
+              errorClass: this.modelAdapter.classifyError(error),
+            });
+            throw error;
+          }
+        },
+      });
+      onDiagnosticPatch?.({
+        semanticCompactEnabled: true,
+        semanticCompactMode: policy.mode ?? 'replace',
+        ...rewritten.diagnosticPatch,
+      });
+      if (!dryRun && rewritten.decision === 'replaced') {
+        if (rewritten.block) this.recordSemanticCompactBlock(rewritten.block);
+        acceptedProjection = {
+          sourceSignatures: incomingMessages.map(modelMessageSignature),
+          projectedMessages: rewritten.messages,
+        };
+        return { messages: rewritten.messages };
+      }
+      return !dryRun && projectedMessages ? { messages: projectedMessages } : undefined;
+    };
+  }
+
   private buildActiveFullCompactPrepareStep(
     turnId: string,
     runtimeEvents: readonly RuntimeEvent[] | undefined,
@@ -1479,6 +1600,64 @@ export class AiSdkBackend implements AgentBackend {
       }
       return !dryRun && projectedMessages ? { messages: projectedMessages } : undefined;
     };
+  }
+
+  private recordSemanticCompactSummaryCall(input: {
+    callId: string;
+    turnId: string;
+    modelId: string;
+    startedAt: number;
+    latencyMs: number;
+    usage?: NormalizedAiSdkUsage;
+    finishReason?: string;
+    status: LlmCallRecord['status'];
+    errorClass?: string;
+  }): void {
+    const costUsd = input.usage ? this.computeTokenUsageCostUsd(input.usage) : 0;
+    this.input.recordLlmCall?.({
+      sessionId: this.sessionId,
+      turnId: input.turnId,
+      callKind: 'semantic_compact',
+      callId: input.callId,
+      connectionSlug: this.input.connection.slug,
+      providerId: this.input.connection.providerType,
+      modelId: input.modelId,
+      inputTokens: input.usage?.inputTokens ?? 0,
+      outputTokens: input.usage?.outputTokens ?? 0,
+      cacheHitInputTokens: input.usage?.cacheHitInputTokens ?? 0,
+      cacheMissInputTokens: input.usage?.cacheMissInputTokens ?? 0,
+      ...(input.usage?.cacheMissInputSource !== undefined
+        ? { cacheMissInputSource: input.usage.cacheMissInputSource }
+        : {}),
+      cachedInputTokens: input.usage?.cachedInputTokens ?? 0,
+      cacheWriteInputTokens: input.usage?.cacheWriteInputTokens ?? 0,
+      reasoningTokens: input.usage?.reasoningTokens ?? 0,
+      totalTokens: input.usage?.totalTokens,
+      ...(input.finishReason !== undefined ? { rawFinishReason: input.finishReason } : {}),
+      ...(input.usage?.raw !== undefined ? { rawUsage: input.usage.raw } : {}),
+      latencyMs: input.latencyMs,
+      status: input.status,
+      ...(input.errorClass ? { errorClass: input.errorClass } : {}),
+      startedAt: input.startedAt,
+      ...(costUsd !== undefined ? { costUsd } : {}),
+    });
+  }
+
+  private recordSemanticCompactBlock(block: SemanticCompactBlock): void {
+    const recorder = this.input.recordSemanticCompactBlock;
+    if (!recorder) return;
+    try {
+      const result = recorder(block);
+      if (result && typeof (result as PromiseLike<void>).then === 'function') {
+        void Promise.resolve(result).catch(() => {
+          // Semantic compact persistence is diagnostic/storage-only and must
+          // never perturb provider request projection or tool-loop progress.
+        });
+      }
+    } catch {
+      // Semantic compact persistence is diagnostic/storage-only and must never
+      // perturb provider request projection or tool-loop progress.
+    }
   }
 
   private recordActiveFullCompactBlock(block: ActiveFullCompactBlock): void {
