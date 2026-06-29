@@ -3,7 +3,11 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { readFixedPromptWal } from './fixed-prompt-controller.js';
-import { derivePromptOptimizationReplayState } from './prompt-optimization-replay.js';
+import {
+  assertPromptRepoMatchesReplayState,
+  derivePromptOptimizationReplayState,
+  replayStateHasRecoverablePendingCandidateEvidence,
+} from './prompt-optimization-replay.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -49,15 +53,19 @@ export async function assertPromptOptimizationResumeSupported(input: {
   resultsJsonlPath: string;
 }): Promise<void> {
   const events = await readFixedPromptWal(input.resultsJsonlPath);
-  const head = await gitOutput(input.promptRepoDir, 'rev-parse', 'HEAD');
   const replayState = await derivePromptOptimizationReplayState({
     events,
     promptRepoDir: input.promptRepoDir,
   });
-  const expectedHead = replayState.expectedPromptRepoHead;
-  if (head !== expectedHead) {
-    throw new Error(`prompt repo HEAD does not match resumed RSI WAL state: expected ${expectedHead}, got ${head}`);
-  }
+  await assertPromptRepoMatchesReplayState({
+    gitRootPath: input.promptRepoDir,
+    expectedHead: replayState.expectedPromptRepoHead,
+    programPath: join(input.promptRepoDir, 'program.md'),
+    systemPromptGitPath: 'system_prompt.md',
+    ...(replayStateHasRecoverablePendingCandidateEvidence({ events, state: replayState })
+      ? { recoverExpectedHeadFromParent: true }
+      : {}),
+  });
 }
 
 async function assertExistingSeedFile(path: string, expected: string): Promise<void> {

@@ -3,6 +3,7 @@ export {
   assertPromptRepoMatchesReplayState,
   buildPromptOptimizationReplayPlan,
   derivePromptOptimizationReplayState,
+  replayStateHasRecoverablePendingCandidateEvidence,
   type PromptOptimizationReplayPlan,
   type PromptOptimizationReplayState,
 } from './prompt-optimization-replay-state.js';

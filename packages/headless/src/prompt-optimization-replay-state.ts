@@ -102,6 +102,21 @@ export async function buildPromptOptimizationReplayPlan(input: {
   };
 }
 
+export function replayStateHasRecoverablePendingCandidateEvidence(input: {
+  events: readonly FixedPromptWalEvent[];
+  state: PromptOptimizationReplayState;
+  runId?: string;
+}): boolean {
+  const recoverablePendingCandidate = [...input.state.candidateByRoundId.values()].find((candidate) =>
+    candidate.commitSha === input.state.expectedPromptRepoHead
+    && !input.state.decisionByRoundId.has(candidate.roundId));
+  return recoverablePendingCandidate !== undefined
+    && input.events.some((event) =>
+      matchesRun(event, input.runId)
+      && event.roundId === recoverablePendingCandidate.roundId
+      && isTaskEvent(event));
+}
+
 export async function derivePromptOptimizationReplayState(input: {
   events: readonly FixedPromptWalEvent[];
   promptRepoDir: string;

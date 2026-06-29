@@ -169,6 +169,74 @@ describe('ensurePromptOptimizationPromptRepo', () => {
     });
   });
 
+  test('allows pending candidate resume when task evidence exists but HEAD was rolled back', async () => {
+    await withDir(async (dir) => {
+      const promptRepoDir = join(dir, 'prompt-repo');
+      const resultsJsonlPath = join(dir, 'controller', 'results.jsonl');
+      await mkdir(join(dir, 'controller'), { recursive: true });
+      await ensurePromptOptimizationPromptRepo({
+        promptRepoDir,
+        program: 'program v1\n',
+        systemPrompt: 'prompt v1\n',
+      });
+      const seedSha = await gitOutput(promptRepoDir, 'rev-parse', 'HEAD');
+      await writeFile(join(promptRepoDir, 'system_prompt.md'), 'candidate prompt\n', 'utf8');
+      await git(promptRepoDir, 'add', 'system_prompt.md');
+      await git(promptRepoDir, 'commit', '-q', '-m', 'candidate prompt round-0');
+      const candidateSha = await gitOutput(promptRepoDir, 'rev-parse', 'HEAD');
+      const promptHash = 'sha256:candidate';
+      await writeFile(resultsJsonlPath, [
+        JSON.stringify({
+          schemaVersion: 1,
+          type: 'prompt_candidate_committed',
+          id: 'candidate-1',
+          ts: 1,
+          runId: 'run-1',
+          roundId: 'round-0',
+          commitSha: candidateSha,
+          promptHash,
+          candidateRationale: {
+            failurePattern: 'coverage_regression',
+            evidenceRefs: [],
+            hypothesis: 'hypothesis',
+            targetedFix: 'fix',
+            predictedFixes: [],
+            riskTasks: [],
+          },
+          candidateRationaleHash: 'sha256:55016d80cd4dac4d2bba351e5ee27dcc9ae24f44b93c71817650e6e7d5d7dc7a',
+          heldInTaskIds: ['task-a'],
+          heldInTaskSetHash: 'sha256:e1fb89ce9b4d1a7bd327cc525627f5340ac54db8b005a6c5808298a77636599e',
+        }),
+        JSON.stringify({
+          schemaVersion: 1,
+          type: 'task_completed',
+          id: 'task-1',
+          ts: 2,
+          runId: 'run-1',
+          roundId: 'round-0',
+          taskId: 'task-a',
+          status: 'passed',
+          passed: true,
+          scored: true,
+          eligible: true,
+          promptHash,
+          resumeFingerprint: 'fingerprint-test',
+          tokenSummary: { input: 1, output: 1, total: 2, costUsd: 0.01 },
+          steps: 1,
+          durationMs: 1,
+          runtimeEventsPath: '/tmp/runtime-events.jsonl',
+          harbor: { reward: 1 },
+        }),
+      ].join('\n') + '\n', 'utf8');
+      await git(promptRepoDir, 'reset', '--hard', seedSha);
+
+      await assert.doesNotReject(
+        assertPromptOptimizationResumeSupported({ promptRepoDir, resultsJsonlPath }),
+      );
+      assert.equal(await gitOutput(promptRepoDir, 'rev-parse', 'HEAD'), candidateSha);
+    });
+  });
+
   test('allows baseline resume when the WAL has a torn malformed final line', async () => {
     await withDir(async (dir) => {
       const promptRepoDir = join(dir, 'prompt-repo');
