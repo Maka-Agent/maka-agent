@@ -85,6 +85,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const { buttonVariants, cn } = await import(pathToFileURL(resolve(REPO_ROOT, 'packages/ui/dist/ui.js')).href);
 const { markerVariants, streamVariants, toolVariants } = await import(pathToFileURL(resolve(REPO_ROOT, 'packages/ui/dist/primitives/chat.js')).href);
+const { alertVariants } = await import(pathToFileURL(resolve(REPO_ROOT, 'packages/ui/dist/primitives/alert.js')).href);
 
 const mainCssPath = process.argv[2] && resolve(process.argv[2]);
 const headCssPath = process.argv[3] && resolve(process.argv[3]);
@@ -214,12 +215,14 @@ const toolCardSection = (el) => {
 // padding / border / background never rendered; only the few declarations Alert
 // does NOT set survived. This row PROVES that: the main side (Alert base +
 // `.maka-tool-error*`) and the head side (Alert base + the leaf literals that
-// replace the surviving residue) must compute identically. The `ALERT_*` strings
-// mirror primitives/alert.tsx (byte-stable across the baseline range) and are
-// shared by BOTH sides, so any drift cancels in the diff — and a wrongly-surviving
-// `.maka-tool-error` declaration (e.g. its 18px grid winning over Alert's 16px)
-// would surface as a real DIFF here, not a false green.
-const ALERT_ERR = 'relative grid w-full items-start gap-x-2 gap-y-0.5 rounded-xl border px-3.5 py-3 text-card-foreground text-sm has-[>svg]:has-data-[slot=alert-action]:grid-cols-[calc(var(--spacing)*4)_1fr_auto] has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-data-[slot=alert-action]:grid-cols-[1fr_auto] has-[>svg]:gap-x-2 [&>svg]:h-lh [&>svg]:w-4 border-destructive/32 bg-destructive/4 [&>svg]:text-destructive';
+// replace the surviving residue) must compute identically. The container string is
+// the REAL `alertVariants({variant:'error'})` (the same primitive cva Alert renders),
+// so the proof's subject can't drift from production. `ALERT_DESC/ACTION/TITLE` are
+// inert scaffolding — they only exist so Alert's `has-[>svg]:has-data-[slot=alert-action]`
+// 3-col grid resolves — and are shared by BOTH sides, so any drift cancels in the diff.
+// A wrongly-surviving `.maka-tool-error` declaration (e.g. its 18px grid winning over
+// Alert's 16px) would surface as a real DIFF here, not a false green.
+const ALERT_ERR = alertVariants({ variant: 'error' });
 const ALERT_DESC = 'flex flex-col gap-2.5 text-muted-foreground [svg~&]:col-start-2';
 const ALERT_ACTION = 'flex gap-1 max-sm:col-start-2 max-sm:mt-2 sm:row-start-1 sm:row-end-3 sm:self-center sm:[[data-slot=alert-description]~&]:col-start-2 sm:[[data-slot=alert-title]~&]:col-start-2 sm:[svg~&]:col-start-2 sm:[svg~[data-slot=alert-description]~&]:col-start-3 sm:[svg~[data-slot=alert-title]~&]:col-start-3';
 const ALERT_TITLE = 'font-medium [svg~&]:col-start-2';

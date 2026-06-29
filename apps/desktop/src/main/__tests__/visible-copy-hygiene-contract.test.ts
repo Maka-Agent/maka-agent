@@ -556,25 +556,32 @@ describe('tool error copy feedback contract', () => {
     // `.maka-tool-error-copy[…]` retired onto the `@maka/ui` Alert primitive
     // (issue #332 PR3c): the pending / copy-feedback chrome — which lived UNLAYERED
     // in tool-output.css so it out-ranked the ghost button — now lives as literal
-    // arbitrary utilities on the `UiButton` className, exactly like the turn-footer
-    // copy above. Asserting them on the component source (which compiles 1:1) keeps
-    // the same "pending/failure is visibly styled" guarantee; the resting render is
-    // diffed by scripts/check-chat-marker-computed-style.mjs (err-copy-* rows).
+    // arbitrary utilities in the `TOOL_ERROR_COPY` constant. We slice the block from
+    // that constant through `ToolErrorBanner` so the assertion proves BOTH that the
+    // state utilities exist AND that the banner's copy button actually wears them —
+    // a whole-file scan would false-pass if the string drifted to another component.
+    // The resting render is diffed by check-chat-marker-computed-style.mjs (err-copy-* rows).
     const componentsPath = resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'components.tsx');
     const src = await readFile(componentsPath, 'utf8');
+    const block = src.match(/const TOOL_ERROR_TEXT[\s\S]*?export function OverlayHost/)?.[0] ?? '';
 
     assert.match(
-      src,
+      block,
+      /className=\{TOOL_ERROR_COPY\}/,
+      'The tool-error copy button must actually wear the TOOL_ERROR_COPY state utilities.',
+    );
+    assert.match(
+      block,
       /data-\[pending=true\]:cursor-progress/,
       'Tool-error pending copy should visibly indicate in-progress work.',
     );
     assert.match(
-      src,
+      block,
       /data-\[copy-feedback=copied\]:text-\[color:var\(--accent\)\] data-\[copy-feedback=copied\]:border-\[oklch\(from_var\(--accent\)_l_c_h_\/_0\.35\)\]/,
       'Tool-error copied state should have a stable color + border styling hook.',
     );
     assert.match(
-      src,
+      block,
       /data-\[copy-feedback=failed\]:text-\[color:var\(--destructive\)\] data-\[copy-feedback=failed\]:border-\[oklch\(from_var\(--destructive\)_l_c_h_\/_0\.35\)\]/,
       'Tool-error failed copy state should have a stable color + border styling hook.',
     );

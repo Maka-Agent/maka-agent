@@ -6325,28 +6325,16 @@ function ToolOutputStream(props: {
   );
 }
 
-// `.maka-tool-error*` retired onto the `@maka/ui` `Alert` primitive (issue #332,
-// PR3c). Unlike the marker / stream / tool-card shells, there was NO bespoke
-// shell left to literalize: `ToolErrorBanner` has rendered on `Alert` since
-// a1e78b47, and `Alert`'s slot utilities live in `@layer utilities` while
-// `.maka-tool-error*` lived in `@layer components` — so the layer order (utilities
-// beats components, irrespective of specificity) had already made the container's
-// bespoke grid / padding / radius / border / background INERT. The only
-// declarations that ever rendered were the ones `Alert` doesn't set, so the
-// retirement is mostly deletion plus these few leaf literals (each proven equal to
-// the retired CSS by the chat computed-style diff; the copy-feedback state hooks
-// are also pinned as source strings by visible-copy-hygiene-contract). No
-// `errorBannerVariants` cva table: there is no bespoke shell to carry.
-//   - container: `mb-[10px]` — the lone surviving `.maka-tool-error` declaration
-//     (`Alert` sets no margin); everything else now comes from `variant="error"`.
-//   - description: mono / 12px / 1.5 / pre-wrap / break-word — `AlertDescription`
-//     sets none of these. Its `color` stays `text-muted-foreground`: the bespoke
-//     `--foreground-80` was shadowed and never rendered, so re-adding it would be a
-//     visual CHANGE, not a preservation.
-//   - copy button: `align-self:start` (kept arbitrary so it byte-matches the old
-//     `align-self:start`, not Tailwind's `flex-start`) plus the `[data-copy-feedback]`
-//     / `[data-pending]` state chrome that lived UNLAYERED in tool-output.css (so it
-//     out-ranked the ghost button), now leaf utilities mirroring the turn-footer copy.
+// Residual leaf utilities after retiring `.maka-tool-error*` onto the `@maka/ui`
+// Alert primitive (#332, PR3c). There was no bespoke shell to carry: Alert's slot
+// utilities (`@layer utilities`) already shadowed the bespoke container
+// (`@layer components`), so the migration was deletion plus the few declarations
+// Alert doesn't set — each proven equal to the retired CSS by the chat
+// computed-style diff (err-* rows) and pinned by visible-copy-hygiene-contract.
+// `align-self:start` stays arbitrary so it byte-matches the old value, not Tailwind's
+// `flex-start`. The description keeps Alert's `text-muted-foreground`: the bespoke
+// `--foreground-80` was shadowed and never rendered, so re-adding it would be a
+// visual CHANGE, not a preservation.
 const TOOL_ERROR_TEXT =
   '[font-family:var(--font-mono)] text-[12px] leading-[1.5] whitespace-pre-wrap [word-break:break-word]';
 const TOOL_ERROR_COPY =
