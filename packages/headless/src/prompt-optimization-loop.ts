@@ -48,6 +48,7 @@ import {
   derivePromptOptimizationReplayState,
   readSeedSystemPromptHash,
   replayControllerSweep,
+  type PromptOptimizationReplayState,
 } from './prompt-optimization-replay.js';
 
 /**
@@ -198,6 +199,7 @@ export async function runPromptOptimizationLoop(
     seedCommitSha: replayState.seedCommitSha,
     systemPromptGitPath: input.git.systemPromptGitPath,
   });
+  const historicalBaselineEvidenceRequired = hasHistoricalPromptOptimizationState(replayState);
 
   const heldInTaskIds = input.heldInTasks.map((task) => task.id);
   const heldOutTaskIds = input.heldOutTasks.map((task) => task.id);
@@ -305,6 +307,9 @@ export async function runPromptOptimizationLoop(
       resultsTsvPath: input.heldInResultsTsvPath,
     });
     if (replayedHeldIn) await writeFixedPromptResultsTsv(input.heldInResultsTsvPath, replayedHeldIn.events);
+    if (!replayedHeldIn && historicalBaselineEvidenceRequired) {
+      throw new Error(`RSI WAL replay missing required baseline held-in evidence for ${roundId}`);
+    }
     const heldIn = replayedHeldIn ?? await sweep(roundId, input.heldInTasks, input.heldInResultsTsvPath);
     accumulate(heldIn);
     const postHeldInGuard = stopGuard();
@@ -324,6 +329,9 @@ export async function runPromptOptimizationLoop(
       resultsTsvPath: input.heldOutResultsTsvPath,
     });
     if (replayedHeldOut) await writeFixedPromptResultsTsv(input.heldOutResultsTsvPath, replayedHeldOut.events);
+    if (!replayedHeldOut && historicalBaselineEvidenceRequired) {
+      throw new Error(`RSI WAL replay missing required baseline held-out evidence for ${roundId}`);
+    }
     const heldOut = replayedHeldOut ?? await sweep(roundId, input.heldOutTasks, input.heldOutResultsTsvPath);
     accumulate(heldOut);
     baselineRunsData.push({ heldInEvents: heldIn.events, heldOutEvents: heldOut.events });
@@ -437,6 +445,9 @@ export async function runPromptOptimizationLoop(
       if (existingHeldOut) await writeFixedPromptResultsTsv(input.heldOutResultsTsvPath, existingHeldOut.events);
       const existingHeldInEvents = existingHeldIn.events;
       const existingResult = promptAcceptanceResultFromDecision(existingDecision);
+      if (!existingHeldOut && decisionRequiresHeldOutEvidence(existingResult)) {
+        throw new Error(`RSI WAL replay missing required held-out task evidence for ${roundId}`);
+      }
       const existingAttribution = replayState.attributionByRoundId.get(roundId);
       accumulate(existingHeldIn);
       if (existingHeldOut) accumulate(existingHeldOut);
@@ -633,6 +644,19 @@ function promptAcceptanceResultFromDecision(
     rewardHackScan: event.rewardHackScan ?? { decision: 'clean' },
     metrics: event.metrics as PromptAcceptanceResult['metrics'],
   };
+}
+
+function hasHistoricalPromptOptimizationState(state: PromptOptimizationReplayState): boolean {
+  return state.candidateByRoundId.size > 0
+    || state.decisionByRoundId.size > 0
+    || state.attributionByRoundId.size > 0
+    || state.expectedPromptRepoHead !== state.seedCommitSha;
+}
+
+function decisionRequiresHeldOutEvidence(result: PromptAcceptanceResult): boolean {
+  return result.decision === 'keep'
+    || result.reason === 'held_out_regressed'
+    || result.metrics.candidate.heldOut.observed > 0;
 }
 
 function assertUniqueTaskIds(label: string, taskIds: readonly string[]): void {
