@@ -63,7 +63,7 @@ export async function buildPromptOptimizationReplayPlan(input: {
   };
 }
 
-export function replayControllerSweep(input: {
+function replayControllerSweep(input: {
   events: readonly FixedPromptWalEvent[];
   runId: string;
   roundId: string;
@@ -109,7 +109,7 @@ export function replayControllerSweep(input: {
   };
 }
 
-export function replayRequiredControllerSweep(
+function replayRequiredControllerSweep(
   input: Parameters<typeof replayControllerSweep>[0] & { missingEvidenceMessage: string },
 ): FixedPromptControllerResult {
   const result = replayControllerSweep(input);
@@ -128,7 +128,7 @@ export function replayPromptBaselinePartition(input: Parameters<typeof replayCon
   });
 }
 
-export function decisionRequiresHeldOutEvidence(result: PromptAcceptanceResult): boolean {
+function decisionRequiresHeldOutEvidence(result: PromptAcceptanceResult): boolean {
   return result.decision === 'keep'
     || result.reason === 'held_out_regressed'
     || result.metrics.candidate.heldOut.observed > 0;
@@ -182,7 +182,7 @@ export function replayPromptDecisionRound(input: {
   };
 }
 
-export async function readSeedSystemPromptHash(input: {
+async function readSeedSystemPromptHash(input: {
   promptRepoDir: string;
   seedCommitSha: string;
   systemPromptGitPath: string;
