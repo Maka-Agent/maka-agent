@@ -11,6 +11,7 @@
 //
 // Profiles:
 //   MAKA_PROMPT_PROFILE=smoke  # 2/1 tasks, 1 baseline, 1 round, $0.50 guard
+//   MAKA_PROMPT_PROFILE=pilot-light  # 8/3 tasks, 1 baseline, 2 rounds, $1.25 guard
 //   MAKA_PROMPT_PROFILE=pilot  # 12/4 tasks, 1 baseline, 3 rounds, $2 guard
 //   MAKA_PROMPT_PROFILE=full   # 60/20 tasks, 3 baseline, 10 rounds, $30 guard
 // Omitted profile defaults to pilot. Explicit MAKA_PROMPT_* knobs still override

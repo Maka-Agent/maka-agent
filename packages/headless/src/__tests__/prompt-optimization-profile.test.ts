@@ -27,10 +27,21 @@ describe('prompt optimization profile', () => {
     });
   });
 
+  test('provides a light pilot profile for repeatable medium-smoke runs', () => {
+    assert.deepEqual(resolvePromptOptimizationProfile('pilot-light'), {
+      name: 'pilot-light',
+      rounds: 2,
+      baselineRuns: 1,
+      heldInCount: 8,
+      heldOutCount: 3,
+      costCeilingUsd: 1.25,
+    });
+  });
+
   test('rejects unknown profiles before any benchmark work starts', () => {
     assert.throws(
       () => resolvePromptOptimizationProfile('medium'),
-      /MAKA_PROMPT_PROFILE must be one of smoke, pilot, full/,
+      /MAKA_PROMPT_PROFILE must be one of smoke, pilot-light, pilot, full/,
     );
   });
 });

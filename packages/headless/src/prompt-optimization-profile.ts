@@ -1,4 +1,4 @@
-export type PromptOptimizationProfileName = 'smoke' | 'pilot' | 'full';
+export type PromptOptimizationProfileName = 'smoke' | 'pilot-light' | 'pilot' | 'full';
 
 export interface PromptOptimizationProfile {
   name: PromptOptimizationProfileName;
@@ -17,6 +17,14 @@ const PROMPT_OPTIMIZATION_PROFILES: Record<PromptOptimizationProfileName, Prompt
     heldInCount: 2,
     heldOutCount: 1,
     costCeilingUsd: 0.5,
+  },
+  'pilot-light': {
+    name: 'pilot-light',
+    rounds: 2,
+    baselineRuns: 1,
+    heldInCount: 8,
+    heldOutCount: 3,
+    costCeilingUsd: 1.25,
   },
   pilot: {
     name: 'pilot',
@@ -42,8 +50,8 @@ export function resolvePromptOptimizationProfile(
   const name = rawProfile === undefined || rawProfile.trim() === ''
     ? 'pilot'
     : rawProfile.trim().toLowerCase();
-  if (name !== 'smoke' && name !== 'pilot' && name !== 'full') {
-    throw new Error(`MAKA_PROMPT_PROFILE must be one of smoke, pilot, full, got ${JSON.stringify(rawProfile)}`);
+  if (name !== 'smoke' && name !== 'pilot-light' && name !== 'pilot' && name !== 'full') {
+    throw new Error(`MAKA_PROMPT_PROFILE must be one of smoke, pilot-light, pilot, full, got ${JSON.stringify(rawProfile)}`);
   }
   return PROMPT_OPTIMIZATION_PROFILES[name];
 }
