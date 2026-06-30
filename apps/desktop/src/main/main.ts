@@ -343,9 +343,15 @@ async function syncClaudeSubscriptionConnection(): Promise<LlmConnection | null>
 
   const defaults = PROVIDER_DEFAULTS['claude-subscription'];
   const fallbackModels = defaults.fallbackModels.map((id) => ({ id }));
-  const displayName = state.profile?.email
-    ? `Claude OAuth · ${state.profile.email}`
-    : 'Claude OAuth';
+  // PR-OAUTH-NAME-EMAIL-STRIP-0 (WAWQAQ msg `77221a77` 2026-06-30): the
+  // connection display name used to embed the OAuth account email
+  // (`Claude OAuth · user@example.com`). That value leaks the user's
+  // account identity into every model picker, settings dropdown, and
+  // anywhere else `connection.name` shows up. The email belongs on the
+  // Account · 模型 page, not in the model identity. Use the brand-only
+  // label here; the email is still available via the OAuth state for
+  // the dedicated account surfaces that legitimately need it.
+  const displayName = 'Claude OAuth';
   const now = Date.now();
   const connection: LlmConnection = {
     slug: CLAUDE_SUBSCRIPTION_CONNECTION_SLUG,
@@ -399,7 +405,10 @@ async function syncCodexSubscriptionConnection(): Promise<LlmConnection | null> 
     normalizedModels.map((entry) => entry.id),
     defaults.fallbackModels[0] || '',
   );
-  const displayName = state.email ? `Codex OAuth · ${state.email}` : 'Codex OAuth';
+  // PR-OAUTH-NAME-EMAIL-STRIP-0 — same email-leak fix as Claude OAuth
+  // above. Codex's was the one that surfaced in the screenshot, but the
+  // symmetric Claude path had the same shape; both now use brand-only.
+  const displayName = 'Codex OAuth';
   const now = Date.now();
   const connection: LlmConnection = {
     slug: CODEX_SUBSCRIPTION_CONNECTION_SLUG,
