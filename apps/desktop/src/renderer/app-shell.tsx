@@ -1,10 +1,6 @@
 import { useCallback, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type {
   ConnectionEvent,
-  DailyReviewArchive,
-  DailyReviewArchiveSummary,
-  DailyReviewConfig,
-  DailyReviewMode,
   LlmConnection,
   PermissionMode,
   PlanReminder,
@@ -69,15 +65,12 @@ import {
 import {
   modelSetupToastCopy,
 } from './model-connection-errors';
-import {
-  buildDailyReviewRunModelOptions,
-  DAILY_REVIEW_CONFIG_MODEL_VALUE,
-} from './daily-review-actions';
 import { buildChatModelChoices, chatModelChoiceLabel, normalizeActiveChatModel } from './chat-model-selection';
 import { basenameFromPath } from './app-shell-copy';
 import type { AppShellCommandListOptions } from './app-shell-command-actions';
 import { AppShellCollapsedTopbarActions, AppShellWorkspaceTopActions } from './app-shell-chrome-actions';
 import { AppShellOverlays } from './app-shell-overlays';
+import { createAppShellDailyReviewBridge } from './app-shell-daily-review-bridge';
 import { createAppShellPlanActions } from './app-shell-plan-actions';
 import { createAppShellProjectActions, type RendererAppInfo } from './app-shell-project-actions';
 import { createAppShellSkillActions } from './app-shell-skill-actions';
@@ -281,50 +274,7 @@ export function AppShell() {
   // PR-DAILY-REVIEW-MVP-0: bridge for the main Daily Review module.
   // Memoized so the panel's `useEffect` cleanup keys
   // off a stable reference instead of refetching on every render.
-  const dailyReviewBridge = useMemo(
-    () => ({
-      modelOptions: buildDailyReviewRunModelOptions(connections),
-      async fetchDay(offsetDays: number, daySpan?: number) {
-        const result = await window.maka.dailyReview.day(offsetDays, daySpan);
-        if (!result.ok) throw new Error(result.error.message);
-        return result.data;
-      },
-      runOnce(input: { mode: DailyReviewMode; modelKey?: string }) {
-        const runOnce = window.maka.dailyReview.runOnce;
-        if (!runOnce) throw new Error('每日回顾生成暂不可用');
-        const modelKey = input.modelKey === DAILY_REVIEW_CONFIG_MODEL_VALUE ? undefined : input.modelKey;
-        return runOnce({ ...input, modelKey });
-      },
-      listArchives() {
-        const listArchives = window.maka.dailyReview.listArchives;
-        if (!listArchives) throw new Error('每日回顾历史暂不可用');
-        return listArchives();
-      },
-      async getArchive(archiveId: string) {
-        const getArchive = window.maka.dailyReview.getArchive;
-        if (!getArchive) throw new Error('每日回顾历史暂不可用');
-        const archive = await getArchive(archiveId);
-        if (!archive) throw new Error('找不到每日回顾报告');
-        return archive;
-      },
-      deleteArchive(archiveId: string) {
-        const deleteArchive = window.maka.dailyReview.deleteArchive;
-        if (!deleteArchive) throw new Error('每日回顾历史暂不可用');
-        return deleteArchive(archiveId);
-      },
-      fetchConfig() {
-        const getConfig = window.maka.dailyReview.getConfig;
-        if (!getConfig) throw new Error('每日回顾设置暂不可用');
-        return getConfig();
-      },
-      updateConfig(patch: Partial<DailyReviewConfig>) {
-        const setConfig = window.maka.dailyReview.setConfig;
-        if (!setConfig) throw new Error('每日回顾设置暂不可用');
-        return setConfig(patch);
-      },
-    }),
-    [connections],
-  );
+  const dailyReviewBridge = useMemo(() => createAppShellDailyReviewBridge(connections), [connections]);
   const {
     appendDailyReviewMarkdown,
     copyDailyReviewMarkdown,
