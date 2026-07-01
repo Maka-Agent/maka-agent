@@ -36,7 +36,7 @@ type DailyReviewBridge = {
   fetchDay(offsetDays: number, daySpan?: number): Promise<DailyReviewSummary>;
 };
 
-export function buildAppShellCommandList(options: {
+export interface AppShellCommandListOptions {
   activeId: string | undefined;
   activePermissionMode: PermissionMode | undefined;
   connections: LlmConnection[];
@@ -70,7 +70,9 @@ export function buildAppShellCommandList(options: {
   setPermissionMode: (mode: PermissionMode) => Promise<void>;
   setThemePref: (themePref: ThemePreference) => void;
   toastApi: ToastApi;
-}): ReturnType<typeof buildCommandList> {
+}
+
+export function buildAppShellCommandList(options: AppShellCommandListOptions): ReturnType<typeof buildCommandList> {
   const {
     activeId,
     activePermissionMode,

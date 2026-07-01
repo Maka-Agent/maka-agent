@@ -13,6 +13,7 @@ const sourcePaths = [
   'app-shell-turn-actions.ts',
   'app-shell.tsx',
   'app-shell-chrome-actions.tsx',
+  'app-shell-overlays.tsx',
   'app-shell-plan-actions.ts',
   'app-shell-skill-actions.ts',
   'app-shell-project-actions.ts',

@@ -28,8 +28,6 @@ import {
   MakaUriContext,
   materializeTurns,
   type NavSelection,
-  PermissionDialog,
-  SearchModal,
   SessionListPanel,
   type SkillEntry,
   type TurnFooterActionMeta,
@@ -39,9 +37,8 @@ import {
   activePermissionFor,
   type PermissionQueues,
 } from '@maka/ui';
-import { SettingsModal } from './settings/SettingsModal';
-import { KeyboardHelpModal, useKeyboardHelp } from './keyboard-help';
-import { CommandPalette, useCommandPalette } from './command-palette';
+import { useKeyboardHelp } from './keyboard-help';
+import { useCommandPalette } from './command-palette';
 import { OnboardingHero } from './OnboardingHero';
 import { FirstRunChecklist } from './FirstRunChecklist';
 import { useOnboardingSnapshot } from './use-onboarding-snapshot';
@@ -83,8 +80,9 @@ import {
 } from './daily-review-actions';
 import { buildChatModelChoices, chatModelChoiceLabel, normalizeActiveChatModel } from './chat-model-selection';
 import { basenameFromPath } from './app-shell-copy';
-import { buildAppShellCommandList } from './app-shell-command-actions';
+import type { AppShellCommandListOptions } from './app-shell-command-actions';
 import { AppShellCollapsedTopbarActions, AppShellWorkspaceTopActions } from './app-shell-chrome-actions';
+import { AppShellOverlays } from './app-shell-overlays';
 import { createAppShellPlanActions } from './app-shell-plan-actions';
 import { createAppShellProjectActions, type RendererAppInfo } from './app-shell-project-actions';
 import { createAppShellSkillActions } from './app-shell-skill-actions';
@@ -1232,6 +1230,37 @@ export function AppShell() {
     && liveTools.length === 0
     && !activeMessageLoadError;
   const onboardingComposerHidden = showOnboardingHero && onboardingState !== undefined;
+  const commandOptions: AppShellCommandListOptions = {
+    activeId,
+    activePermissionMode: activeSessionForView?.permissionMode,
+    connections,
+    defaultConnection,
+    dailyReviewBridge,
+    messages,
+    sessions,
+    themePref,
+    visibleSessions,
+    captureComposerImportOwner,
+    closePalette,
+    composerRef,
+    createSession,
+    handleQuickChatSubmit,
+    isComposerImportOwnerActive,
+    openHelp,
+    openPlanReminderForm,
+    openProjectFolder,
+    openSessionInChat,
+    openSettings,
+    openSettingsSection,
+    openSkillsFolder,
+    openWorkspaceFolder,
+    refreshConnections,
+    saveDailyReviewMarkdown,
+    setNavSelection,
+    setPermissionMode,
+    setThemePref,
+    toastApi,
+  };
 
   return (
     <div className="appFrame agents-layout-root" data-agents-page>
@@ -1508,106 +1537,39 @@ export function AppShell() {
           </MakaUriContext.Provider>
         </div>
       </div>
-      {activePermission && (
-        <PermissionDialog
-          request={activePermission}
-          onRespond={respondToPermission}
-        />
-      )}
-      {settingsOpen && (
-        <SettingsModal
-          connections={connections}
-          defaultSlug={defaultConnection}
-          onRefresh={refreshConnections}
-          onClose={closeSettings}
-          themePref={themePref}
-          onThemeChange={setThemePref}
-          themePalette={themePalette}
-          onThemePaletteChange={setThemePalette}
-          onUserLabelChange={setUserLabel}
-          requestedSection={settingsRequestedSection}
-          onOpenDailyReview={() => {
-            closeSettings();
-            setNavSelection({ section: 'daily-review' });
-          }}
-          onOpenSession={(sessionId) => {
-            closeSettings();
-            openSessionInChat(sessionId);
-          }}
-        />
-      )}
-      {helpOpen && <KeyboardHelpModal onClose={closeHelp} />}
-      {/*
-        PR-SIDEBAR-IA-0 Phase 3 P0 fixup (WAWQAQ msg `d53852ac`):
-        SearchModal must be conditionally mounted, not always
-        mounted with an internal `if (!open) return null`. Matches
-        `KeyboardHelpModal` lifecycle pattern above and removes the
-        hooks-before-early-return shape that React #310 punished
-        in WAWQAQ's run.
-      */}
-      {/*
-        PR-UX-POLISH-1 commit 5 (WAWQAQ msg `e0dbad11` + kenji msg
-        `2844f64f` blocker #3): SearchModal is now wired to the real
-        `window.maka.search.thread` IPC. Renderer never touches
-        thread JSONL directly; the IPC enforces incognito gate +
-        bounded scan + snippet redaction per `@maka/core/search`
-        contract. Navigation is supplied via `onNavigateToSession`
-        callback (no `maka://session` URI construction).
-      */}
-      {searchModalOpen && (
-        <SearchModal
-          onClose={closeSearchModal}
-          /* PR-FE-BUG-HUNT-0 (kenji bug-hunt 2026-06-24): `deps` and
-             `onNavigateToSession` used to be created inline on every
-             App re-render. SearchModal's debounce effect lists
-             `searchThread` in its dep array, so the 180ms timeout was
-             torn down + restarted on every parent render. During an
-             active stream `App` re-renders many times per second, and
-             the timer never reached its setTimeout fire — search was
-             effectively dead while a turn was streaming. Stable refs
-             keep the timer alive. Same root cause for the palette
-             below. */
-          deps={searchModalDeps}
-          onNavigateToSession={searchModalOnNavigate}
-        />
-      )}
-      {paletteOpen && (
-        <CommandPalette
-          onClose={closePalette}
-          onSelectSession={paletteOnSelectSession}
-          commands={buildAppShellCommandList({
-            activeId,
-            activePermissionMode: activeSessionForView?.permissionMode,
-            connections,
-            defaultConnection,
-            dailyReviewBridge,
-            messages,
-            sessions,
-            themePref,
-            visibleSessions,
-            captureComposerImportOwner,
-            closePalette,
-            composerRef,
-            createSession,
-            handleQuickChatSubmit,
-            isComposerImportOwnerActive,
-            openHelp,
-            openPlanReminderForm,
-            openProjectFolder,
-            openSessionInChat,
-            openSettings,
-            openSettingsSection,
-            openSkillsFolder,
-            openWorkspaceFolder,
-            refreshConnections,
-            saveDailyReviewMarkdown,
-            setNavSelection,
-            setPermissionMode,
-            setThemePref,
-            toastApi,
-          })}
-        />
-      )}
+      <AppShellOverlays
+        activePermission={activePermission}
+        respondToPermission={respondToPermission}
+        settingsOpen={settingsOpen}
+        connections={connections}
+        defaultConnection={defaultConnection}
+        refreshConnections={refreshConnections}
+        closeSettings={closeSettings}
+        themePref={themePref}
+        setThemePref={setThemePref}
+        themePalette={themePalette}
+        setThemePalette={setThemePalette}
+        setUserLabel={setUserLabel}
+        settingsRequestedSection={settingsRequestedSection}
+        onOpenDailyReview={() => {
+          closeSettings();
+          setNavSelection({ section: 'daily-review' });
+        }}
+        onOpenSettingsSession={(sessionId) => {
+          closeSettings();
+          openSessionInChat(sessionId);
+        }}
+        helpOpen={helpOpen}
+        closeHelp={closeHelp}
+        searchModalOpen={searchModalOpen}
+        closeSearchModal={closeSearchModal}
+        searchModalDeps={searchModalDeps}
+        searchModalOnNavigate={searchModalOnNavigate}
+        paletteOpen={paletteOpen}
+        closePalette={closePalette}
+        paletteOnSelectSession={paletteOnSelectSession}
+        commandOptions={commandOptions}
+      />
     </div>
   );
 }
