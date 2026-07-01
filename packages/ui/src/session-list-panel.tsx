@@ -42,6 +42,8 @@ const navRowVariants = cva(
     'transition-[background-color,color] duration-[var(--duration-base)] ease-[var(--ease-out-strong)]',
     'hover:bg-foreground/6 hover:text-foreground',
     'data-[active=true]:bg-foreground/9 data-[active=true]:font-semibold data-[active=true]:text-foreground data-[active=true]:shadow-none',
+    'data-[active=true]:[&_.maka-nav-icon]:text-foreground',
+    '[&_.maka-nav-count]:text-[var(--foreground-40)]',
     'aria-disabled:cursor-not-allowed aria-disabled:opacity-55 aria-disabled:hover:bg-transparent',
     'data-[disabled=true]:cursor-not-allowed data-[disabled=true]:opacity-55 data-[disabled=true]:hover:bg-transparent',
   ],
@@ -49,7 +51,7 @@ const navRowVariants = cva(
     variants: {
       tone: {
         default: 'text-[var(--foreground-80)]',
-        newTask: 'text-foreground',
+        newTask: 'text-foreground [&_.maka-nav-icon]:text-[var(--foreground-70)]',
       },
     },
     defaultVariants: {
@@ -60,14 +62,11 @@ const navRowVariants = cva(
 
 type NavRowVariants = VariantProps<typeof navRowVariants>;
 
-const settingsButtonVariants = cva(
-  [
-    'w-full min-w-0 gap-2 rounded-md border-0 bg-transparent px-2 py-1.5',
-    'text-left text-sm font-medium text-[var(--foreground-65)]',
-    'transition-[background-color,color] duration-[var(--duration-base)] ease-[var(--ease-out-strong)]',
-    'hover:bg-foreground/6 hover:text-foreground',
-  ],
-);
+const settingsButtonClass =
+  'w-full min-w-0 gap-2 rounded-md border-0 bg-transparent px-2 py-1.5 ' +
+  'text-left text-sm font-medium text-[var(--foreground-65)] ' +
+  'transition-[background-color,color] duration-[var(--duration-base)] ease-[var(--ease-out-strong)] ' +
+  'hover:bg-foreground/6 hover:text-foreground';
 
 const rowActionVariants = cva(
   [
@@ -444,7 +443,7 @@ export function SessionListPanel(props: {
             this panel. The custom class still owns the
             full-width grid layout (24px icon + 1fr label). */}
         <UiButton
-          className={cn('maka-sidebar-settings-button', settingsButtonVariants())}
+          className={cn('maka-sidebar-settings-button', settingsButtonClass)}
           variant="quiet"
           size="nav"
           type="button"
