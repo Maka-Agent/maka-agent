@@ -129,6 +129,8 @@ export async function ensurePromptOptimizationRunManifest(
     return await ensureAbRunManifest(path, manifest);
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('A/B run manifest does not match existing run id:')) {
+      const existing = JSON.parse(await readFile(path, 'utf8')) as PromptOptimizationRunManifest;
+      if (isCostCeilingIncreaseOnlyResume(existing, manifest)) return existing;
       throw new Error(error.message.replace(
         'A/B run manifest does not match existing run id:',
         'prompt optimization run manifest does not match existing run id:',
@@ -292,4 +294,22 @@ function isNotFound(error: unknown): boolean {
 
 function withoutUndefined<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, entryValue]) => entryValue !== undefined)) as T;
+}
+
+function isCostCeilingIncreaseOnlyResume(
+  existing: PromptOptimizationRunManifest,
+  current: PromptOptimizationRunManifest,
+): boolean {
+  if (typeof existing.costCeilingUsd !== 'number' || typeof current.costCeilingUsd !== 'number') return false;
+  if (current.costCeilingUsd <= existing.costCeilingUsd) return false;
+  return comparableResumeManifest(existing) === comparableResumeManifest(current);
+}
+
+function comparableResumeManifest(manifest: PromptOptimizationRunManifest): string {
+  const {
+    costCeilingUsd: _costCeilingUsd,
+    fingerprint: _fingerprint,
+    ...rest
+  } = manifest;
+  return buildRunManifestFingerprint(rest);
 }

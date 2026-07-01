@@ -152,6 +152,22 @@ describe('prompt optimization run manifest', () => {
     });
   });
 
+  test('allows resume when only the cost ceiling increases', async () => {
+    await withDir(async (dir) => {
+      const runRoot = join(dir, 'run-1');
+      const manifestPath = join(runRoot, 'prompt-optimization-manifest.json');
+      const original = buildManifest('sha256:task-source', []);
+      const raised = buildManifest('sha256:task-source', [], 'pilot', 1.5);
+      await mkdir(runRoot, { recursive: true });
+      await writeFile(manifestPath, `${JSON.stringify(original, null, 2)}\n`, 'utf8');
+
+      const resumed = await ensurePromptOptimizationRunManifest(manifestPath, raised, runRoot);
+
+      assert.equal(resumed.fingerprint, original.fingerprint);
+      assert.equal(resumed.costCeilingUsd, original.costCeilingUsd);
+    });
+  });
+
   test('records the prompt optimization profile in the resume fingerprint', () => {
     const pilot = buildManifest('sha256:task-source', [], 'pilot');
     const full = buildManifest('sha256:task-source', [], 'full');
@@ -166,6 +182,7 @@ function buildManifest(
   taskSourceFingerprint: string,
   heldInTasks: FixedPromptTask[],
   profile: 'pilot' | 'full' = 'pilot',
+  costCeilingUsd = 1,
 ) {
   return buildPromptOptimizationRunManifest({
     runId: 'rsi-test',
@@ -175,7 +192,7 @@ function buildManifest(
     model: 'deepseek/deepseek-v4-flash',
     rounds: 1,
     baselineRuns: 1,
-    costCeilingUsd: 1,
+    costCeilingUsd,
     maxConcurrency: 1,
     maxInfraFailureRate: null,
     maxStableTaskDurationMs: null,
