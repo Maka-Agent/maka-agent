@@ -97,6 +97,7 @@ import { createAppShellSkillActions } from './app-shell-skill-actions';
 import { createAppShellSessionEventHandlers } from './app-shell-session-events';
 import { createAppShellVisualSmokeActions } from './app-shell-visual-smoke';
 import { createAppShellChatActions } from './app-shell-chat-actions';
+import { createAppShellTurnActions } from './app-shell-turn-actions';
 import { createAppShellImportActions } from './app-shell-import-actions';
 import { createAppShellSessionRowActions } from './app-shell-session-row-actions';
 import { createAppShellSessionSettingsActions } from './app-shell-session-settings-actions';
@@ -734,43 +735,6 @@ export function AppShell() {
     openSessionInChatRef.current(sessionId, turnId);
   }, []);
 
-  async function handleTurnFooterAction(
-    turnId: string,
-    actionId: TurnFooterActionMeta['id'],
-  ): Promise<void> {
-    if (actionId === 'copy') return; // handled in-component
-    const sessionId = activeIdRef.current;
-    if (!sessionId) return;
-    const key = pendingKeyOf(sessionId, turnId, actionId);
-    // Ref-backed guard blocks same-frame double clicks before React has
-    // committed the disabled state. State alone is too late here because
-    // retry/regenerate IPC returns after starting the stream asynchronously.
-    if (!addPendingTurnAction(key)) return;
-    try {
-      if (actionId === 'retry') {
-        await window.maka.sessions.retryTurn(sessionId, { sourceTurnId: turnId });
-        if (activeIdRef.current === sessionId) toastApi.info('已发起重试', '正在生成新的一轮回答');
-      } else if (actionId === 'regenerate') {
-        await window.maka.sessions.regenerateTurn(sessionId, { sourceTurnId: turnId });
-        if (activeIdRef.current === sessionId) toastApi.info('已发起重新生成', '保留旧回答，生成新的并行回答');
-      } else if (actionId === 'branch') {
-        const newSession = await window.maka.sessions.branchFromTurn(sessionId, { sourceTurnId: turnId });
-        upsertSessionSummary(newSession);
-        if (activeIdRef.current === sessionId) {
-          openSessionInChat(newSession.id);
-          setMessages([]);
-          await refreshMessages(newSession.id);
-          toastApi.success('已创建分支', `新会话 ${newSession.name}`);
-        }
-        await refreshSessions();
-      }
-    } catch (error) {
-      if (activeIdRef.current === sessionId) toastApi.error('操作失败', generalizedErrorMessageChinese(error, '对话操作失败，请稍后重试。'));
-    } finally {
-      clearPendingTurnAction(key);
-    }
-  }
-
   // PR109b: chat header lifecycle status badge. Hidden for `active`
   // (default) to avoid badge noise on healthy sessions. Every other
   // status — including `aborted` per @kenji review — surfaces a badge
@@ -945,6 +909,19 @@ export function AppShell() {
     toastApi,
     upsertSessionSummary,
     validPendingNewChatModel,
+  });
+
+  const { handleTurnFooterAction } = createAppShellTurnActions({
+    activeIdRef,
+    addPendingTurnAction,
+    clearPendingTurnAction,
+    openSessionInChat,
+    pendingKeyOf,
+    refreshMessages,
+    refreshSessions,
+    setMessages,
+    toastApi,
+    upsertSessionSummary,
   });
 
   const {
