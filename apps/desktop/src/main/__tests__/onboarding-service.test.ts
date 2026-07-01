@@ -19,6 +19,7 @@ import type {
 } from '@maka/core';
 import type { LlmConnection } from '@maka/core';
 import {
+  bindOnboardingDeps,
   createOnboardingService,
   type OnboardingServiceDeps,
 } from '../onboarding-service.js';
@@ -122,6 +123,59 @@ describe('createOnboardingService.getSnapshot', () => {
     if (snapshot.state.kind === 'needs_connection_credentials') {
       assert.equal(snapshot.state.connectionSlug, 'broken');
     }
+  });
+});
+
+describe('bindOnboardingDeps — resolveSecret wiring', () => {
+  // Regression test: onboarding used to call a `hasApiKey` that only
+  // checked the API-key credential store, so an OAuth-subscription
+  // connection (Claude Subscription / Codex Subscription) marked as
+  // the default was always reported as `missing_api_key`, even when
+  // Settings showed it verified + default. The fix routes onboarding
+  // through the same `resolveSecret` the send-path uses
+  // (`resolveConnectionSecret` in main.ts), which special-cases
+  // OAuth-subscription connections. This test wires a fake
+  // `resolveSecret` that mirrors that split (API-key store for normal
+  // connections, a separate token store for OAuth subscriptions) and
+  // asserts the OAuth-subscription default resolves to `ready_empty`
+  // rather than being stuck on a credentials/default-connection step.
+  it('treats an OAuth-subscription default connection as credentialed', async () => {
+    const oauthConnection = realConnection({
+      slug: 'claude-oauth',
+      providerType: 'claude-subscription',
+      defaultModel: 'claude-sonnet-4-5-20250929',
+    });
+    // Deliberately empty: the API-key store has nothing for this slug.
+    const apiKeyStore = new Map<string, string>();
+    // The OAuth-subscription token lives in a separate store, exactly
+    // like claudeSubscription.getAccessTokenInternal() in main.ts.
+    const subscriptionTokenStore = new Map<string, string>([['claude-oauth', 'sk-ant-oat-fake']]);
+
+    const service = createOnboardingService(
+      bindOnboardingDeps({
+        settingsStore: {
+          get: async () => ({ onboarding: { milestones: [] } }),
+          upsertOnboardingMilestone: async () => [],
+          clearOnboardingMilestone: async () => [],
+        },
+        connectionStore: {
+          list: async () => [oauthConnection],
+          getDefault: async () => 'claude-oauth',
+        },
+        resolveSecret: async (slug) => {
+          if (slug === oauthConnection.slug) return subscriptionTokenStore.get(slug) ?? null;
+          return apiKeyStore.get(slug) ?? null;
+        },
+        listSessions: async () => [],
+      }),
+    );
+
+    const snapshot = await service.getSnapshot();
+    assert.equal(
+      snapshot.state.kind,
+      'ready_empty',
+      `expected the OAuth-subscription default to be ready; got ${JSON.stringify(snapshot.state)}`,
+    );
   });
 });
 

@@ -31,7 +31,6 @@ import {
   type SessionSummary,
 } from '@maka/core';
 import type { LlmConnection } from '@maka/core/llm-connections';
-import type { CredentialStore } from './credential-store.js';
 
 export interface OnboardingSnapshot {
   state: OnboardingState;
@@ -214,7 +213,17 @@ export function bindOnboardingDeps(input: {
     list(): Promise<LlmConnection[]>;
     getDefault(): Promise<string | null>;
   };
-  credentialStore: Pick<CredentialStore, 'getSecret'>;
+  /**
+   * Resolves the effective secret for a connection slug, covering
+   * both API-key connections (credential store) and OAuth-subscription
+   * connections (claude-subscription / codex-subscription access
+   * tokens). Callers must pass the SAME resolver the send-path uses
+   * (`resolveConnectionSecret` in main.ts) — a resolver that only
+   * checks the API-key credential store makes every OAuth-subscription
+   * connection look like it's missing credentials, even when it's the
+   * verified default.
+   */
+  resolveSecret(slug: string): Promise<string | null>;
   listSessions(): Promise<SessionSummary[]>;
 }): OnboardingServiceDeps {
   return {
@@ -225,7 +234,7 @@ export function bindOnboardingDeps(input: {
     upsertMilestone: (id, status) => input.settingsStore.upsertOnboardingMilestone(id, status),
     clearMilestone: (id) => input.settingsStore.clearOnboardingMilestone(id),
     hasApiKey: async (slug) => {
-      const key = await input.credentialStore.getSecret(slug, 'api_key');
+      const key = await input.resolveSecret(slug);
       return typeof key === 'string' && key.length > 0;
     },
   };

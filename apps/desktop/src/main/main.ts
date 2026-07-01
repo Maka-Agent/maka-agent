@@ -643,13 +643,14 @@ botIncoming = createBotIncomingMainService({
 // PR110b: onboarding service composes existing stores + runtime to
 // derive `OnboardingState` and manage `OnboardingMilestone[]`.
 // Constructed AFTER `runtime` so `listSessions()` is bindable. The
-// service never reaches into credentialStore directly except through
-// the explicit `hasApiKey` predicate.
+// service resolves secrets through the same `resolveConnectionSecret`
+// the send-path uses, so OAuth-subscription connections (Claude/Codex)
+// are recognized as credentialed, not just API-key connections.
 const onboardingService = createOnboardingService(
   bindOnboardingDeps({
     settingsStore,
     connectionStore,
-    credentialStore,
+    resolveSecret: resolveConnectionSecret,
     listSessions: () => runtime.listSessions(),
   }),
 );
