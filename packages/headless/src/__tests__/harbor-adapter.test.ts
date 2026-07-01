@@ -7,7 +7,16 @@ import { resolve } from 'node:path';
 import { describe, test, type TestContext } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { discoverCachedHarborTasks } from '../fixed-prompt-task-source.js';
+import type { FixedPromptTask } from '../fixed-prompt-controller.js';
 import { HARBOR_CELL_CONTEXT_ENV_KEYS } from '../harbor-cell.js';
+import {
+  buildPromptOptimizationRunManifest,
+  buildPromptOptimizationSubjectFingerprint,
+  buildPromptOptimizationTaskSourceFingerprint,
+  buildPromptOptimizationToolchainFingerprint,
+} from '../prompt-optimization-manifest.js';
+import { buildRewardHackVerifierPatterns } from '../prompt-optimization-run.js';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../../..', import.meta.url)));
 const execFileAsync = promisify(execFile);
@@ -434,6 +443,7 @@ describe('Harbor adapter contract', () => {
     try {
       const outDir = resolve(tmp, 'out');
       const runRoot = resolve(outDir, 'run-1');
+      const controllerDir = resolve(runRoot, 'controller');
       const tasksRoot = resolve(tmp, 'tasks');
       const taskAPath = resolve(tasksRoot, 'hash-a', 'task-a');
       const taskBPath = resolve(tasksRoot, 'hash-b', 'task-b');
@@ -443,6 +453,7 @@ describe('Harbor adapter contract', () => {
 
       await mkdir(resolve(taskAPath, 'tests'), { recursive: true });
       await mkdir(resolve(taskBPath, 'tests'), { recursive: true });
+      await mkdir(controllerDir, { recursive: true });
       await mkdir(subjectRepo, { recursive: true });
       await writeFile(keyFile, 'dummy-key\n', 'utf8');
       await writeFile(initialPromptFile, 'custom initial prompt\n', 'utf8');
@@ -464,6 +475,43 @@ describe('Harbor adapter contract', () => {
       await git(subjectRepo, 'config', 'user.name', 'Test User');
       await git(subjectRepo, 'add', 'tracked.txt');
       await git(subjectRepo, 'commit', '-q', '-m', 'initial');
+      const allTasks = await discoverCachedHarborTasks(tasksRoot);
+      const heldInTasks = allTasks.filter((task) => task.id === 'task-a');
+      const heldOutTasks = allTasks.filter((task) => task.id === 'task-b');
+      const rewardHackVerifierPatternsByTaskId = await buildRewardHackVerifierPatterns([...heldInTasks, ...heldOutTasks]);
+      const hasPattern = (task: { id: string }) => (rewardHackVerifierPatternsByTaskId[task.id] ?? []).length > 0;
+      await writeFile(resolve(runRoot, 'prompt-optimization-manifest.json'), `${JSON.stringify(
+        await buildPromptSeedTestManifest({
+          runId: 'run-1',
+          tasksRoot,
+          subjectRepo,
+          heldInTasks,
+          heldOutTasks,
+          heldInNoPattern: heldInTasks.filter((task) => !hasPattern(task)),
+          heldOutNoPattern: heldOutTasks.filter((task) => !hasPattern(task)),
+        }),
+      )}\n`, 'utf8');
+      await writeFile(resolve(controllerDir, 'results.jsonl'), `${JSON.stringify({
+        schemaVersion: 1,
+        type: 'prompt_candidate_decided',
+        id: 'decision-1',
+        ts: 1,
+        runId: 'run-1',
+        roundId: 'round-0',
+        decision: 'discard',
+        reason: 'held_in_within_noise',
+        candidateCommitSha: 'candidate-sha',
+        previousLastKeptCommitSha: 'other-seed',
+        lastKeptCommitSha: 'other-seed',
+        previousHeldInReferencePassEligibleRate: 0,
+        heldInReferencePassEligibleRate: 0,
+        originalCommitSha: 'other-seed',
+        originalHeldOutPassEligibleRate: 0,
+        heldInPassRateNoiseBand: 0,
+        heldOutPassRateNoiseBand: 0,
+        rewardHackScan: { decision: 'clean' },
+        metrics: {},
+      })}\n`, 'utf8');
       if ((await gitOutput(repoRoot, 'status', '--porcelain=v1', '--untracked-files=normal')).length > 0) {
         t.skip('requires a clean execution checkout to build a resume fingerprint');
         return;
@@ -478,22 +526,38 @@ describe('Harbor adapter contract', () => {
           MAKA_PROMPT_KEY_FILE: keyFile,
           MAKA_PROMPT_TASKS_ROOT: tasksRoot,
           MAKA_PROMPT_MAKA_REPO: subjectRepo,
+          MAKA_PROMPT_PROFILE: 'smoke',
           MAKA_PROMPT_RUN_ID: 'run-1',
           MAKA_PROMPT_INITIAL_SYSTEM_PROMPT_FILE: initialPromptFile,
           MAKA_PROMPT_HELD_IN_IDS: 'task-a',
           MAKA_PROMPT_HELD_OUT_IDS: 'task-b',
           MAKA_PROMPT_ROUNDS: '1',
           MAKA_PROMPT_BASELINE_RUNS: '1',
+          MAKA_PROMPT_COST_CEILING: '0.5',
+          MAKA_PROMPT_MAX_CONCURRENCY: '1',
           MAKA_PROMPT_MIN_STABLE_HELD_IN: '1',
           MAKA_PROMPT_MIN_STABLE_HELD_OUT: '1',
+          MAKA_PROMPT_MIN_STABLE_RATIO: '0.5',
+          MAKA_PROMPT_TASK_BUDGET_SEC: '1800',
+          MAKA_PROMPT_HARBOR_TIMEOUT_MS: '2100000',
+          MAKA_CELL_COMMAND_TIMEOUT_MS: '300000',
+          MAKA_HARBOR_CONTINUATION: 'on',
+          MAKA_HARBOR_CONTINUATION_MAX_TURNS: '3',
+          MAKA_HARBOR_CONTINUATION_MAX_TOTAL_RUNTIME_STEPS: '150',
+          MAKA_CONTEXT_ACTIVE_TOOL_RESULT_PRUNE: 'on',
+          MAKA_CONTEXT_ACTIVE_TOOL_RESULT_MAX_ESTIMATED_TOKENS: '2048',
+          MAKA_CONTEXT_ACTIVE_TOOL_RESULT_MIN_STEP_NUMBER: '1',
         },
+        timeout: 10_000,
       });
       if (result.error && 'code' in result.error && result.error.code === 'ENOENT') {
         t.skip('node is not available');
         return;
       }
+      assert.ifError(result.error);
 
       assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /prompt repo HEAD does not match resumed RSI WAL state/);
       assert.equal(
         await readFile(resolve(runRoot, 'prompt-repo', 'system_prompt.md'), 'utf8'),
         'custom initial prompt\n',
@@ -625,6 +689,68 @@ describe('Harbor adapter contract', () => {
 
 async function readRepoFile(path: string): Promise<string> {
   return await readFile(resolve(repoRoot, path), 'utf8');
+}
+
+async function buildPromptSeedTestManifest(input: {
+  runId: string;
+  tasksRoot: string;
+  subjectRepo: string;
+  heldInTasks: readonly FixedPromptTask[];
+  heldOutTasks: readonly FixedPromptTask[];
+  heldInNoPattern: readonly FixedPromptTask[];
+  heldOutNoPattern: readonly FixedPromptTask[];
+}) {
+  const runtimeProfile = {
+    taskBudgetSec: 1800,
+    harborTimeoutMs: 2100000,
+    commandTimeoutMs: 300000,
+    runtimeEnvKeys: [
+      'MAKA_CELL_TIMEOUT_SEC',
+      'MAKA_CELL_COMMAND_TIMEOUT_MS',
+      'MAKA_HARBOR_CONTINUATION',
+      'MAKA_HARBOR_CONTINUATION_MAX_TURNS',
+      'MAKA_HARBOR_CONTINUATION_MAX_TOTAL_RUNTIME_STEPS',
+      'MAKA_CONTEXT_ACTIVE_TOOL_RESULT_PRUNE',
+      'MAKA_CONTEXT_ACTIVE_TOOL_RESULT_MAX_ESTIMATED_TOKENS',
+      'MAKA_CONTEXT_ACTIVE_TOOL_RESULT_MIN_STEP_NUMBER',
+    ],
+    continuation: {
+      enabled: true,
+      maxTurns: 3,
+      maxTotalRuntimeSteps: 150,
+    },
+    contextEnv: {
+      MAKA_CONTEXT_ACTIVE_TOOL_RESULT_PRUNE: 'on',
+      MAKA_CONTEXT_ACTIVE_TOOL_RESULT_MAX_ESTIMATED_TOKENS: '2048',
+      MAKA_CONTEXT_ACTIVE_TOOL_RESULT_MIN_STEP_NUMBER: '1',
+    },
+  };
+  return buildPromptOptimizationRunManifest({
+    runId: input.runId,
+    profile: 'smoke',
+    provider: 'deepseek',
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek/deepseek-v4-flash',
+    rounds: 1,
+    baselineRuns: 1,
+    costCeilingUsd: 0.5,
+    maxConcurrency: 1,
+    minStableRatio: 0.5,
+    minStableHeldInTasks: 1,
+    minStableHeldOutTasks: 1,
+    runtimeProfile,
+    subjectFingerprint: await buildPromptOptimizationSubjectFingerprint(input.subjectRepo),
+    taskSourceFingerprint: await buildPromptOptimizationTaskSourceFingerprint(
+      input.tasksRoot,
+      input.heldInTasks,
+      input.heldOutTasks,
+    ),
+    toolchainFingerprint: await buildPromptOptimizationToolchainFingerprint(repoRoot),
+    heldInTasks: input.heldInTasks,
+    heldOutTasks: input.heldOutTasks,
+    heldInNoPattern: input.heldInNoPattern,
+    heldOutNoPattern: input.heldOutNoPattern,
+  });
 }
 
 async function git(cwd: string, ...args: string[]): Promise<void> {
