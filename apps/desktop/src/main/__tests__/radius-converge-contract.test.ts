@@ -49,7 +49,7 @@ const RADIUS_TOKEN_WHITELIST = new Set([
 ]);
 
 function extractRadiusToken(expr: string): string | null {
-  const m = expr.match(/^var\((--radius-[\w-]+)\)$/);
+  const m = expr.trim().match(/^var\(\s*(--radius-[\w-]+)\s*\)$/);
   return m ? m[1] : null;
 }
 
@@ -62,8 +62,9 @@ function isWhitelistedVar(expr: string): boolean {
  * calc() must be exactly `calc(var(--radius-whitelisted) - <positive>px)`.
  * Positive allowlist — any other calc form (addition, multiplication,
  * division, double-negative, no token, non-whitelisted token) fails.
+ * Tolerates whitespace inside var() and around operators.
  */
-const CALC_ALLOW_RE = /^calc\(var\((--radius-[\w-]+)\)\s*-\s*([1-9]\d*(?:\.\d+)?|0?\.\d*[1-9])px\)$/;
+const CALC_ALLOW_RE = /^calc\(\s*var\(\s*(--radius-[\w-]+)\s*\)\s*-\s*([1-9]\d*(?:\.\d+)?|0?\.\d*[1-9])px\s*\)$/;
 
 function isWhitelistedCalc(expr: string): boolean {
   const m = expr.match(CALC_ALLOW_RE);
@@ -80,8 +81,8 @@ function isAllowedCorner(corner: string): boolean {
 
 // --- CSS scanning (single entry: readAllRendererCss unfolds all imports) -----
 
-const RADIUS_DECL_RE = /border-radius:\s*([^;}\n]+)\s*[;}]/g;
-const RADIUS_LONGHAND_RE = /border-(?:top-left|top-right|bottom-left|bottom-right|start-start|start-end|end-start|end-end)-radius:\s*([^;}\n]+)\s*[;}]/g;
+const RADIUS_DECL_RE = /border-radius\s*:\s*([^;}\n]+)\s*[;}]/gi;
+const RADIUS_LONGHAND_RE = /border-(?:top-left|top-right|bottom-left|bottom-right|start-start|start-end|end-start|end-end)-radius\s*:\s*([^;}\n]+)\s*[;}]/gi;
 
 function findCssOffenders(css: string, label: string): string[] {
   const stripped = stripCssComments(css);
@@ -513,5 +514,34 @@ describe('radius whitelist negative cases', () => {
       assert.ok(m.length > 0, `${bad} must be caught by ROUNDED_RE`);
     }
     assert.equal(isWhitelistedVar('var(--radius-pill)'), true, 'valid pill token must pass');
+  });
+
+  it('CSS scanner is case-insensitive and tolerates whitespace around colons', () => {
+    // Bare px must be caught regardless of case or spacing
+    const badSnippets = [
+      'border-radius : 10px;',
+      'BORDER-RADIUS: 10px;',
+      'Border-Radius: 10px;',
+      'border-radius:10px;',
+    ];
+    for (const css of badSnippets) {
+      RADIUS_DECL_RE.lastIndex = 0;
+      RADIUS_LONGHAND_RE.lastIndex = 0;
+      const offenders = findCssOffenders(css, 'test');
+      assert.ok(offenders.length > 0, `${JSON.stringify(css)} must be flagged as bare px`);
+    }
+  });
+
+  it('calc() with internal whitespace still passes for valid tokens', () => {
+    assert.equal(isWhitelistedCalc('calc(var(--radius-modal) - 1px)'), true, 'standard calc must pass');
+    assert.equal(isWhitelistedCalc('calc( var(--radius-modal) - 1px )'), true, 'calc with spaces inside parens must pass');
+    assert.equal(isWhitelistedCalc('calc(var(--radius-modal)  -  1px)'), true, 'calc with multiple spaces around minus must pass');
+    assert.equal(isWhitelistedCalc('calc(var( --radius-modal ) - 1px)'), true, 'calc with spaces inside var() must pass');
+  });
+
+  it('var() with internal whitespace still passes for valid tokens', () => {
+    assert.equal(isWhitelistedVar('var(--radius-surface)'), true, 'standard var must pass');
+    assert.equal(isWhitelistedVar('var( --radius-surface )'), true, 'var with spaces inside parens must pass');
+    assert.equal(isWhitelistedVar('var( --radius-control )'), true, 'var with spaces and control token must pass');
   });
 });
