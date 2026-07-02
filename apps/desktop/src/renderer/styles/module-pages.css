@@ -1957,15 +1957,24 @@
    underneath .maka-workspace-top-actions (top-right toolbar) once more
    than one badge was showing at once. Pulled them out of the header's
    flow and anchored them in their own row, directly below the toolbar,
-   sharing its `right: 24px` baseline. */
+   sharing its geometry (see --maka-workspace-top-actions-* in
+   maka-tokens.css — single source of truth for both rules).
+   `max-width` + `flex-wrap` cap how far the row can grow: with three
+   badges and long Chinese labels in a narrow window, an unbounded
+   shrink-to-fit row could run past the left edge of the header/window.
+   Capped rows wrap onto a second line (still right-aligned) instead. */
 .maka-chat-status-cluster {
   position: absolute;
   z-index: var(--z-panel-action);
   top: calc(var(--maka-workspace-top-actions-bottom) + 6px);
-  right: 24px;
+  right: var(--maka-workspace-top-actions-right);
+  max-width: min(60vw, 320px);
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
+  row-gap: 4px;
   -webkit-app-region: no-drag;
 }
 

@@ -222,9 +222,12 @@
      was bare `z-index: 4`. Tokenized to `--z-panel-action`.
      Identical visual stacking, but referenceable + contract-locked. */
   z-index: var(--z-panel-action);
-  /* Same baseline; 17px correction = 12px half-icon + 5px detail-panel inset. */
-  top: calc(var(--maka-titlebar-control-safe-top) - 17px);
-  right: 24px;
+  /* Same baseline; 17px correction = 12px half-icon + 5px detail-panel
+     inset. Tokenized in maka-tokens.css (--maka-workspace-top-actions-*)
+     so .maka-chat-status-cluster (module-pages.css) can anchor off the
+     same geometry instead of duplicating it. */
+  top: var(--maka-workspace-top-actions-top);
+  right: var(--maka-workspace-top-actions-right);
   display: inline-flex;
   align-items: center;
   gap: 6px;

@@ -299,12 +299,15 @@
   --maka-titlebar-control-safe-left: 94px;
   --maka-titlebar-control-safe-top: 20px;
 
-  /* Bottom edge of .maka-workspace-top-actions (see sidebar.css): its
-     `top` baseline plus the 24px icon-button height. .maka-chat-status-
-     cluster anchors its own `top` off of this so the status/alert
-     badges sit in a second row directly under the toolbar instead of
-     competing with it for the same row. */
-  --maka-workspace-top-actions-bottom: calc(var(--maka-titlebar-control-safe-top) - 17px + 24px);
+  /* Single source of truth for .maka-workspace-top-actions' geometry
+     (sidebar.css) and .maka-chat-status-cluster's (module-pages.css),
+     which anchors below + shares the same right edge as the toolbar.
+     Previously each rule hard-coded its own copy of these numbers —
+     PR review flagged that as a duplicated layout contract. */
+  --maka-workspace-top-actions-top: calc(var(--maka-titlebar-control-safe-top) - 17px);
+  --maka-workspace-top-actions-height: 24px;
+  --maka-workspace-top-actions-right: 24px;
+  --maka-workspace-top-actions-bottom: calc(var(--maka-workspace-top-actions-top) + var(--maka-workspace-top-actions-height));
 
   /* session list geometry */
   --w-sessionlist: 240px;
