@@ -41,7 +41,7 @@
 
   .maka-daily-review-info-body {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     line-height: 1.55;
     color: var(--foreground-80);
   }
@@ -53,7 +53,7 @@
 
   .maka-daily-review-info-hint {
     margin: 0;
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     line-height: 1.5;
     color: var(--foreground-50);
   }
@@ -85,7 +85,7 @@
 }
 
 .maka-daily-review-quick-run {
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   white-space: nowrap;
 }
 
@@ -109,7 +109,7 @@
   }
 
   .maka-daily-review-archive-count {
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     color: var(--foreground-40);
     font-variant-numeric: tabular-nums;
   }
@@ -168,7 +168,7 @@
 @layer components {
   .maka-daily-review-archive-row-title {
     color: var(--foreground);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -177,7 +177,7 @@
 
   .maka-daily-review-archive-row-meta {
     color: var(--foreground-50);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     font-variant-numeric: tabular-nums;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -198,7 +198,7 @@
   .maka-daily-review-archive-body[data-empty="true"],
   .maka-daily-review-archive-empty {
     color: var(--foreground-50);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     line-height: 1.5;
   }
 
@@ -212,7 +212,7 @@
   .maka-daily-review-archive-body-header h4 {
     margin: 0;
     color: var(--foreground);
-    font-size: 13px;
+    font-size: var(--font-size-ui);
     font-weight: 600;
     letter-spacing: 0;
   }
@@ -220,7 +220,7 @@
   .maka-daily-review-archive-body-header p {
     margin: 2px 0 0;
     color: var(--foreground-50);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     line-height: 1.45;
     overflow-wrap: anywhere;
   }
@@ -230,7 +230,7 @@
     border: 1px solid var(--foreground-10);
     border-radius: var(--radius-pill);
     color: var(--foreground-50);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     line-height: 1;
     padding: 4px 7px;
     white-space: nowrap;
@@ -250,7 +250,7 @@
   .maka-daily-review-archive-error {
     margin: 0;
     color: var(--destructive, var(--foreground));
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     line-height: 1.5;
   }
 
@@ -267,7 +267,7 @@
   .maka-daily-review-archive-section h5 {
     margin: 0;
     color: var(--foreground-50);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     font-weight: 600;
     letter-spacing: 0;
   }
@@ -275,7 +275,7 @@
   .maka-daily-review-archive-section p {
     margin: 0;
     color: var(--foreground-80);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     line-height: 1.6;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
@@ -284,7 +284,7 @@
   .maka-daily-review-day {
     text-align: center;
     font-weight: 600;
-    font-size: 13px;
+    font-size: var(--font-size-ui);
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.005em;
     color: var(--foreground);
@@ -314,13 +314,13 @@
 
 .maka-daily-review-range-tab {
   flex: 1;
-  font-size: 12px;
+  font-size: var(--font-size-ui);
 }
 
 .maka-daily-review-copy,
 .maka-daily-review-append,
 .maka-daily-review-save {
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   white-space: nowrap;
 }
 
@@ -341,7 +341,7 @@
     border-radius: var(--radius-surface);
     background: oklch(from var(--warning, var(--info)) l c h / 0.08);
     color: var(--warning-text, var(--foreground));
-    font-size: 12px;
+    font-size: var(--font-size-ui);
   }
 
   .maka-daily-review-alert > span {
@@ -351,7 +351,7 @@
 
 .maka-daily-review-alert-retry {
   flex: none;
-  font-size: 12px;
+  font-size: var(--font-size-ui);
 }
 
 @media (max-width: 720px) {
@@ -391,14 +391,14 @@
   }
 
   .maka-daily-review-totals-value {
-    font-size: 13px;
+    font-size: var(--font-size-ui);
     font-weight: 600;
     color: var(--foreground);
     font-variant-numeric: tabular-nums;
   }
 
   .maka-daily-review-totals-label {
-    font-size: 10px;
+    font-size: var(--font-size-ui);
     text-transform: none;
     letter-spacing: 0;
     color: var(--foreground-50);
@@ -428,7 +428,7 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    font-size: 10px;
+    font-size: var(--font-size-ui);
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -510,13 +510,13 @@
 
   .maka-daily-review-session-time {
     color: var(--foreground-50);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
 
   .maka-daily-review-session-preview {
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     color: var(--foreground-50);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -529,7 +529,7 @@
   }
 
   .maka-daily-review-top-meta {
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     color: var(--foreground-50);
     font-variant-numeric: tabular-nums;
   }

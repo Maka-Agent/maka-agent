@@ -232,8 +232,17 @@
   --font-mono: "Geist Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --font-default: var(--font-sans);
 
-  /* === layout === */
+  /* === typography ===
+     PR-TYPOGRAPHY-CONVERGE-0 (issue #430 PR2, 2026-07-03):
+     two-tier scale. Body 15 is the root (html font-size); UI 13 is the
+     chrome/meta tier (timestamps, badges, nav labels, code-block headers,
+     tool-card meta, session-list rows). 9/10/11/12/12.5/13/13.5/14px and
+     rem-encoded meta all collapse to ui. Bubble h1-h4 scale in em off
+     body 15 so they track the root automatically. */
   --font-size-base: 15px;
+  --font-size-ui: 13px;
+
+  /* === layout === */
   --radius: 0rem;
   --radius-control: 6px;
   --radius-surface: 8px;
@@ -786,7 +795,7 @@
     align-items: center;
     gap: 4px;
     padding: 2px 8px;
-    font-size: 0.8125rem;
+    font-size: var(--font-size-ui);
     font-weight: 500;
     color: var(--foreground-80);
     background: var(--foreground-5);
@@ -840,7 +849,7 @@
     justify-content: space-between;
     border-bottom: 1px solid var(--border);
     font-weight: 600;
-    font-size: 13px;
+    font-size: var(--font-size-ui);
     letter-spacing: 0.02em;
     text-transform: uppercase;
     color: var(--foreground-60);
@@ -855,7 +864,7 @@
     padding: 6px 10px;
     border-radius: var(--radius-control);
     color: var(--foreground-80);
-    font-size: 14px;
+    font-size: var(--font-size-ui);
     line-height: 1.4;
     user-select: none;
     transition: background 120ms var(--ease-out-strong), color 120ms var(--ease-out-strong);
@@ -881,7 +890,7 @@
     padding: 4px 8px;
     border-radius: var(--radius-control);
     color: var(--foreground-60);
-    font-size: 13px;
+    font-size: var(--font-size-ui);
   }
   .maka-sidebar-button:hover { background: var(--hover); color: var(--foreground); }
 
@@ -900,7 +909,7 @@
     align-items: center;
     gap: 12px;
     padding: 0 16px;
-    font-size: 13px;
+    font-size: var(--font-size-ui);
     color: var(--foreground-70);
   }
   .maka-titlebar strong { color: var(--foreground); font-weight: 500; }
@@ -974,7 +983,7 @@
     border: 1px dashed oklch(from var(--accent) l c h / 0.25);
     border-radius: var(--radius-surface);
     background: oklch(from var(--accent) l c h / 0.03);
-    font-size: 12.5px;
+    font-size: var(--font-size-ui);
     color: var(--foreground-70);
   }
 
@@ -1010,7 +1019,7 @@
   }
 
   .maka-turn-thinking-note {
-    font-size: 10px;
+    font-size: var(--font-size-ui);
     font-weight: 500;
     letter-spacing: 0.04em;
     color: var(--foreground-50);
@@ -1154,10 +1163,10 @@
   .maka-bubble-assistant code {
     font-variant-numeric: tabular-nums;
   }
-  .maka-bubble-assistant h1 { font-size: 22px; }
-  .maka-bubble-assistant h2 { font-size: 19px; }
-  .maka-bubble-assistant h3 { font-size: 16px; }
-  .maka-bubble-assistant h4 { font-size: 14px; color: var(--foreground-80); }
+  .maka-bubble-assistant h1 { font-size: 1.4667em; }
+  .maka-bubble-assistant h2 { font-size: 1.2667em; }
+  .maka-bubble-assistant h3 { font-size: 1.0667em; }
+  .maka-bubble-assistant h4 { font-size: 0.9333em; color: var(--foreground-80); }
   .maka-bubble-assistant ul,
   .maka-bubble-assistant ol {
     margin: 0 0 12px;
@@ -1218,7 +1227,7 @@
     background: var(--foreground-5);
     color: var(--foreground-60);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     letter-spacing: 0.02em;
   }
   .maka-code-block-lang {
@@ -1268,7 +1277,7 @@
     background: transparent;
     overflow-x: auto;
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: var(--font-size-ui);
     line-height: 1.55;
     white-space: pre;
   }
@@ -1333,7 +1342,7 @@
     width: 100%;
     margin: 0 0 12px;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: var(--font-size-ui);
     overflow: hidden;
     /* PR-UI-LAYOUT-28: table radius 8 → 10 joins the card family,
      * and a hairline outer border gives the table chrome a clean
@@ -1417,7 +1426,7 @@
     align-items: center;
     gap: 6px;
     padding: 3px 8px;
-    font-size: 10.5px;
+    font-size: var(--font-size-ui);
     font-weight: 600;
     opacity: 1;
     background: transparent;
@@ -1577,7 +1586,7 @@
     background: transparent;
     color: var(--foreground);
     font-family: var(--font-default);
-    font-size: 15px;
+    font-size: var(--font-size-base);
     line-height: 1.5;
     min-height: var(--h-composer-min);
     max-height: 240px;
@@ -1601,7 +1610,7 @@
     justify-content: space-between;
     gap: 8px;
     color: var(--foreground-60);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
   }
 
   /* ---- Buttons ---------------------------------------------------- */
@@ -1618,7 +1627,7 @@
     color: var(--foreground);
     padding: 7px 14px;
     border-radius: var(--radius-control);
-    font-size: 13px;
+    font-size: var(--font-size-ui);
     font-weight: 500;
     line-height: 1.2;
     transition: background 120ms var(--ease-out-strong), border-color 120ms var(--ease-out-strong), color 120ms var(--ease-out-strong), transform 120ms var(--ease-out-strong), box-shadow 120ms var(--ease-out-strong);
@@ -1665,13 +1674,13 @@
     border-bottom: 1px solid var(--border);
   }
   .maka-modal-title {
-    font-size: 15px;
+    font-size: var(--font-size-base);
     font-weight: 600;
     color: var(--foreground);
     letter-spacing: 0;
   }
   .maka-modal-subtitle {
-    font-size: 13px;
+    font-size: var(--font-size-ui);
     color: var(--foreground-60);
     margin-top: 2px;
   }
@@ -1700,7 +1709,7 @@
 
   .maka-code {
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: var(--font-size-ui);
     background: var(--foreground-3);
     border: 1px solid var(--border);
     border-radius: var(--radius-surface);

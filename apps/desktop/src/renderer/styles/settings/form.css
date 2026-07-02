@@ -3,7 +3,7 @@
   margin: 0;
   border-radius: var(--radius-control);
   padding: 6px 10px;
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   line-height: 1.4;
   color: var(--warning-text);
   background: oklch(from var(--warning) l c h / 0.10);
@@ -32,7 +32,7 @@
   width: fit-content;
   padding: 0 5px;
   border-radius: var(--radius-control);
-  font-size: 9px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
@@ -58,7 +58,7 @@
   list-style: none;
   padding: 5px 10px;
   color: var(--foreground-60);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
 }
 
 .maka-permission-raw > summary::-webkit-details-marker { display: none; }

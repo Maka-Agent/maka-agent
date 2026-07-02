@@ -144,8 +144,19 @@ background / foreground / accent (purple) / info (amber) / success (green) / des
 | `--font-sans` | `"Geist Variable", system-ui, …, sans-serif` | 默认正文 / UI |
 | `--font-mono` | `"Geist Mono Variable", "JetBrains Mono", …, monospace` | 代码、tool 名称、model id、provider type、token 计数 |
 | `--font-default` | `var(--font-sans)` | `body` 兜底 |
-| `--font-size-base` | 15px | `html` 基准；勿在组件覆盖 |
+| `--font-size-base` | 15px | `html` 基准；正文、nav-item label、page hint |
+| `--font-size-ui` | 12px | chrome/meta；timestamp、badge、code-block header、tool-card meta |
 | `kbd` | mono + 0.85em + `var(--foreground-5)` 底 + 1px border | composer hint / 设置帮助 |
+
+Tailwind alias：`--text-xs`→ui(12px), `--text-sm`/`--text-base`→base(15px)。
+
+**两档 scale**（PR-TYPOGRAPHY-CONVERGE-0, issue #430 PR2）：
+- **base 15px** — `html` root，不动。改它会全局 scale 所有 rem。
+- **ui 12px** — chrome/meta。timestamp、badge、nav group label、code-block header、tool-card title/meta。
+- 原来的 9/10/11/12.5/13/13.5/14px 和 0.7–0.875rem（15px root 下 10.5–13.1px）全部收敛到 ui 或 base。
+- 半像素值（12.5/11.5/10.5/13.5/14.5）归到最近 tier。
+
+**Heading em scaling**：`.maka-bubble-assistant h1-h4` 用 em off body 15（h1=1.47em, h2=1.27em, h3=1.07em, h4=0.93em），track root 自动。Surface-specific hero 大字（onboarding/settings title 16–32px）也用 em。
 
 **规则**：
 - 标识符（model id、provider type、tool name、file path、env key、API endpoint）
@@ -153,6 +164,8 @@ background / foreground / accent (purple) / info (amber) / success (green) / des
 - 文章标题、章节标题用 600 weight + `text-wrap: balance`（见
   `.maka-bubble-assistant h1..h4`）。
 - `tabular-nums` 用在数字会跳动的位置（duration / token count）。
+- `font-size` 不准裸写 `Npx` / `Nrem`，必须引用 `var(--font-size-*)` 或用 `em`。
+  `typography-converge-contract.test.ts` 锁住这条规则。
 
 ### 1.4 圆角（Radius）
 

@@ -24,7 +24,7 @@
 
 .settingsWebSearchStatusCluster small {
   color: var(--foreground-50);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   font-family: var(--font-mono);
   white-space: nowrap;
 }
@@ -45,7 +45,7 @@
 
 .settingsWebSearchDisabledReason {
   color: var(--foreground-50);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   line-height: 1.45;
   text-align: right;
 }
@@ -79,14 +79,14 @@
 
   .settingsWebSearchResult small {
     color: var(--foreground-50);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
 
   .settingsWebSearchResult p {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--font-size-ui);
     color: var(--foreground-70);
     line-height: 1.45;
     white-space: pre-wrap;
@@ -141,19 +141,19 @@
   }
 
   .settingsMemoryPreview strong {
-    font-size: 13px;
+    font-size: var(--font-size-ui);
     color: var(--foreground);
   }
 
   .settingsMemoryPreview small {
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     color: var(--foreground-50);
   }
 
   .settingsMemoryPreview p {
     margin: 0;
     color: var(--foreground-70);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     line-height: 1.45;
     white-space: pre-wrap;
     word-break: break-word;
@@ -182,7 +182,7 @@
 
   .settingsMemoryPromptPreviewHeader strong {
     color: var(--foreground);
-    font-size: 13px;
+    font-size: var(--font-size-ui);
   }
 
   .settingsMemoryPromptPreviewHeader div {
@@ -194,7 +194,7 @@
   .settingsMemoryPromptPreviewHeader span {
     flex-shrink: 0;
     color: var(--foreground-60);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
   }
 
   .settingsMemoryPromptPreview[data-active="true"] .settingsMemoryPromptPreviewHeader span {
@@ -203,7 +203,7 @@
 
   .settingsMemoryPromptPreview small {
     color: var(--foreground-50);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     line-height: 1.4;
   }
 
@@ -222,7 +222,7 @@
     background: var(--background);
     color: var(--foreground-80);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     line-height: 1.45;
     white-space: pre-wrap;
     word-break: break-word;
@@ -231,7 +231,7 @@
   .settingsMemoryPromptPreview p {
     margin: 0;
     color: var(--foreground-70);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     line-height: 1.45;
   }
 
@@ -246,12 +246,12 @@
 
   .settingsMemoryEntryPreviewNotice strong {
     color: var(--foreground);
-    font-size: 13px;
+    font-size: var(--font-size-ui);
   }
 
   .settingsMemoryEntryPreviewNotice small {
     color: var(--foreground-70);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     line-height: 1.4;
   }
 
@@ -266,17 +266,17 @@
 
   .settingsMemorySaveSummary strong {
     color: var(--foreground);
-    font-size: 13px;
+    font-size: var(--font-size-ui);
   }
 
   .settingsMemorySaveSummary small {
     color: var(--foreground-60);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
   }
 
   .settingsMemorySaveSummaryTime {
     color: var(--foreground-50);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
   }
 
   .settingsMemoryBackupState {
@@ -298,7 +298,7 @@
 
   .settingsMemoryBackupList strong {
     color: var(--foreground);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
   }
 
   /* PR-MEMORY-BACKUP-LIST-A11Y-0 (round 16/30): selector
@@ -322,7 +322,7 @@
 
   .settingsMemoryBackupList small {
     color: var(--foreground-50);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     line-height: 1.4;
   }
 
@@ -335,7 +335,7 @@
     border-radius: var(--radius-pill);
     background: var(--background);
     color: var(--foreground-60);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
   }
 }
 
@@ -359,13 +359,13 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     color: var(--foreground-60);
   }
 
   .settingsMemoryEntryGroupHeader strong {
     color: var(--foreground);
-    font-size: 13px;
+    font-size: var(--font-size-ui);
   }
 
   .settingsMemoryEntryDraftNotice {
@@ -375,7 +375,7 @@
     border-radius: var(--radius-surface);
     background: oklch(from var(--warning) l c h / 0.08);
     color: var(--foreground-70);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     line-height: 1.45;
   }
 
@@ -418,12 +418,12 @@
   }
 
   .settingsMemoryEntryCard strong {
-    font-size: 13px;
+    font-size: var(--font-size-ui);
     color: var(--foreground);
   }
 
   .settingsMemoryEntryCard small {
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     color: var(--foreground-50);
   }
 
@@ -445,7 +445,7 @@
     border-radius: var(--radius-control);
     background: var(--foreground-5);
     color: var(--foreground-60);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     line-height: 1.4;
   }
 
@@ -464,7 +464,7 @@
   .settingsMemoryEntryEmpty {
     margin: 0;
     color: var(--foreground-70);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     line-height: 1.45;
     white-space: pre-wrap;
     word-break: break-word;
@@ -490,13 +490,13 @@
   background: var(--background);
   color: var(--foreground);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   padding: 8px 9px;
 }
 
 .settingsMemoryFilter small {
   color: var(--foreground-50);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   white-space: nowrap;
 }
 
@@ -519,13 +519,13 @@
   .settingsMemoryFilterEmpty strong,
   .settingsMemoryListEmpty strong {
     color: var(--foreground);
-    font-size: 13px;
+    font-size: var(--font-size-ui);
   }
 
   .settingsMemoryFilterEmpty small,
   .settingsMemoryListEmpty small {
     color: var(--foreground-60);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     line-height: 1.45;
   }
 }
@@ -546,12 +546,12 @@
 
 .settingsMemoryManualAddHeader strong {
   color: var(--foreground);
-  font-size: 13px;
+  font-size: var(--font-size-ui);
 }
 
 .settingsMemoryManualAddHeader small {
   color: var(--foreground-50);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
 }
 
 .settingsMemoryManualAddGrid {
@@ -567,7 +567,7 @@
   background: var(--background);
   color: var(--foreground);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   padding: 8px 9px;
 }
 
@@ -593,12 +593,12 @@
 
 .settingsMemoryDraftWarning strong {
   color: var(--foreground);
-  font-size: 13px;
+  font-size: var(--font-size-ui);
 }
 
 .settingsMemoryDraftWarning small {
   color: var(--foreground-70);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   line-height: 1.4;
 }
 
@@ -609,7 +609,7 @@
 
 .settingsMemoryEditor > span {
   color: var(--foreground-60);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
 }
 
@@ -623,7 +623,7 @@
   background: var(--background-elevated, var(--background));
   color: var(--foreground);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   line-height: 1.55;
 }
 
@@ -684,12 +684,12 @@
 
   .maka-first-run-checklist-header strong {
     color: var(--foreground);
-    font-size: 13px;
+    font-size: var(--font-size-ui);
   }
 
   .maka-first-run-checklist-count {
     margin-left: auto;
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     letter-spacing: 0.04em;
     color: var(--foreground-50);
     font-variant-numeric: tabular-nums;
@@ -705,7 +705,7 @@
   border-radius: var(--radius-surface);
   background: oklch(from var(--warning, var(--info)) l c h / 0.08);
   color: var(--warning-text, var(--info-text));
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   line-height: 1.45;
   padding: 8px 10px;
 }
@@ -722,7 +722,7 @@
   border-radius: var(--radius-control);
   background: var(--background);
   color: var(--warning-text, var(--info-text));
-  font-size: 12px;
+  font-size: var(--font-size-ui);
 }
 
 .maka-first-run-checklist-error-action:hover {
@@ -804,14 +804,14 @@
 }
 
 .maka-first-run-checklist-copy strong {
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   white-space: nowrap;
 }
 
 .maka-first-run-checklist-copy small {
   display: none;
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   color: var(--foreground-50);
   line-height: 1.45;
 }
@@ -834,7 +834,7 @@
   }
 
   .maka-onboarding-ready header h1 {
-    font-size: 24px;
+    font-size: 1.6em;
     line-height: 1.2;
   }
 

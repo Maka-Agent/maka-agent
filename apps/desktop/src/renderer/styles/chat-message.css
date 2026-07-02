@@ -21,7 +21,7 @@
     border-radius: var(--radius-modal);
     background: var(--foreground-3);
     color: var(--foreground-50);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     font-weight: 600;
     line-height: 1;
     white-space: nowrap;
@@ -65,7 +65,7 @@
     border: 4px solid oklch(from var(--accent) l c h / 0.12);
     background: oklch(0.93 0.035 70);
     color: var(--foreground);
-    font-size: 22px;
+    font-size: 1.4667em;
     font-weight: 700;
   }
 
@@ -74,7 +74,7 @@
     align-items: center;
     gap: 6px;
     color: var(--accent);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -90,7 +90,7 @@
        tracking + setting font-variation-settings wdth 105 gives the
        hero the same "wider, slightly heavier, optically distinct from
        chrome" feel without adding a second variable font asset. */
-    font-size: 32px;
+    font-size: 2.1333em;
     font-weight: 550;
     letter-spacing: -0.018em;
     line-height: 1.1;
@@ -102,7 +102,7 @@
     margin: 0;
     max-width: 54ch;
     color: var(--foreground-60);
-    font-size: 14.5px;
+    font-size: var(--font-size-ui);
     line-height: 1.55;
     text-wrap: pretty;
   }
@@ -114,7 +114,7 @@
     }
 
     .maka-hero-bubble {
-      font-size: 11px;
+      font-size: var(--font-size-ui);
       padding-inline: 10px;
     }
 

@@ -5,7 +5,7 @@
 .maka-message-time-inline {
   display: inline-block;
   color: var(--foreground-40);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   font-weight: 500;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -37,7 +37,7 @@
   background: oklch(from var(--info) l c h / 0.08);
   color: var(--info-text);
   padding: 2px 7px;
-  font-size: 10px;
+  font-size: var(--font-size-ui);
 }
 
 /* `.toolInline` (inline section + header), `.toolItem` (the `<details>` card's
@@ -149,7 +149,7 @@
   min-height: var(--h-composer-min, 56px);
   color: var(--foreground);
   font-family: var(--font-default);
-  font-size: 15px;
+  font-size: var(--font-size-base);
   line-height: 1.55;
   border: none !important;
   box-shadow: none !important;
@@ -168,7 +168,7 @@
 }
 
 .maka-composer-streaming-hint .maka-shortcut-kbd {
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   padding: 1px 5px;
   background: var(--foreground-3);
   border: 1px solid var(--border);
@@ -211,7 +211,7 @@
   min-width: 0;
   flex: 1 1 auto;
   color: var(--foreground-40);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   text-align: center;
 }
 
@@ -226,7 +226,7 @@
   padding: 0 9px;
   background: oklch(from var(--background) l c h / 0.82);
   color: var(--foreground-60);
-  font-size: 10.5px;
+  font-size: var(--font-size-ui);
   font-weight: 500;
   white-space: nowrap;
   transition:
@@ -294,12 +294,12 @@
   min-width: 0;
 }
 .maka-composer-mode-menu-label {
-  font-size: 12.5px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   color: var(--foreground);
 }
 .maka-composer-mode-menu-hint {
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   color: var(--foreground-50);
   line-height: 1.4;
   white-space: normal;
@@ -311,7 +311,7 @@
 .maka-composer-right-controls .maka-model-switcher {
   margin: 0;
   max-width: min(180px, 28vw);
-  font-size: 10.5px;
+  font-size: var(--font-size-ui);
 }
 
 .maka-composer-right-controls .maka-model-switcher-trigger {
@@ -338,7 +338,7 @@
 .maka-composer-right-controls .maka-model-switcher-value {
   max-width: 128px;
   color: inherit;
-  font-size: 10.5px;
+  font-size: var(--font-size-ui);
   font-weight: 500;
 }
 

@@ -26,13 +26,13 @@
   }
   .settingsHealthIntro h3 {
     margin: 0 0 6px;
-    font-size: 0.95rem;
+    font-size: var(--font-size-ui);
     font-weight: 600;
   }
   .settingsHealthIntro p {
     margin: 0;
     color: var(--foreground-70);
-    font-size: 0.85rem;
+    font-size: var(--font-size-ui);
     line-height: 1.55;
     max-width: 60ch;
   }
@@ -48,7 +48,7 @@
   }
   .settingsHealthMeta small {
     color: var(--foreground-60);
-    font-size: 0.75rem;
+    font-size: var(--font-size-ui);
   }
 }
 
@@ -61,7 +61,7 @@
   border-radius: var(--radius-control);
   padding: 4px 10px;
   color: var(--foreground-80);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-ui);
   transition: background var(--duration-quick) var(--ease-out-strong), border-color var(--duration-quick) var(--ease-out-strong), color var(--duration-quick) var(--ease-out-strong);
 }
 .settingsHealthRefresh:hover {
@@ -86,11 +86,11 @@
     color: var(--destructive-text);
   }
   .settingsHealthError strong {
-    font-size: 0.9rem;
+    font-size: var(--font-size-ui);
   }
   .settingsHealthError small {
     color: var(--foreground-70);
-    font-size: 0.8125rem;
+    font-size: var(--font-size-ui);
   }
   .settingsHealthError button {
     align-self: flex-start;
@@ -119,12 +119,12 @@
     background: var(--background);
   }
   .settingsHealthSummaryTile strong {
-    font-size: 1.4rem;
+    font-size: 1.4em;
     font-weight: 600;
     line-height: 1.1;
   }
   .settingsHealthSummaryTile small {
-    font-size: 0.72rem;
+    font-size: var(--font-size-ui);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--foreground-50);
@@ -173,13 +173,13 @@
   }
   .settingsHealthLayer > header h4 {
     margin: 0 0 2px;
-    font-size: 0.875rem;
+    font-size: var(--font-size-ui);
     font-weight: 600;
     color: var(--foreground);
   }
   .settingsHealthLayer > header small {
     color: var(--foreground-60);
-    font-size: 0.78rem;
+    font-size: var(--font-size-ui);
   }
 
   .settingsHealthSignalList {
@@ -222,23 +222,23 @@
     gap: 2px;
   }
   .settingsHealthSignalHeading strong {
-    font-size: 0.875rem;
+    font-size: var(--font-size-ui);
     font-weight: 600;
   }
   .settingsHealthSignalScope {
-    font-size: 0.72rem;
+    font-size: var(--font-size-ui);
     color: var(--foreground-50);
     letter-spacing: 0.04em;
   }
 
   .settingsHealthSignalMessage {
     margin: 0;
-    font-size: 0.8125rem;
+    font-size: var(--font-size-ui);
     color: var(--foreground-80);
     line-height: 1.5;
   }
   .settingsHealthSignalDetail {
-    font-size: 0.76rem;
+    font-size: var(--font-size-ui);
     color: var(--foreground-60);
     line-height: 1.45;
   }
@@ -248,7 +248,7 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 10px;
-    font-size: 0.72rem;
+    font-size: var(--font-size-ui);
     color: var(--foreground-50);
   }
   .settingsHealthSignalMeta code {
@@ -259,7 +259,7 @@
     color: var(--foreground-70);
   }
   .settingsHealthSignalBlocker {
-    font-size: 0.7rem;
+    font-size: var(--font-size-ui);
     padding: 1px 8px;
     border-radius: var(--radius-pill);
     border: 1px solid var(--border);
@@ -282,7 +282,7 @@
     border-radius: var(--radius-surface);
     background: var(--foreground-3);
     color: var(--foreground-60);
-    font-size: 0.78rem;
+    font-size: var(--font-size-ui);
     line-height: 1.55;
   }
 }

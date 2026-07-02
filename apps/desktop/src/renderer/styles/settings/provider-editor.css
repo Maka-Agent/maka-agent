@@ -1,14 +1,14 @@
 .providerEditor h3 {
   margin: 0;
   color: var(--foreground);
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
 }
 
 .providerEditor p {
   margin: 0;
   color: var(--foreground-50);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   line-height: 1.4;
 }
 
@@ -40,13 +40,13 @@
 }
 
 .catalogTabs strong {
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
 }
 
 .catalogTabs small {
   color: var(--foreground-50);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   line-height: 1.2;
 }
 
@@ -90,7 +90,7 @@
 .providerCatalogCount {
   margin-left: 8px;
   color: var(--foreground-50);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
 }
 
 .providerCatalogChevron {
@@ -106,7 +106,7 @@
   background: var(--foreground-5);
   color: var(--foreground-60);
   padding: 2px 7px;
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   font-style: normal;
   font-weight: 600;
   line-height: 1.35;
@@ -128,7 +128,7 @@
 }
 
 .providerUnavailableNotice span {
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   line-height: 1.4;
 }
 
@@ -152,7 +152,7 @@
   display: grid;
   gap: 6px;
   color: var(--foreground-60);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   font-weight: 500;
 }
 
@@ -172,7 +172,7 @@
   color: var(--foreground);
   padding: 0 12px;
   outline: none;
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   transition: border-color 140ms var(--ease-out-strong), box-shadow 140ms var(--ease-out-strong), background 140ms var(--ease-out-strong);
 }
 
@@ -200,7 +200,7 @@
 .providerExternalLink {
   width: fit-content;
   color: var(--accent);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   text-decoration: none;
   /* PR-UI-LAYOUT-33: explicit padding + radius so the focus halo
@@ -255,13 +255,13 @@
 }
 
 .modelTableHeaderText strong {
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   font-weight: 700;
   color: var(--foreground);
 }
 
 .modelTableHeaderText small {
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   line-height: 1.5;
   color: var(--foreground-60);
 }
@@ -285,7 +285,7 @@
   border-radius: var(--radius-surface);
   background: var(--background);
   color: var(--foreground);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   font-family: var(--font-mono);
   transition: border-color 140ms var(--ease-out-strong), box-shadow 140ms var(--ease-out-strong);
 }
@@ -303,7 +303,7 @@
   border-radius: var(--radius-surface);
   background: var(--background);
   color: var(--foreground-60);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   line-height: 1.55;
   text-align: center;
 }
@@ -318,7 +318,7 @@
   border: 1px solid oklch(from var(--accent) l c h / 0.22);
   background: oklch(from var(--accent) l c h / 0.06);
   color: var(--foreground);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   line-height: 1.5;
   width: 100%;
 }
@@ -423,7 +423,7 @@
 .modelTableRowId {
   background: transparent;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   color: var(--foreground-60);
   white-space: nowrap;
   overflow: hidden;
@@ -436,7 +436,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--warning-text);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
 }
 
 .modelTableChips {
@@ -451,7 +451,7 @@
   border-radius: var(--radius-control);
   background: var(--foreground-5);
   color: var(--foreground-60);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -462,7 +462,7 @@
   border-radius: var(--radius-control);
   background: oklch(from var(--accent) l c h / 0.14);
   color: var(--accent);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   font-weight: 700;
   letter-spacing: 0;
 }
@@ -476,7 +476,7 @@
    the right-side value text). */
 .settingsRow strong {
   color: var(--foreground);
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -488,7 +488,7 @@
      for any numeric data. */
   min-width: 0;
   color: var(--foreground-60);
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
   text-align: right;
@@ -544,7 +544,7 @@
   border-radius: var(--radius-surface);
   background: color-mix(in srgb, var(--warning) 10%, var(--background));
   color: var(--warning-text);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   line-height: 1.5;
   padding: 9px 11px;
 }
@@ -555,7 +555,7 @@
 }
 
 .providerOAuthCardBadge {
-  font-size: 10.5px;
+  font-size: var(--font-size-ui);
   font-weight: 500;
   letter-spacing: 0.02em;
 }
@@ -590,7 +590,7 @@
 .customProviderEntry h3 {
   margin: 0;
   color: var(--foreground);
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   font-weight: 700;
 }
 
@@ -599,7 +599,7 @@
 .customProviderEntry p {
   margin: 0;
   color: var(--foreground-50);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   line-height: 1.35;
 }
 
@@ -622,5 +622,5 @@
   background: var(--background-elevated);
 }
 
-.enabledEmptyChip strong { font-size: 12px; font-weight: 700; }
-.enabledEmptyChip small { margin-top: 2px; color: var(--foreground-50); font-size: 11px; }
+.enabledEmptyChip strong { font-size: var(--font-size-ui); font-weight: 700; }
+.enabledEmptyChip small { margin-top: 2px; color: var(--foreground-50); font-size: var(--font-size-ui); }
