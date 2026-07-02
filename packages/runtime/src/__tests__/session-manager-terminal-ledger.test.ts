@@ -465,7 +465,59 @@ describe('SessionManager terminal ledger invariants', () => {
     const terminalEvents = (await runStore.readRuntimeEvents(session.id, run.runId)).filter(isTerminalRuntimeEvent);
     expect(terminalEvents).toHaveLength(1);
     expect(terminalEvents[0]?.status).toBe('failed');
+    expect(terminalEvents[0]?.invocationId).toBe(run.runId);
     expect(terminalEvents[0]?.actions?.stateDelta?.failureClass).toBe('missing_terminal_event');
+    expect(terminalEvents[0]?.actions?.stateDelta?.recovered).toBeUndefined();
+    await new RuntimeReadModel({ runStore, runtimeEventStore: runStore }).getSessionView(session.id);
+  });
+
+  test('direct AgentRun stop synthesizes a cancelled terminal fact when no terminal event was recorded', async () => {
+    const store = new TinySessionStore();
+    const runStore = new TinyAgentRunStore();
+    const session = await store.create(makeInput());
+    const backend = new ScriptBackend({ sessionId: session.id } as BackendFactoryContext, []);
+    const activeRuns = new Map<string, AgentRun>();
+    const turnToRunId = new Map<string, string>();
+    const run = new AgentRun({
+      sessionId: session.id,
+      header: session,
+      userInput: { turnId: 'turn-1', text: 'hello' },
+      store,
+      runStore,
+      runtimeEventStore: runStore,
+      newId: nextId(),
+      now: nextNow(41_250),
+      hooks: {
+        ensureActive: async () => ({ sessionId: session.id, backend, cachedHeader: session, activeRuns, turnToRunId }),
+        registerRun: (_active, activeRun) => {
+          activeRuns.set(activeRun.runId, activeRun);
+          turnToRunId.set(activeRun.turnId, activeRun.runId);
+        },
+        unregisterRun: (_active, activeRun) => {
+          activeRuns.delete(activeRun.runId);
+          turnToRunId.delete(activeRun.turnId);
+        },
+        updateHeader: (sessionId, patch) => store.updateHeader(sessionId, patch),
+        updateStatus: async () => {},
+        appendTurnState: async () => {},
+      },
+    });
+
+    const begin = await run.begin();
+    run.stop('stop_button');
+    await run.finalize();
+
+    const header = await runStore.readRun(session.id, run.runId);
+    expect(header.status).toBe('cancelled');
+    expect(header.failureClass).toBeUndefined();
+    expect(header.abortSource).toBe('renderer.stop_button');
+    const terminalEvents = (await runStore.readRuntimeEvents(session.id, run.runId)).filter(isTerminalRuntimeEvent);
+    expect(terminalEvents).toHaveLength(1);
+    expect(terminalEvents[0]?.status).toBe('aborted');
+    expect(terminalEvents[0]?.invocationId).toBe(begin.initialRuntimeEvent.invocationId);
+    expect(terminalEvents[0]?.actions?.stateDelta?.abortSource).toBe('renderer.stop_button');
+    expect(terminalEvents[0]?.actions?.stateDelta?.failureClass).toBeUndefined();
+    expect(terminalEvents[0]?.actions?.stateDelta?.recovered).toBeUndefined();
     await new RuntimeReadModel({ runStore, runtimeEventStore: runStore }).getSessionView(session.id);
   });
 

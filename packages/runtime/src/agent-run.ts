@@ -786,6 +786,7 @@ export class AgentRun {
     const runStore = this.input.runStore;
     const runtimeEventStore = this.input.runtimeEventStore;
     if (!runStore || !this.runStoreAvailable || !runtimeEventStore || !this.runtimeEventStoreAvailable) return;
+    const fallbackStatus = this.stopped || finalStatus?.status === 'aborted' ? 'cancelled' : 'failed';
     const fallbackFailureClass = 'missing_terminal_event';
     const fallbackFailureMessage = this.failureMessage ?? 'run finalized without a terminal RuntimeEvent';
     try {
@@ -808,12 +809,13 @@ export class AgentRun {
           : {}),
         ...(this.failureMessage ? { failureMessage: this.failureMessage } : {}),
         ...(this.abortSource ? { abortSource: this.abortSource } : {}),
-        fallbackFailureClass,
-        fallbackRecoveryReason: fallbackFailureClass,
-        fallbackFailureMessage,
+        fallbackStatus,
+        fallbackInvocationId: this.runId,
+        ...(fallbackStatus === 'failed' ? { fallbackFailureClass, fallbackFailureMessage } : {}),
+        ...(fallbackStatus === 'cancelled' ? { fallbackAbortSource: this.abortSource ?? 'user_stop' } : {}),
         allowHeaderCommitFailure: true,
       });
-      if (result.createdTerminalEvent) {
+      if (result.createdTerminalEvent && result.status === 'failed') {
         this.failureClass = result.failureClass ?? fallbackFailureClass;
         this.failureMessage = fallbackFailureMessage;
       }
