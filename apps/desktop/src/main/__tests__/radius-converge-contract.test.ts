@@ -190,40 +190,84 @@ const COMPONENT_RADIUS: ComponentRadiusCheck[] = [
   { file: 'packages/ui/src/session-list-panel.tsx', name: 'rowActionVariants', tier: 'control' },
 ];
 
+/** Extract the body of a component declaration by brace-matching from the
+ *  point where `name` is declared.
+ *
+ *  - `const X = cva(...)` / `const X = forwardRef<...>(...)`: match the
+ *    outermost `(...)` call, tracking nested parens.
+ *  - `function X(...) { ... }`: skip the parameter `(...)`, then match
+ *    the function body `{ ... }`.
+ *
+ *  This avoids relying on `\nexport` lookahead which is fragile when
+ *  multiple exports share a line or when no export follows. */
+function extractComponentBlock(src: string, name: string): string | null {
+  const re = new RegExp(
+    `(?:const\\s+${name}\\s*=|export\\s+const\\s+${name}\\s*=|function\\s+${name}\\b)`,
+  );
+  const m = re.exec(src);
+  if (!m) return null;
+  let i = m.index + m[0].length;
+  const isFunction = /function\s/.test(m[0]);
+
+  // Skip to the first `(` (parameter list or call expression).
+  while (i < src.length && src[i] !== '(') i++;
+  if (i >= src.length) return src.slice(m.index);
+
+  // Match the (...) pair.
+  i = matchPair(src, i, '(', ')');
+  if (i < 0) return src.slice(m.index);
+
+  if (isFunction) {
+    // For function declarations, the body is the next `{ ... }`.
+    while (i < src.length && src[i] !== '{') i++;
+    if (i >= src.length) return src.slice(m.index);
+    i = matchPair(src, i, '{', '}');
+    if (i < 0) return src.slice(m.index);
+  }
+  return src.slice(m.index, i);
+}
+
+/** Match a balanced pair starting at `src[start]` (which must be `open`).
+ *  Returns the index *after* the closing `close`, or -1 if unbalanced. */
+function matchPair(src: string, start: number, open: string, close: string): number {
+  let depth = 0;
+  for (let i = start; i < src.length; i++) {
+    if (src[i] === open) depth++;
+    else if (src[i] === close) {
+      depth--;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return -1;
+}
+
 function checkComponentTier(src: string, check: ComponentRadiusCheck): string[] {
   const offenders: string[] = [];
-  const re = new RegExp(
-    `(?:const\\s+${check.name}\\s*=|export\\s+const\\s+${check.name}\\s*=|function\\s+${check.name}\\b)[\\s\\S]*?(?=\\nexport\\s|$)`,
-    'g',
-  );
+  const block = extractComponentBlock(src, check.name);
+  if (!block) {
+    offenders.push(`${check.file}: ${check.name} not found in source — stale contract entry or renamed component`);
+    return offenders;
+  }
   const expected = TIER_CLASS[check.tier];
   const expectedTokens = TIER_TOKENS[check.tier];
   const forbidden = classesForOtherTiers(check.tier);
-  let matched = 0;
-  for (const m of src.matchAll(re)) {
-    matched++;
-    const block = m[0];
-    const hasExpected = expected.some((c) => block.includes(c));
-    if (!hasExpected) {
-      offenders.push(`${check.file}: ${check.name} must use ${expected.join(' or ')} (${check.tier}), found none`);
-    }
-    for (const bad of forbidden) {
-      if (block.includes(bad)) {
-        offenders.push(`${check.file}: ${check.name} must not use ${bad} (wrong tier for ${check.tier})`);
-      }
-    }
-    // Extract every --radius-* reference in the block and verify it belongs
-    // to the expected tier. Catches calc() and arbitrary value paths that
-    // the class-based check misses.
-    const blockTokens = [...block.matchAll(/--radius-[\w-]+/g)].map((t) => t[0]);
-    for (const tok of blockTokens) {
-      if (!expectedTokens.has(tok)) {
-        offenders.push(`${check.file}: ${check.name} references ${tok} which is not a ${check.tier} tier token`);
-      }
+  const hasExpected = expected.some((c) => block.includes(c));
+  if (!hasExpected) {
+    offenders.push(`${check.file}: ${check.name} must use ${expected.join(' or ')} (${check.tier}), found none`);
+  }
+  for (const bad of forbidden) {
+    if (block.includes(bad)) {
+      offenders.push(`${check.file}: ${check.name} must not use ${bad} (wrong tier for ${check.tier})`);
     }
   }
-  if (matched === 0) {
-    offenders.push(`${check.file}: ${check.name} not found in source — stale contract entry or renamed component`);
+  // Extract every --radius-* reference in the block and verify it belongs
+  // to the expected tier. Catches calc() and arbitrary value paths that
+  // the class-based check misses.
+  const blockTokens = [...block.matchAll(/--radius-[\w-]+/g)].map((t) => t[0]);
+  for (const tok of blockTokens) {
+    if (!expectedTokens.has(tok)) {
+      offenders.push(`${check.file}: ${check.name} references ${tok} which is not a ${check.tier} tier token`);
+    }
   }
   return offenders;
 }
@@ -303,6 +347,8 @@ describe('radius token governance (#406 gap 4)', () => {
       '.providerLogo': '--radius-surface',
       '.maka-browser-address': '--radius-control',
       '.maka-plan-shell': '--radius-surface',
+      '.maka-plan-card': '--radius-surface',
+      '.maka-plan-template-strip[data-layout="cards"] .maka-plan-template-card': '--radius-surface',
       '.maka-module-main .maka-daily-review-panel': '--radius-surface',
       '.maka-daily-review-info': '--radius-surface',
       '.maka-daily-review-archive-body': '--radius-surface',

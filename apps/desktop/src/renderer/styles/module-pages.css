@@ -166,7 +166,7 @@
   align-items: start;
   gap: 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-surface);
   background: var(--background);
   box-shadow: none;
   padding: 12px;
@@ -553,7 +553,7 @@
   gap: 10px;
   position: relative;
   border: 1px solid var(--foreground-8);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-surface);
   background: var(--background);
   padding: 14px 16px 13px;
   min-height: 148px;
