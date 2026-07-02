@@ -1,6 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import {
-  BotBrandIcon,
   Bot,
   X,
   type LucideProps,
@@ -17,6 +16,7 @@ import type { BotStatus, WechatBridgeQrCodeResult } from '@maka/runtime';
 import { BOT_PROVIDERS, MAX_ALLOWED_USER_IDS, parseAllowedUserIdsFromText } from '@maka/core/settings';
 import {
   BOT_BRAND,
+  BotBrandLogo as BotBrandMark,
   Button,
   DialogContent,
   DialogRoot,
@@ -44,9 +44,9 @@ import { settingsActionErrorMessage } from './settings-error-copy';
  *   用的真实对应公司的图标。" → swap the monogram for the real brand
  *   icon, the same way model providers already use their actual logos.
  *
- * Implementation: `iconId` references a vendored `maka-bot:*` SVG body.
- * The icons render synchronously offline; `glyph` stays as the defensive
- * fallback if a local id is missing.
+ * Implementation: `BotBrandMark` renders a local provider SVG. The icons
+ * render synchronously offline; `glyph` stays only as metadata for text
+ * fallback contexts.
  *
  * `configDocUrl` is the official developer doc surfaced inline as a
  * "查看配置文档 →" link.
@@ -147,17 +147,15 @@ function BotBrandLogo(props: {
           the brand-color disc + white official mark (Telegram blue
           gradient + paper plane, WeChat green + double-bubble,
           Discord blurple + Clyde, Feishu 3-color staircase, …) —
-          see `packages/ui/src/bot-brand-icons.ts`. width/height
+          see `packages/ui/src/bot-brand-logo.tsx`. width/height
           100% so the brand tile fills `.settingsBotLogo` edge-to-
           edge; the parent plate is transparent so the brand-color
-          disc IS the visible tile. `brand.glyph` (`微` / `企` / etc.)
-          fallback only renders if the local SVG fails to register. */}
-      <BotBrandIcon
-        iconId={brand.iconId}
+          disc IS the visible tile. */}
+      <BotBrandMark
+        provider={props.provider}
         width="100%"
         height="100%"
         aria-hidden="true"
-        fallback={<>{brand.glyph}</>}
       />
       {props.support !== 'planned' && (
         <span className="settingsBotLogoStatusDot" data-tone={copy.tone} aria-hidden="true" />

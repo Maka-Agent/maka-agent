@@ -3,14 +3,16 @@
  *
  * Business code imports named icons from `@maka/ui/icons`; the seam is
  * allowed to pick the underlying library. Generic UI icons come from
- * `lucide-react`; bot/channel brand icons render from vendored SVG
- * bodies without Iconify runtime code.
+ * `lucide-react`; bot/channel brand icons render as local SVG React
+ * components without Iconify runtime code.
  */
 
 import { strict as assert } from 'node:assert';
 import { readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 const REPO_ROOT = resolve(import.meta.dirname, '../../../../..');
 const ICONS_FILE = resolve(REPO_ROOT, 'packages/ui/src/icons.tsx');
@@ -124,20 +126,29 @@ describe('icon library seam contract', () => {
     assert.deepEqual(
       offenders,
       [],
-      `Iconify runtime packages are not needed: generic icons use lucide-react and bot brands use vendored SVG bodies:\n  ${offenders.join('\n  ')}`,
+      `Iconify runtime packages are not needed: generic icons use lucide-react and bot brands use local SVG components:\n  ${offenders.join('\n  ')}`,
     );
   });
 
-  it('renders bot brand icons through a local BotBrandIcon component', async () => {
+  it('renders every bot provider with a local SVG logo component', async () => {
     const source = await readFile(ICONS_FILE, 'utf8');
     const botBrand = await readFile(resolve(REPO_ROOT, 'packages/ui/src/bot-brand.ts'), 'utf8');
+    const ui = await import(resolve(REPO_ROOT, 'packages/ui/dist/index.js'));
+    const providers = ['telegram', 'feishu', 'wecom', 'wechat', 'discord', 'dingtalk', 'qq'] as const;
 
-    assert.match(source, /export function BotBrandIcon/, 'icons.tsx must expose a local bot brand SVG renderer');
-    assert.match(source, /MAKA_BOT_ICON_BODIES/, 'BotBrandIcon must read vendored SVG bodies');
-    assert.match(source, /dangerouslySetInnerHTML/, 'BotBrandIcon renders trusted vendored SVG bodies inline');
+    assert.equal(typeof ui.BotBrandLogo, 'function', '@maka/ui must expose a provider-based bot brand logo component');
+    assert.doesNotMatch(source, /BotBrandIcon/, 'the icon seam must not expose a generic bot icon registry API');
     assert.doesNotMatch(source, /IconifyIcon/, 'icons.tsx must not keep the old IconifyIcon API');
     assert.doesNotMatch(botBrand, /iconifyId/, 'bot brand metadata must not keep Iconify naming');
-    assert.match(botBrand, /iconId:\s*'maka-bot:/, 'bot brand metadata must still point at local maka-bot ids');
+    assert.doesNotMatch(botBrand, /iconId/, 'bot brand metadata should not leak local icon registry ids to callers');
+
+    for (const provider of providers) {
+      const brand = ui.BOT_BRAND[provider];
+      const html = renderToStaticMarkup(createElement(ui.BotBrandLogo, { provider, width: 24, height: 24, 'aria-hidden': true }));
+      assert.match(html, /<svg\b/, `${provider} must render a local SVG logo`);
+      assert.match(html, new RegExp(`data-provider="${provider}"`), `${provider} logo should identify its provider for debugging and snapshots`);
+      assert.doesNotMatch(html, new RegExp(`>${brand.glyph}<`), `${provider} must not fall back to its glyph placeholder`);
+    }
   });
 
   it('package manifests do not depend on Iconify icon runtimes', async () => {

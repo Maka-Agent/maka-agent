@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   ArchiveRestore,
-  BotBrandIcon,
   Check,
   Clock,
   Copy,
@@ -15,7 +14,7 @@ import {
   Trash2,
   X,
 } from './icons.js';
-import { BOT_BRAND } from './bot-brand.js';
+import { BotBrandLogo } from './bot-brand-logo.js';
 import { SettingsSelect, type SettingsSelectOption } from './primitives/settings-select.js';
 import type {
   BotProvider,
@@ -771,14 +770,12 @@ export function PlanReminderPanel(props: {
                       disabled={formInteractionDisabled}
                       ariaLabel="平台"
                       options={BOT_DELIVERY_PROVIDERS.map((provider) => {
-                        const brand = BOT_BRAND[provider];
                         const icon = (
-                          <BotBrandIcon
-                            iconId={brand.iconId}
+                          <BotBrandLogo
+                            provider={provider}
                             width="100%"
                             height="100%"
                             aria-hidden="true"
-                            fallback={<>{brand.glyph}</>}
                           />
                         );
                         return [provider, botDisplayLabel(provider), icon] as const;

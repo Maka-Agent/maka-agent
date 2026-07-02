@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ElementType } from 'react';
 import * as Icons from '../src/icons.js';
-import { MAKA_BOT_ICON_BODIES } from '../src/bot-brand-icons.js';
+import { BOT_BRAND, BotBrandLogo } from '../src/index.js';
 
 const meta = {
   title: 'Design System/Icons',
@@ -17,7 +17,7 @@ interface IconEntry {
   Comp: ElementType<{ size?: number | string; strokeWidth?: number | string; 'aria-hidden'?: boolean }>;
 }
 
-const OMITTED_RUNTIME_EXPORTS = new Set(['BotBrandIcon']);
+const OMITTED_RUNTIME_EXPORTS = new Set<string>();
 
 function isIconComponent(value: unknown): value is IconEntry['Comp'] {
   return typeof value === 'function' || (typeof value === 'object' && value !== null);
@@ -28,7 +28,7 @@ const LUCIDE_ICONS: IconEntry[] = Object.entries(Icons)
   .map(([name, value]) => ({ name, Comp: value as IconEntry['Comp'] }))
   .sort((a, b) => a.name.localeCompare(b.name));
 
-const BOT_BRAND_ICONS = Object.keys(MAKA_BOT_ICON_BODIES).sort();
+const BOT_BRAND_PROVIDERS = ['telegram', 'feishu', 'wecom', 'wechat', 'discord', 'dingtalk', 'qq'] as const satisfies ReadonlyArray<keyof typeof BOT_BRAND>;
 
 export const LucideIcons: Story = {
   render: () => (
@@ -74,13 +74,13 @@ export const BotBrandIcons: Story = {
       <div style={{ display: 'grid', gap: 4 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Bot Brand Icons</h2>
         <p style={{ color: 'var(--foreground-60)', fontSize: 12, margin: 0, lineHeight: 1.5 }}>
-          {BOT_BRAND_ICONS.length} 个 IM 渠道品牌图标,内联 SVG,零运行时 CDN 依赖。
+          {BOT_BRAND_PROVIDERS.length} 个 IM 渠道品牌图标,本地 React SVG,零运行时 CDN 依赖。
         </p>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-        {BOT_BRAND_ICONS.map((name) => (
+        {BOT_BRAND_PROVIDERS.map((provider) => (
           <div
-            key={name}
+            key={provider}
             style={{
               display: 'grid',
               gap: 6,
@@ -91,8 +91,8 @@ export const BotBrandIcons: Story = {
               textAlign: 'center',
             }}
           >
-            <Icons.BotBrandIcon iconId={`maka-bot:${name}`} width={32} height={32} />
-            <code style={{ color: 'var(--foreground-70)', fontSize: 10 }}>{name}</code>
+            <BotBrandLogo provider={provider} width={32} height={32} />
+            <code style={{ color: 'var(--foreground-70)', fontSize: 10 }}>{provider}</code>
           </div>
         ))}
       </div>

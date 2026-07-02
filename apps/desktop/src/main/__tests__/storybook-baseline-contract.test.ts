@@ -195,9 +195,11 @@ describe('Storybook baseline contract', () => {
     assert.match(story, /export const LucideIcons: Story/);
     assert.match(story, /lucide-react re-export/, 'Icons story must explain the Lucide runtime seam');
     assert.match(story, /OMITTED_RUNTIME_EXPORTS/);
-    assert.match(story, /MAKA_BOT_ICON_BODIES/);
-    assert.match(story, /Object\.keys\(MAKA_BOT_ICON_BODIES\)/);
-    assert.match(story, /maka-bot:/);
+    assert.match(story, /BotBrandLogo/);
+    assert.match(story, /BOT_BRAND/);
+    for (const provider of ['telegram', 'feishu', 'wecom', 'wechat', 'discord', 'dingtalk', 'qq']) {
+      assert.match(story, new RegExp(`['"]${provider}['"]`), `${provider} must appear in the bot brand icon story`);
+    }
   });
 
   it('removes the temporary Phosphor vs Lucide icon comparison story after the Lucide cutover', () => {

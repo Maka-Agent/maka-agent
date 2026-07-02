@@ -4,39 +4,10 @@
  *
  * Business code imports icons from `@maka/ui/icons`; this file decides
  * which icon set backs those names. Generic UI icons now come directly
- * from `lucide-react`. Bot/channel brand icons render from vendored SVG
- * bodies via `BotBrandIcon`.
+ * from `lucide-react`. Bot/channel brand logos live in
+ * `bot-brand-logo.tsx` because they are fixed product assets, not generic
+ * UI icons.
  */
-
-import type { ReactNode, SVGProps } from 'react';
-import {
-  MAKA_BOT_ICON_BODIES,
-  MAKA_BOT_ICON_PREFIX,
-} from './bot-brand-icons.js';
-
-export interface BotBrandIconProps extends Omit<SVGProps<SVGSVGElement>, 'dangerouslySetInnerHTML'> {
-  iconId: string;
-  fallback?: ReactNode;
-}
-
-export function BotBrandIcon({ iconId, fallback = null, width = '1em', height = '1em', ...props }: BotBrandIconProps): ReactNode {
-  const prefix = `${MAKA_BOT_ICON_PREFIX}:`;
-  const name = iconId.startsWith(prefix) ? iconId.slice(prefix.length) : '';
-  const icon = MAKA_BOT_ICON_BODIES[name];
-  if (!icon) return fallback;
-
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={width}
-      height={height}
-      viewBox={`${icon.left ?? 0} ${icon.top ?? 0} ${icon.width ?? 24} ${icon.height ?? 24}`}
-      focusable="false"
-      dangerouslySetInnerHTML={{ __html: icon.body }}
-      {...props}
-    />
-  );
-}
 
 export type { LucideIcon, LucideProps } from 'lucide-react';
 

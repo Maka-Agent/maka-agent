@@ -26,6 +26,7 @@ export * from './utils.js';
 // by our shared component-style wrappers in `./ui.js` re-export here so
 // consumers can `import { Alert, Empty, ... } from '@maka/ui'`.
 export * from './bot-brand.js';
+export * from './bot-brand-logo.js';
 export * from './primitives/alert.js';
 // `markerVariants` / `streamVariants` / `toolVariants` / `LiveIndicator` are
 // deliberately NOT re-exported here: they are internal styling tables / a
