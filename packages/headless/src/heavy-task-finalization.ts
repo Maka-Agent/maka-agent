@@ -1,4 +1,4 @@
-import { isAcceptedHeavyTaskSelfCheck } from './heavy-task-self-check.js';
+import { hasBlockingHeavyTaskSelfCheckWorkspaceDelta, isAcceptedHeavyTaskSelfCheck } from './heavy-task-self-check.js';
 import type {
   AutonomousDecision,
   AutonomousResultTaxonomy,
@@ -121,6 +121,9 @@ function semanticStatusFromInput(input: HeavyTaskCompletionInput): HeavyTaskComp
   }
   if (selfCheck.status !== 'pass') {
     return { ...base, status: 'incomplete', reason: `latest self-check status is ${selfCheck.status}` };
+  }
+  if (hasBlockingHeavyTaskSelfCheckWorkspaceDelta(selfCheck)) {
+    return { ...base, status: 'incomplete', reason: 'latest self-check reports uncleaned workspace side effects' };
   }
   if (!todos) {
     return { ...base, status: 'incomplete', reason: 'missing latest heavy-task todos' };
