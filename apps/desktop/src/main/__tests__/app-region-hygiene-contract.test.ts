@@ -116,6 +116,33 @@ describe('app-region hygiene contract (PR-SIDEBAR-IA-0 Phase 3 P0 fixup v5)', ()
       }
     }
   });
+
+  it('topbar chrome buttons and their icon subtrees carve out no-drag hit regions', async () => {
+    const stylesSources = [
+      ['renderer CSS', await readRendererContractCss()],
+      [TOKENS_PATH, await readFile(TOKENS_PATH, 'utf8')],
+    ] as const;
+    const selectors = new Set<string>();
+    for (const [, src] of stylesSources) {
+      for (const rule of findRulesWithDeclaration(src, '-webkit-app-region: no-drag')) {
+        for (const selector of rule.selector.split(',')) {
+          selectors.add(selector.trim());
+        }
+      }
+    }
+
+    for (const selector of [
+      '.maka-shell-topbar-button',
+      '.maka-shell-topbar-button *',
+      '.maka-workspace-icon-action',
+      '.maka-workspace-icon-action *',
+    ]) {
+      assert.ok(
+        selectors.has(selector),
+        `${selector} must declare \`-webkit-app-region: no-drag\` so clicks on topbar icons are not treated as titlebar drags`,
+      );
+    }
+  });
 });
 
 /**

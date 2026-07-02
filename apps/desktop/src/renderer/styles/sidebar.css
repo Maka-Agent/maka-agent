@@ -117,7 +117,6 @@
   height: var(--maka-sidebar-topbar-button-size);
   border-radius: 6px;
   color: var(--foreground-70);
-  -webkit-app-region: no-drag;
 }
 
 .maka-shell-topbar-button:hover {
@@ -244,6 +243,13 @@
   height: 24px;
   border-radius: 6px;
   color: var(--foreground-60);
+}
+
+.maka-shell-topbar-button,
+.maka-shell-topbar-button *,
+.maka-workspace-icon-action,
+.maka-workspace-icon-action * {
+  -webkit-app-region: no-drag;
 }
 
 .maka-workspace-icon-action:hover {
