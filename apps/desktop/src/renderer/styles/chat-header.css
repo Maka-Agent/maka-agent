@@ -7,7 +7,7 @@
     margin-bottom: 3px;
     border-radius: var(--radius-pill);
     border: 1px solid transparent;
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     font-weight: 600;
     letter-spacing: 0.02em;
     white-space: nowrap;
@@ -48,7 +48,7 @@
     padding: 1px 7px;
     border-radius: var(--radius-pill);
     border: 1px solid transparent;
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     font-weight: 600;
     line-height: 1.4;
     /* Spacing from neighboring badges comes from the parent
@@ -192,14 +192,14 @@
   .maka-error-copy h2 {
     margin: 0;
     color: var(--foreground);
-    font-size: 14px;
+    font-size: var(--font-size-ui);
     font-weight: 600;
   }
 
   .maka-error-copy p {
     margin: 0;
     color: var(--foreground-70);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     line-height: 1.45;
     max-width: 56ch;
   }
@@ -214,7 +214,7 @@
     color: var(--foreground-80);
     overflow: auto;
     font-family: var(--font-mono);
-    font-size: 11.5px;
+    font-size: var(--font-size-ui);
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
@@ -251,7 +251,7 @@
   border-radius: var(--radius-surface);
   background: oklch(from var(--info) l c h / 0.10);
   color: var(--info-text);
-  font-size: 12.5px;
+  font-size: var(--font-size-ui);
   line-height: 1.5;
 }
 
@@ -343,14 +343,14 @@
 
 .maka-toast-copy strong {
   color: var(--foreground);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   text-wrap: balance;
 }
 
 .maka-toast-copy small {
   color: var(--foreground-60);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   line-height: 1.4;
   text-wrap: pretty;
 }
@@ -362,7 +362,7 @@
   background: var(--background);
   color: var(--accent);
   padding: 3px 9px;
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   transition:
     background-color var(--duration-base) var(--ease-out-strong),
@@ -439,7 +439,7 @@
   gap: 4px;
   margin-bottom: 4px;
   color: var(--foreground-50);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
@@ -455,7 +455,7 @@
 .maka-help-section h3 {
   margin: 0 0 4px;
   color: var(--foreground-70);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
@@ -474,7 +474,7 @@
 
 .maka-help-section dt {
   color: var(--foreground-80);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   line-height: 1.45;
 }
 
@@ -494,7 +494,7 @@
 
 .maka-help-plus {
   color: var(--foreground-40);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
 }
 
 .maka-palette-backdrop {
@@ -536,7 +536,7 @@
 
 .maka-palette-input {
   color: var(--foreground);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   line-height: 1.4;
   -webkit-user-select: text;
   user-select: text;
@@ -551,7 +551,7 @@
   align-items: center;
   gap: 6px;
   color: var(--foreground-50);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   white-space: nowrap;
 }
 
@@ -575,7 +575,7 @@
   box-shadow: inset 0 1px 0 oklch(from var(--background) l c h / 0.45);
   color: var(--foreground-60);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   line-height: 1;
 }
@@ -603,7 +603,7 @@
 .maka-palette-group-label {
   padding: 4px 8px 3px;
   color: var(--foreground-50);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
@@ -623,7 +623,7 @@
   color: var(--foreground);
   padding: 5px 8px;
   text-align: left;
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   cursor: default;
   transform: translateY(0);
   transition:
@@ -703,7 +703,7 @@
   align-items: center;
   gap: 4px;
   color: var(--foreground-50);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
@@ -724,7 +724,7 @@
   border-top: 1px solid var(--border);
   background: var(--foreground-2);
   color: var(--foreground-50);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
 }
 
 .maka-palette-footer .maka-shortcut-group,
@@ -739,7 +739,7 @@
 .maka-palette-footer .maka-shortcut-kbd {
   padding: 1px 5px;
   background: var(--background);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
 }
 
 /* PR-UI-1 (@yuejing 2026-05-22): unified hero chrome.

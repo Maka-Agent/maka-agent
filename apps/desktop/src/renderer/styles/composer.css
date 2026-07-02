@@ -72,7 +72,7 @@
   background: transparent;
   color: var(--foreground-50);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   line-height: 1.25;
   text-align: left;
   transition: color var(--duration-quick) var(--ease-out-strong);
@@ -115,7 +115,7 @@
   align-items: center;
   gap: 8px;
   color: var(--foreground-70);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
 }
 
 /* Streaming indicator — 3-dot typing pattern (the center dot is the
@@ -228,7 +228,7 @@
   gap: 5px;
   margin-top: 10px;
   color: var(--foreground-70);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
 }
 
 /* PR30 Permission dialog: per-reason iconography + per-tool summary block */
@@ -269,7 +269,7 @@
 
 .maka-permission-tool {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   padding: 0 5px;
   border-radius: var(--radius-control);
   background: var(--foreground-5);
@@ -279,7 +279,7 @@
 
 .maka-permission-age {
   color: var(--foreground-50);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   white-space: nowrap;
 }
 
@@ -304,7 +304,7 @@
 .maka-permission-line {
   margin: 0;
   color: var(--foreground-80);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
 }
 
 .maka-permission-path {
@@ -313,7 +313,7 @@
 
 .maka-permission-path code {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   padding: 1px 5px;
   border-radius: var(--radius-control);
   background: var(--foreground-5);
@@ -331,7 +331,7 @@
 .maka-permission-meta {
   margin: 0;
   color: var(--foreground-60);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
 }
 
 .maka-permission-hint {
@@ -339,7 +339,7 @@
   background: oklch(from var(--info) l c h / 0.10);
   color: var(--info-text);
   padding: 6px 10px;
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   line-height: 1.4;
 }
 
@@ -349,7 +349,7 @@
 .maka-permission-danger-note {
   margin: 0;
   color: var(--destructive);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   line-height: 1.5;
   font-weight: 600;
 }

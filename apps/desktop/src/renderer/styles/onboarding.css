@@ -40,7 +40,7 @@
   margin: 0;
   max-width: 32ch;
   color: var(--foreground);
-  font-size: 18px;
+  font-size: 1.2em;
   font-weight: 650;
   line-height: 1.25;
   letter-spacing: 0;
@@ -73,7 +73,7 @@
 .maka-firstrun-title {
   margin: 0;
   max-width: none;
-  font-size: 26px;
+  font-size: 1.7333em;
   font-weight: 680;
   line-height: 1.2;
   letter-spacing: -0.01em;
@@ -82,7 +82,7 @@
 
 .maka-firstrun-sub {
   margin: 8px 0 0;
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   line-height: 1.5;
   color: var(--foreground-50);
 }
@@ -112,14 +112,14 @@
   width: 21px;
   height: 21px;
   border-radius: var(--radius-pill);
-  font-size: 11.5px;
+  font-size: var(--font-size-ui);
   font-weight: 650;
   border: 1.5px solid var(--border-strong);
   color: var(--foreground-50);
 }
 
 .maka-firstrun-step-label {
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   color: var(--foreground-50);
   white-space: nowrap;
 }
@@ -165,12 +165,12 @@
   margin: 30px 0 12px;
 }
 .maka-firstrun-pick-label {
-  font-size: 13.5px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   color: var(--foreground);
 }
 .maka-firstrun-pick-hint {
-  font-size: 12.5px;
+  font-size: var(--font-size-ui);
   color: var(--foreground-50);
 }
 
@@ -195,7 +195,7 @@
 /* --- "常用" tag inside a provider row title --- */
 .maka-firstrun-tag {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   line-height: 1;
   color: var(--accent);
@@ -264,7 +264,7 @@
   border-radius: var(--radius-pill);
   background: var(--background-elevated);
   color: var(--foreground-70);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
 }
 
@@ -286,14 +286,14 @@
 
 .maka-onboarding-setup-step-copy strong {
   color: var(--foreground);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   line-height: 1.2;
 }
 
 .maka-onboarding-setup-step-copy small {
   color: var(--foreground-60);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   line-height: 1.3;
 }
 
@@ -303,7 +303,7 @@
   border-radius: var(--radius-pill);
   background: var(--background-elevated);
   color: var(--foreground-60);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -336,7 +336,7 @@
      warm/amber for `warning` (info family), shifts destructive
      for `blocked` so a stranded user immediately sees gravity. */
 .maka-onboarding-setup header h1 {
-  font-size: 22px;
+  font-size: 1.4667em;
 }
 .maka-onboarding-setup header p {
   margin-top: 8px;
@@ -362,7 +362,7 @@
 
 .maka-onboarding-slug {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   padding: 2px 6px;
   /* PR-UI-LAYOUT-25: slug radius 6 → 8 to join the form input
    * family (same chrome as inline code badges). */
@@ -376,7 +376,7 @@
    surface stays self-contained. */
 .maka-onboarding-ready header h1 {
   font-family: Georgia, "Times New Roman", Times, serif;
-  font-size: 29px;
+  font-size: 1.9333em;
   font-weight: 680;
   letter-spacing: 0;
   line-height: 1.18;
@@ -385,7 +385,7 @@
   /* Slightly larger subtitle so it carries the meaning without
      reading like fine print under the now-heavier h1. */
   margin-top: 6px;
-  font-size: 14px;
+  font-size: var(--font-size-ui);
   line-height: 1.5;
   max-width: 56ch;
 }
@@ -442,7 +442,7 @@
   min-height: 90px;
   color: var(--foreground);
   font: inherit;
-  font-size: 15px;
+  font-size: var(--font-size-base);
   line-height: 1.5;
   outline: none;
   border: none !important;
@@ -477,7 +477,7 @@
   margin-bottom: 0;
   padding-inline: 0;
   color: var(--foreground-50);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   line-height: 1.4;
   font-style: italic;
 }
@@ -495,7 +495,7 @@
   padding: 4px 8px;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
-  font-size: 0.78rem;
+  font-size: var(--font-size-ui);
   line-height: 1;
 }
 .maka-onboarding-quickchat-submit {
@@ -556,7 +556,7 @@
 }
 
 .maka-first-run-task-suggestions-header > strong {
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   color: var(--foreground-50);
   font-weight: 600;
 }
@@ -588,7 +588,7 @@
   height: auto;
   min-height: 38px;
   padding: 9px 18px;
-  font-size: 12.5px;
+  font-size: var(--font-size-ui);
   line-height: 1.2;
   text-align: center;
   box-shadow: 0 1px 2px oklch(from var(--foreground) l c h / 0.04);
@@ -623,7 +623,7 @@
   align-items: center;
   gap: 6px;
   overflow: hidden;
-  font-size: 0.875rem;
+  font-size: var(--font-size-ui);
   font-weight: 500;
   min-width: 0;
 }
@@ -679,7 +679,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--foreground-50);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
@@ -807,7 +807,7 @@
 .maka-list-group-count {
   font-variant-numeric: tabular-nums;
   color: var(--foreground-30);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   font-weight: 500;
 }
 
@@ -823,7 +823,7 @@
    * "已过期" is a degraded-state signal, not informational. */
   background: oklch(from var(--warning, var(--info)) l c h / 0.18);
   color: var(--warning-text, var(--info-text));
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
   line-height: 1.4;
 }
@@ -867,14 +867,14 @@
 
 .maka-empty-state-title {
   color: var(--foreground);
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
 }
 
 .maka-empty-state-body {
   max-width: 30ch;
   color: var(--foreground-40);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   line-height: 1.4;
   text-wrap: pretty;
 }
@@ -899,19 +899,19 @@
 
 .maka-session-list .maka-session-empty-state .maka-empty-state-title {
   color: var(--foreground-50);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   font-weight: 600;
 }
 
 .maka-session-list .maka-session-empty-state .maka-empty-state-body {
   max-width: 22ch;
   color: var(--foreground-40);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
 }
 
 .maka-empty-state-code {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   padding: 1px 5px;
   border-radius: var(--radius-control);
   background: var(--foreground-5);

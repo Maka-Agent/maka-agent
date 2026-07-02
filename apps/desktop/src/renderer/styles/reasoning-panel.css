@@ -27,7 +27,7 @@
     align-items: center;
     gap: 6px;
     padding: 4px 8px;
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     font-weight: 600;
     letter-spacing: 0.02em;
     color: var(--info-text);
@@ -87,7 +87,7 @@
      dropped content. Same family as the A3 tool-output truncated
      pill: warning tone, rounded rect, cursor:help. */
   .maka-reasoning-panel-truncated[data-truncated="true"] {
-    font-size: 10px;
+    font-size: var(--font-size-ui);
     color: var(--warning-text, var(--info-text));
     border: 1px solid oklch(from var(--warning) l c h / 0.24);
     background: oklch(from var(--warning) l c h / 0.05);
@@ -102,7 +102,7 @@
      the same visual family. */
 
   .maka-reasoning-panel-chevron {
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     line-height: 1;
     color: var(--foreground-50);
     transition: transform var(--duration-base) var(--ease-out-strong);
@@ -119,7 +119,7 @@
     background: transparent;
     color: var(--foreground-70);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     line-height: 1.55;
     max-height: 280px;
     overflow-y: auto;

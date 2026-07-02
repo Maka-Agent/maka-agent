@@ -60,7 +60,7 @@
   .settingsQuotaRow {
     display: flex;
     justify-content: space-between;
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     font-variant-numeric: tabular-nums;
   }
 
@@ -80,7 +80,7 @@
     background: var(--background);
     color: var(--foreground);
     font-family: var(--mono-font, monospace);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     resize: vertical;
   }
   .settingsErrorText {
@@ -108,7 +108,7 @@
     border-radius: var(--radius-control);
     background: oklch(from var(--accent) l c h / 0.14);
     color: var(--accent);
-    font-size: 10px;
+    font-size: var(--font-size-ui);
     font-weight: 700;
     letter-spacing: 0;
   }
@@ -128,14 +128,14 @@
 
   .settingsConnectionRowText strong {
     color: var(--foreground);
-    font-size: 13px;
+    font-size: var(--font-size-ui);
     font-weight: 600;
   }
 
   .settingsConnectionRowText small {
     color: var(--foreground-50);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
   }
 
   .settingsConnectionBadge {
@@ -144,7 +144,7 @@
     min-height: 20px;
     padding: 2px 8px;
     border-radius: var(--radius-control);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     font-weight: 600;
     letter-spacing: 0;
     background: var(--foreground-5);
@@ -174,7 +174,7 @@
   .settingsConnectionDetail {
     margin: 0;
     color: var(--foreground-70);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     line-height: 1.45;
   }
 
@@ -198,13 +198,13 @@
 
   .settingsAuthContractText strong {
     color: var(--foreground);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     font-weight: 650;
   }
 
   .settingsAuthContractText span {
     color: var(--foreground-60);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     line-height: 1.45;
   }
 
@@ -215,7 +215,7 @@
     min-height: 20px;
     border-radius: var(--radius-control);
     white-space: nowrap;
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     font-weight: 650;
   }
 
@@ -254,7 +254,7 @@
     display: flex;
     gap: 12px;
     color: var(--foreground-50);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     font-family: var(--font-mono);
   }
 
@@ -315,7 +315,7 @@
     display: block;
     margin-top: 4px;
     color: var(--foreground-50);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     line-height: 1.4;
   }
 

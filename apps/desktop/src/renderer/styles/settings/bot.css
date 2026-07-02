@@ -38,7 +38,7 @@
 }
 
 .settingsBotList em {
-  font-size: 10px;
+  font-size: var(--font-size-ui);
   font-style: normal;
   color: var(--foreground-50);
 }
@@ -90,7 +90,7 @@
     place-items: center;
     background: transparent;
     color: var(--bot-brand-color, var(--accent));
-    font-size: 13px;
+    font-size: var(--font-size-ui);
     font-weight: 700;
     letter-spacing: 0;
     flex-shrink: 0;
@@ -104,7 +104,7 @@
   .settingsBotLogo[data-large="true"] {
     width: 44px;
     height: 44px;
-    font-size: 20px;
+    font-size: 1.3333em;
   }
 
   .settingsBotLogoStatusDot {
@@ -172,7 +172,7 @@
 
   .settingsBotHero h3 {
     margin: 0 0 4px;
-    font-size: 16px;
+    font-size: 1.0667em;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -182,7 +182,7 @@
   .settingsBotHero small,
   .settingsHelpText {
     color: var(--foreground-50);
-    font-size: 12.5px;
+    font-size: var(--font-size-ui);
     line-height: 1.5;
   }
 
@@ -210,7 +210,7 @@
     border-radius: var(--radius-pill);
     background: color-mix(in srgb, var(--foreground) 5%, transparent);
     color: var(--foreground-70);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
     font-weight: 500;
     letter-spacing: 0.01em;
   }
@@ -257,20 +257,20 @@
   .settingsBotStatusGrid dt {
     margin-bottom: 4px;
     color: var(--foreground-40);
-    font-size: 11px;
+    font-size: var(--font-size-ui);
   }
 
   .settingsBotStatusGrid dd {
     margin: 0;
     color: var(--foreground);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     word-break: break-word;
   }
 
   .settingsBotReason {
     border-left: 2px solid var(--accent);
     color: var(--foreground-60);
-    font-size: 12px;
+    font-size: var(--font-size-ui);
     line-height: 1.5;
     padding-left: 10px;
   }
@@ -315,7 +315,7 @@
   background: transparent;
   color: var(--foreground-60);
   padding: 0 8px;
-  font-size: 11px;
+  font-size: var(--font-size-ui);
 }
 
 .settingsSegmented button[data-pressed] {
@@ -343,11 +343,11 @@
 .settingsMetricCard small,
 .settingsMetricCard span {
   color: var(--foreground-50);
-  font-size: 10px;
+  font-size: var(--font-size-ui);
 }
 
 .settingsMetricCard strong {
-  font-size: 14px;
+  font-size: var(--font-size-ui);
 }
 
 .settingsStatsTable {
@@ -356,7 +356,7 @@
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-surface);
-  font-size: 11px;
+  font-size: var(--font-size-ui);
 }
 
 .settingsStatsTable th,
@@ -415,7 +415,7 @@
   background: var(--foreground-5);
   color: var(--foreground-60);
   padding: 0 6px;
-  font-size: 10px;
+  font-size: var(--font-size-ui);
 }
 
 /* PR-SETTINGS-GROUPED-CARD-0 (WAWQAQ msg `1abecd66`): same grouped-

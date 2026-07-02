@@ -108,7 +108,7 @@ html[data-os="darwin"] .maka-list-row[data-active="true"] .maka-list-row-name {
    the size / transform / tracking on macOS; the natural color step
    from --color-text-quaternary is enough hierarchy. */
 html[data-os="darwin"] .maka-list-group-label {
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
