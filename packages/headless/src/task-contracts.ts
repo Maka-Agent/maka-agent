@@ -361,6 +361,16 @@ export interface HeavyTaskSelfCheckExecutionHygiene {
   cleanupPerformed?: boolean;
   workspaceSideEffects?: 'none' | 'cleaned' | 'present' | 'unknown';
   remainingSideEffectPaths?: string[];
+  workspaceGuard?: {
+    checked?: boolean;
+    checkedPaths?: string[];
+    beforeListingCommand?: string;
+    afterListingCommand?: string;
+    addedPaths?: string[];
+    modifiedPaths?: string[];
+    removedPaths?: string[];
+    publicReason?: string;
+  };
   publicReason?: string;
 }
 

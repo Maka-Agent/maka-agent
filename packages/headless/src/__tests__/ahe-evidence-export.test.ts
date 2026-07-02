@@ -268,9 +268,14 @@ describe('AHE evidence export', () => {
       assert.equal(failureDigest.status, 'official_fail');
       assert.equal(failureDigest.selfCheck.divergence, 'self_check_pass_official_fail');
       assert.equal(failureDigest.selfCheck.hygiene.scratchUsed, false);
+      assert.equal(failureDigest.selfCheck.hygiene.workspaceGuardStatus, 'dirty');
+      assert.equal(failureDigest.selfCheck.hygiene.strongPassEligible, false);
       assert.equal(failureDigest.selfCheck.hygiene.workspacePollutionSuspected, true);
       assert.deepEqual(failureDigest.selfCheck.hygiene.remainingSideEffectPaths, ['/app/polyglot/cmain']);
+      assert.deepEqual(failureDigest.selfCheck.hygiene.addedPaths, ['/app/polyglot/cmain']);
+      assert.deepEqual(failureDigest.selfCheck.hygiene.checkedPaths, ['/app/polyglot']);
       assert.ok(failureDigest.selfCheck.hygiene.riskFlags.includes('workspace_side_effects_present'));
+      assert.ok(failureDigest.selfCheck.hygiene.riskFlags.includes('workspace_guard_added_paths_reported'));
       assert.equal(failureDigest.selfCheck.heavyTaskSelfChecks[0].status, 'pass');
       assert.match(failureDigest.officialHarbor.verifier.stdoutExcerpt, /expected move e2e4/);
       assert.equal(failureDigest.debugRefs.messages.ref, 'traces/run-official/messages.json');
@@ -363,6 +368,15 @@ function acceptedHeavySelfCheck(taskRunId: string, passed: boolean) {
         cleanupPerformed: false,
         workspaceSideEffects: 'present' as const,
         remainingSideEffectPaths: ['/app/polyglot/cmain'],
+        workspaceGuard: {
+          checked: true,
+          checkedPaths: ['/app/polyglot'],
+          beforeListingCommand: 'find /app/polyglot -maxdepth 1 -type f | sort',
+          afterListingCommand: 'find /app/polyglot -maxdepth 1 -type f | sort',
+          addedPaths: ['/app/polyglot/cmain'],
+          modifiedPaths: [],
+          removedPaths: [],
+        },
         publicReason: 'public compile left a binary in the deliverable workspace',
       },
     } : {}),

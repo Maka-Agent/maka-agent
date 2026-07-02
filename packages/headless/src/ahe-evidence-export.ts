@@ -27,6 +27,7 @@ import {
 } from './result-export.js';
 import { harborOfficialVerifierOutputFromArtifacts } from './harbor-official-artifacts.js';
 import type { BenchmarkVerifierOutput } from './benchmark-adapters.js';
+import { heavyTaskSelfCheckWorkspaceGuardStatus } from './heavy-task-self-check.js';
 import type { AutonomousResultTaxonomy, HeavyTaskSelfCheckExecutionHygiene, ScoreResult, TaskRunArtifact, VerifierResult } from './task-contracts.js';
 import type { TaskRunProjection } from './task-run-store.js';
 
@@ -110,8 +111,14 @@ export interface MakaAheFailureDigest {
     hygiene: {
       scratchUsed: boolean | 'unknown';
       cleanupPerformed: boolean | 'unknown';
+      workspaceGuardStatus: 'clean' | 'dirty' | 'unchecked' | 'unknown';
+      strongPassEligible: boolean;
       workspacePollutionSuspected: boolean;
       remainingSideEffectPaths: string[];
+      addedPaths: string[];
+      modifiedPaths: string[];
+      removedPaths: string[];
+      checkedPaths: string[];
       riskFlags: string[];
       latest?: HeavyTaskSelfCheckExecutionHygiene;
     };
@@ -614,13 +621,26 @@ function selfCheckHygieneSummary(projection: TaskRunProjection): MakaAheFailureD
     return {
       scratchUsed: 'unknown',
       cleanupPerformed: 'unknown',
+      workspaceGuardStatus: 'unchecked',
+      strongPassEligible: false,
       workspacePollutionSuspected: false,
       remainingSideEffectPaths: [],
+      addedPaths: [],
+      modifiedPaths: [],
+      removedPaths: [],
+      checkedPaths: [],
       riskFlags: ['hygiene_not_reported'],
     };
   }
 
   const remainingSideEffectPaths = uniqueStrings(latest.remainingSideEffectPaths ?? []);
+  const addedPaths = uniqueStrings(latest.workspaceGuard?.addedPaths ?? []);
+  const modifiedPaths = uniqueStrings(latest.workspaceGuard?.modifiedPaths ?? []);
+  const removedPaths = uniqueStrings(latest.workspaceGuard?.removedPaths ?? []);
+  const checkedPaths = uniqueStrings(latest.workspaceGuard?.checkedPaths ?? []);
+  const workspaceGuardStatus = projection.latestHeavyTaskSelfCheck
+    ? heavyTaskSelfCheckWorkspaceGuardStatus(projection.latestHeavyTaskSelfCheck)
+    : 'unchecked';
   const riskFlags = [
     ...(latest.scratchUsed === false ? ['scratch_not_used'] : []),
     ...(latest.scratchUsed === undefined ? ['scratch_unknown'] : []),
@@ -629,13 +649,21 @@ function selfCheckHygieneSummary(projection: TaskRunProjection): MakaAheFailureD
     ...(latest.workspaceSideEffects === 'present' ? ['workspace_side_effects_present'] : []),
     ...(latest.workspaceSideEffects === 'unknown' || latest.workspaceSideEffects === undefined ? ['workspace_side_effects_unknown'] : []),
     ...(remainingSideEffectPaths.length > 0 ? ['remaining_side_effect_paths_reported'] : []),
+    ...(latest.workspaceGuard?.checked !== true ? ['workspace_guard_not_checked'] : []),
+    ...(addedPaths.length > 0 ? ['workspace_guard_added_paths_reported'] : []),
   ];
 
   return {
     scratchUsed: latest.scratchUsed ?? 'unknown',
     cleanupPerformed: latest.cleanupPerformed ?? 'unknown',
-    workspacePollutionSuspected: latest.workspaceSideEffects === 'present' || remainingSideEffectPaths.length > 0,
+    workspaceGuardStatus,
+    strongPassEligible: workspaceGuardStatus === 'clean',
+    workspacePollutionSuspected: workspaceGuardStatus === 'dirty',
     remainingSideEffectPaths,
+    addedPaths,
+    modifiedPaths,
+    removedPaths,
+    checkedPaths,
     riskFlags: uniqueStrings(riskFlags),
     latest,
   };

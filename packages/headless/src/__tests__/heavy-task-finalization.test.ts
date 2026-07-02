@@ -81,6 +81,34 @@ describe('heavy-task finalization status', () => {
     }
   });
 
+  test('does not treat a pass self-check with uncleaned workspace delta as semantic complete', () => {
+    const status = evaluateHeavyTaskCompletionStatus({
+      status: 'budget_exhausted',
+      taxonomy: 'budget_exhausted',
+      heavyTaskMode,
+      latestHeavyTaskSelfCheck: selfCheck('pass', {
+        executionHygiene: {
+          scratchUsed: false,
+          cleanupPerformed: false,
+          workspaceSideEffects: 'present',
+          remainingSideEffectPaths: ['/app/polyglot/cmain'],
+          workspaceGuard: {
+            checked: true,
+            checkedPaths: ['/app/polyglot'],
+            addedPaths: ['/app/polyglot/cmain'],
+            modifiedPaths: [],
+            removedPaths: [],
+          },
+        },
+      }),
+      latestHeavyTaskTodos: phaseGateTodos([{ id: 'edit', status: 'completed' }]),
+    });
+
+    assert.equal(status.semantic.status, 'incomplete');
+    assert.match(status.semantic.reason ?? '', /uncleaned workspace side effects/);
+    assert.equal(status.finalization.eligible, false);
+  });
+
   test('requires non-empty latest todos with no unresolved work', () => {
     const cases = [
       { name: 'missing todos', todos: undefined, unresolved: [] },
@@ -201,7 +229,11 @@ describe('heavy-task finalization status', () => {
 
 function selfCheck(
   status: HeavyTaskSelfCheckStatus,
-  options: { guardStatus?: 'accepted' | 'rejected'; publicReason?: string } = {},
+  options: {
+    guardStatus?: 'accepted' | 'rejected';
+    publicReason?: string;
+    executionHygiene?: HeavyTaskSemanticSelfCheckState['executionHygiene'];
+  } = {},
 ): HeavyTaskSemanticSelfCheckState {
   return {
     schemaVersion: 1,
@@ -212,6 +244,7 @@ function selfCheck(
     publicReason: options.publicReason ?? 'npm test passed against public files.',
     commandEvidence: [{ command: 'npm test', exitCode: 0, outputExcerpt: 'public tests passed' }],
     artifactEvidence: [{ path: 'build-output.log', kind: 'log', exists: true }],
+    ...(options.executionHygiene ? { executionHygiene: options.executionHygiene } : {}),
     guard: {
       status: options.guardStatus ?? 'accepted',
       checkedAt: 2,

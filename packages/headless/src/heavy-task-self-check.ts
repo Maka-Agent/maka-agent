@@ -64,6 +64,16 @@ export const heavyTaskSelfCheckExecutionHygieneSchema = z.object({
   cleanupPerformed: z.boolean().optional(),
   workspaceSideEffects: z.enum(['none', 'cleaned', 'present', 'unknown']).optional(),
   remainingSideEffectPaths: z.array(z.string().trim().min(1).max(MAX_PATH_CHARS)).max(MAX_ARTIFACT_REFS).optional(),
+  workspaceGuard: z.object({
+    checked: z.boolean().optional(),
+    checkedPaths: z.array(z.string().trim().min(1).max(MAX_PATH_CHARS)).max(MAX_ARTIFACT_REFS).optional(),
+    beforeListingCommand: z.string().trim().min(1).max(MAX_COMMAND_CHARS).optional(),
+    afterListingCommand: z.string().trim().min(1).max(MAX_COMMAND_CHARS).optional(),
+    addedPaths: z.array(z.string().trim().min(1).max(MAX_PATH_CHARS)).max(MAX_ARTIFACT_REFS).optional(),
+    modifiedPaths: z.array(z.string().trim().min(1).max(MAX_PATH_CHARS)).max(MAX_ARTIFACT_REFS).optional(),
+    removedPaths: z.array(z.string().trim().min(1).max(MAX_PATH_CHARS)).max(MAX_ARTIFACT_REFS).optional(),
+    publicReason: z.string().trim().min(1).max(MAX_REASON_CHARS).optional(),
+  }).strict().optional(),
   publicReason: z.string().trim().min(1).max(MAX_REASON_CHARS).optional(),
 }).strict();
 
@@ -152,7 +162,7 @@ export function buildHeavyTaskSelfCheckTools(recorder: HeavyTaskSelfCheckRecorde
 }
 
 export function validateHeavyTaskPublicSelfCheck(
-  input: Pick<HeavyTaskSelfCheckSubmitInput, 'publicReason' | 'commandEvidence' | 'artifactEvidence'>,
+  input: Pick<HeavyTaskSelfCheckSubmitInput, 'publicReason' | 'commandEvidence' | 'artifactEvidence' | 'executionHygiene'>,
   now: number,
 ): HeavyTaskPublicSelfCheckValidation {
   const categories = new Set<string>();
@@ -191,6 +201,27 @@ export function isAcceptedHeavyTaskSelfCheck(
   return validateHeavyTaskPublicSelfCheck(selfCheck, now).ok;
 }
 
+export function hasBlockingHeavyTaskSelfCheckWorkspaceDelta(selfCheck: HeavyTaskSemanticSelfCheckState): boolean {
+  const hygiene = selfCheck.executionHygiene;
+  if (!hygiene) return false;
+  if (hygiene.workspaceSideEffects === 'present') return true;
+  if ((hygiene.remainingSideEffectPaths?.length ?? 0) > 0) return true;
+  if ((hygiene.workspaceGuard?.addedPaths?.length ?? 0) > 0) return true;
+  return false;
+}
+
+export function heavyTaskSelfCheckWorkspaceGuardStatus(
+  selfCheck: HeavyTaskSemanticSelfCheckState,
+): 'clean' | 'dirty' | 'unchecked' | 'unknown' {
+  const hygiene = selfCheck.executionHygiene;
+  if (!hygiene) return 'unchecked';
+  if (hasBlockingHeavyTaskSelfCheckWorkspaceDelta(selfCheck)) return 'dirty';
+  if (hygiene.workspaceGuard?.checked === true || hygiene.workspaceSideEffects === 'none' || hygiene.workspaceSideEffects === 'cleaned') {
+    return 'clean';
+  }
+  return 'unknown';
+}
+
 export function renderHeavyTaskSelfCheckForPrompt(projection: {
   latestHeavyTaskSelfCheck?: HeavyTaskSemanticSelfCheckState;
 }): string | undefined {
@@ -213,6 +244,11 @@ export function renderHeavyTaskSelfCheckForPrompt(projection: {
     if (hygiene.scratchPath) lines.push(`  - scratch: ${oneLine(hygiene.scratchPath, 160)}`);
     if (hygiene.remainingSideEffectPaths?.length) {
       lines.push(`  - remaining side-effect paths: ${hygiene.remainingSideEffectPaths.slice(0, 5).map((path) => oneLine(path, 120)).join(', ')}`);
+    }
+    if (hygiene.workspaceGuard) {
+      const guard = hygiene.workspaceGuard;
+      lines.push(`  - workspace guard: checked=${guard.checked ?? 'unknown'} added=${guard.addedPaths?.length ?? 0} modified=${guard.modifiedPaths?.length ?? 0} removed=${guard.removedPaths?.length ?? 0}`);
+      if (guard.checkedPaths?.length) lines.push(`  - checked paths: ${guard.checkedPaths.slice(0, 5).map((path) => oneLine(path, 120)).join(', ')}`);
     }
   }
   lines.push('Use self_check_submit to refresh advisory public semantic evidence after running public checks.');
@@ -239,6 +275,15 @@ function collectExecutionHygieneStrings(value: HeavyTaskSelfCheckExecutionHygien
   if (value.scratchPath) output.push(value.scratchPath);
   if (value.publicReason) output.push(value.publicReason);
   output.push(...(value.remainingSideEffectPaths ?? []));
+  const guard = value.workspaceGuard;
+  if (!guard) return;
+  if (guard.beforeListingCommand) output.push(guard.beforeListingCommand);
+  if (guard.afterListingCommand) output.push(guard.afterListingCommand);
+  if (guard.publicReason) output.push(guard.publicReason);
+  output.push(...(guard.checkedPaths ?? []));
+  output.push(...(guard.addedPaths ?? []));
+  output.push(...(guard.modifiedPaths ?? []));
+  output.push(...(guard.removedPaths ?? []));
 }
 
 function collectMetadataStrings(value: unknown, output: string[], depth = 0): void {
