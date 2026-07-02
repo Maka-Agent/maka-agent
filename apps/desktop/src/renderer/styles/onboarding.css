@@ -621,7 +621,7 @@
   margin: auto;
   overflow: hidden;
   border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  border-radius: var(--radius-modal);
   background: var(--foreground-5);
   box-shadow:
     0 0 0 1px oklch(from var(--foreground) l c h / 0.03),
@@ -634,7 +634,7 @@
   position: absolute;
   left: 24px;
   right: 24px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: linear-gradient(
     90deg,
     var(--foreground-8),

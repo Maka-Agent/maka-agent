@@ -17,12 +17,19 @@ test('startup onboarding loading slot paints visible skeleton chrome', () => {
   assert.match(css, /\.maka-onboarding-loading::after\s*\{/);
 });
 
-test('renderer keeps preload skeleton visible while lazy app shell loads', () => {
+test('index.html paints an inline preload skeleton before React mounts', () => {
   const cwd = process.cwd();
   const desktopRoot = cwd.endsWith(join('apps', 'desktop')) ? cwd : join(cwd, 'apps', 'desktop');
-  const appSource = readFileSync(join(desktopRoot, 'src', 'renderer', 'app.tsx'), 'utf8');
+  const html = readFileSync(join(desktopRoot, 'src', 'renderer', 'index.html'), 'utf8');
 
-  assert.doesNotMatch(appSource, /fallback=\{null\}/);
-  assert.match(appSource, /fallback=\{<StartupFallback \/>\}/);
-  assert.match(appSource, /className="maka-preload"/);
+  // #root ships a non-empty, accessible skeleton so there is no blank window
+  // during the CSS + JS loading gap; createRoot() replaces it on mount.
+  assert.match(html, /<div id="root">\s*<div class="maka-preload"/);
+  assert.match(html, /aria-busy="true"/);
+  // Styled inline (before external CSS) with hardcoded colors, since
+  // maka-tokens.css has not loaded yet — no CSS variables in the skeleton.
+  assert.match(html, /\.maka-preload\s*\{[\s\S]*?background:\s*#[0-9a-fA-F]{3,6}/);
+  assert.doesNotMatch(html.match(/\.maka-preload\s*\{[\s\S]*?\}/)?.[0] ?? '', /var\(/);
+  // Dark mode handled to match cached-theme-bootstrap fallback.
+  assert.match(html, /@media \(prefers-color-scheme: dark\)/);
 });
