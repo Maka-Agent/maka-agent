@@ -1945,7 +1945,11 @@
   display: flex;
   align-items: flex-end;
   gap: 4px;
-  padding: 0 10px;
+  /* Right padding reserves space for the absolutely-positioned
+     .maka-workspace-top-actions toolbar so right-aligned content
+     (.maka-chat-header-mode-pill, .maka-model-switcher, memory pill) stops
+     before the toolbar instead of rendering underneath it. */
+  padding: 0 var(--maka-workspace-top-actions-inset) 0 10px;
   background: transparent;
   border-bottom: 0;
   -webkit-app-region: drag;
