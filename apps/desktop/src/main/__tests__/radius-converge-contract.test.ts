@@ -57,19 +57,16 @@ function isWhitelistedVar(expr: string): boolean {
 }
 
 /**
- * calc() must contain at least one whitelisted token, every --radius-*
- * reference must be whitelisted, and the expression may only *shrink*
- * (subtract). `+ Npx` / `* N` that could enlarge past the token tier is banned.
+ * calc() must be exactly `calc(var(--radius-whitelisted) - <positive>px)`.
+ * Positive allowlist — any other calc form (addition, multiplication,
+ * division, double-negative, no token, non-whitelisted token) fails.
  */
+const CALC_ALLOW_RE = /^calc\(var\((--radius-[\w-]+)\)\s*-\s*([1-9]\d*(?:\.\d+)?|0?\.\d*[1-9])px\)$/;
+
 function isWhitelistedCalc(expr: string): boolean {
-  if (!/^calc\(.*\)$/.test(expr)) return false;
-  const refs = [...expr.matchAll(/var\((--radius-[\w-]+)\)/g)].map((m) => m[1]);
-  if (refs.length === 0) return false;
-  if (!refs.every((r) => RADIUS_TOKEN_WHITELIST.has(r))) return false;
-  // Only allow subtraction (inner-ring shrink). Addition can break the 12px cap.
-  if (/\+\s*\d/.test(expr)) return false;
-  if (/\*\s*[2-9]/.test(expr)) return false; // multiplier > 1
-  return true;
+  const m = expr.match(CALC_ALLOW_RE);
+  if (!m) return false;
+  return RADIUS_TOKEN_WHITELIST.has(m[1]);
 }
 
 const LITERAL_OK = /^(?:0+(?:px|%)?|50%|inherit|initial)$/;
@@ -170,7 +167,6 @@ const COMPONENT_RADIUS: ComponentRadiusCheck[] = [
   { file: 'packages/ui/src/ui.tsx', name: 'TabsList', tier: 'surface' },
   { file: 'packages/ui/src/ui.tsx', name: 'SelectPopup', tier: 'surface' },
   { file: 'packages/ui/src/ui.tsx', name: 'ToggleGroup', tier: 'surface' },
-  { file: 'packages/ui/src/primitives/input.tsx', name: 'InputPrimitive', tier: 'control' },
   { file: 'packages/ui/src/primitives/input-group.tsx', name: 'InputGroup', tier: 'control' },
   { file: 'packages/ui/src/primitives/badge.tsx', name: 'badgeVariants', tier: 'pill' },
   { file: 'packages/ui/src/primitives/item.tsx', name: 'itemVariants', tier: 'surface' },
@@ -190,7 +186,9 @@ function checkComponentTier(src: string, check: ComponentRadiusCheck): string[] 
   );
   const expected = TIER_CLASS[check.tier];
   const forbidden = classesForOtherTiers(check.tier);
+  let matched = 0;
   for (const m of src.matchAll(re)) {
+    matched++;
     const block = m[0];
     const hasExpected = expected.some((c) => block.includes(c));
     if (!hasExpected) {
@@ -201,6 +199,9 @@ function checkComponentTier(src: string, check: ComponentRadiusCheck): string[] 
         offenders.push(`${check.file}: ${check.name} must not use ${bad} (wrong tier for ${check.tier})`);
       }
     }
+  }
+  if (matched === 0) {
+    offenders.push(`${check.file}: ${check.name} not found in source — stale contract entry or renamed component`);
   }
   return offenders;
 }
@@ -243,6 +244,22 @@ describe('radius token governance (#406 gap 4)', () => {
     assert.deepEqual(offenders, [], `Component tier violations:\n  ${offenders.join('\n  ')}`);
   });
 
+  it('CSS class selectors .maka-code and .maka-skeleton-card use --radius-surface', async () => {
+    const css = await readAllRendererCss();
+    const stripped = stripCssComments(css);
+    const checks: Record<string, RegExp> = {
+      '.maka-code': /\.maka-code\s*\{[^}]*border-radius:\s*var\(--radius-surface\)/,
+      '.maka-skeleton-card': /\.maka-skeleton-card\s*\{[^}]*border-radius:\s*var\(--radius-surface\)/,
+    };
+    const offenders: string[] = [];
+    for (const [sel, re] of Object.entries(checks)) {
+      if (!re.test(stripped)) {
+        offenders.push(`${sel} must use border-radius: var(--radius-surface)`);
+      }
+    }
+    assert.deepEqual(offenders, [], `Selector violations:\n  ${offenders.join('\n  ')}`);
+  });
+
   it('radius token values are pinned to 6/8/12/999px', async () => {
     const tokens = await parseRadiusTokenValues();
     const expected: Record<string, string> = {
@@ -275,15 +292,20 @@ describe('radius whitelist negative cases', () => {
   });
 
   it('rejects calc() with non-whitelisted tokens', () => {
-    assert.equal(isWhitelistedCalc('calc(var(--radius-private) + 1px)'), false, 'private token in calc must fail');
-    assert.equal(isWhitelistedCalc('calc(var(--radius-modla) - 1px)'), false, 'typo in calc must fail');
-    assert.equal(isWhitelistedCalc('calc(var(--radius-control) - 1px)'), true, 'valid token in calc must pass');
+    assert.equal(isWhitelistedCalc('calc(var(--radius-private) + 1px)'), false, 'private token must fail');
+    assert.equal(isWhitelistedCalc('calc(var(--radius-modla) - 1px)'), false, 'typo must fail');
+    assert.equal(isWhitelistedCalc('calc(var(--radius-control) - 1px)'), true, 'valid token subtraction must pass');
   });
 
-  it('rejects calc() that enlarges past the token tier', () => {
+  it('calc() allowlist: only var(--radius-*) - <positive>px passes', () => {
     assert.equal(isWhitelistedCalc('calc(var(--radius-modal) + 20px)'), false, 'addition must fail');
     assert.equal(isWhitelistedCalc('calc(var(--radius-surface) + 8px)'), false, 'addition must fail');
+    assert.equal(isWhitelistedCalc('calc(var(--radius-modal) * 1.5)'), false, 'multiplication must fail');
+    assert.equal(isWhitelistedCalc('calc(var(--radius-modal) / 0.5)'), false, 'division must fail');
+    assert.equal(isWhitelistedCalc('calc(var(--radius-modal) - -1px)'), false, 'double-negative must fail');
+    assert.equal(isWhitelistedCalc('calc(var(--radius-modal) - 0px)'), false, 'zero subtraction must fail');
     assert.equal(isWhitelistedCalc('calc(var(--radius-modal) - 1px)'), true, 'subtraction must pass');
     assert.equal(isWhitelistedCalc('calc(var(--radius-xl) - 1px)'), true, 'subtraction with alias must pass');
+    assert.equal(isWhitelistedCalc('calc(var(--radius-sm) - 1.5px)'), true, 'fractional subtraction must pass');
   });
 });
